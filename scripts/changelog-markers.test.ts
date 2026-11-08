@@ -151,4 +151,29 @@ describe('CHANGELOG.md', () => {
     expect(rc3).toBeLessThan(rc2);
     expect(rc2).toBeLessThan(rc1);
   });
+
+  describe('released section 0.6.0', () => {
+    const section = (() => {
+      const start = text.indexOf('## 0.6.0\n');
+      const next = text.indexOf('\n## ', start + 1);
+      return start === -1 ? '' : text.slice(start, next === -1 ? undefined : next);
+    })();
+
+    it('exists with the install line and its Known heading', () => {
+      expect(section).not.toBe('');
+      expect(section).toContain('`npm i -g tagreeve` installs this release.');
+      expect(section).toContain('### Known in 0.6.0\n');
+    });
+
+    it('has no marker and no "Not released yet" line', () => {
+      expect(section).not.toMatch(/^<!-- [A-Z]\d{2} -->$/m);
+      expect(section).not.toContain('Not released yet');
+    });
+
+    it('sits above 0.6.0-rc.3', () => {
+      const final = text.indexOf('## 0.6.0\n');
+      expect(final).toBeGreaterThan(-1);
+      expect(final).toBeLessThan(text.indexOf('## 0.6.0-rc.3\n'));
+    });
+  });
 });

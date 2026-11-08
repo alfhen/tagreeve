@@ -12,17 +12,17 @@ Flags
 Expectations
   FAIL mustNot: {"vendor":["meta","google-ads"],"before":"consent"}
        Expected no matching hits before consent, found 5 matching hits (5 before narrowing).
-       evidence: hit_01M6Y6SK71BNVBC8JVH83F5634, hit_01M6Y6SK72CSDCB5ZHG2FDTMXC, hit_01M6Y6SK72CSDCB5ZHG2FDTMXG, hit_01M6Y6SK732X41HE5KY18C61GQ, hit_01M6Y6SK732X41HE5KY18C61GR
+       evidence: hit_01M6YA2PJT76SMFW82D2TKJ3A2, hit_01M6YA2PJV427BA4EG2GBA8RHN, hit_01M6YA2PJV427BA4EG2GBA8RHS, hit_01M6YA2PJW9K8MAP09ZKJ44328, hit_01M6YA2PJW9K8MAP09ZKJ44329
   PASS must: {"vendor":"ga4","event":"page_view","count":">=2"}
-       evidence: hit_01M6Y6SK6Z2EF3HGK1RRRKGBJ7, hit_01M6Y6SK71BNVBC8JVH83F5633, hit_01M6Y6SK72CSDCB5ZHG2FDTMXB, hit_01M6Y6SK72CSDCB5ZHG2FDTMXD, hit_01M6Y6SK72CSDCB5ZHG2FDTMXF and 1 more
+       evidence: hit_01M6YA2PJR5S5QE4BM0HR855W3, hit_01M6YA2PJT76SMFW82D2TKJ3A1, hit_01M6YA2PJT76SMFW82D2TKJ3A3, hit_01M6YA2PJV427BA4EG2GBA8RHP, hit_01M6YA2PJV427BA4EG2GBA8RHR and 1 more
   PASS builtin: unknownDestination
-       evidence: flg_01M6Y6SK7432ZYEZBVCVCTQFJY, flg_01M6Y6SK751F1VDBJ2EJ648045
+       evidence: flg_01M6YA2PJX22F5ECXB92S5KD55, flg_01M6YA2PJX22F5ECXB92S5KD56
   WARN builtin: sandboxPageUrl
        Expected no hit to carry a sandbox URL as its page, found 2: staging.northwind.example/web-pixels@0.0.0-fixture/sandbox/modern/.
-       evidence: hit_01M6Y6SK71BNVBC8JVH83F5633, hit_01M6Y6SK72CSDCB5ZHG2FDTMXF
+       evidence: hit_01M6YA2PJT76SMFW82D2TKJ3A1, hit_01M6YA2PJV427BA4EG2GBA8RHR
   PASS builtin: deniedIdentifiers
   PASS builtin: earlyIdentifiers
   PASS builtin: consentModeSetup
   PASS builtin: possibleRealData
 Result: fail (1 of 8) with 1 warning
-Record: tagreeve/runs/2026-01-15/run_01M6Y6SDBXAQJNGHYTZ41ZDJ72.jsonl
+Record: tagreeve/runs/2026-01-15/run_01M6YA2GMTAE87X8E0PB902VWD.jsonl
