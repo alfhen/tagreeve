@@ -103,7 +103,7 @@ Why the waves are this way:
 
 - **Leaks first.** L09 and E09 hold the three leaks and run in wave 1.
 - **`packages/expect/src/evaluate.ts`** changes in L09 (wave 1: `findForeignData` only) and V09 (wave 2: `evaluateRule`).
-- **`packages/cli/src/summary.ts`** changes in L09 (wave 1: `formatFlags` and `PROSE_KINDS`) and in later entries that already name it, in other functions.
+- **`packages/cli/src/summary.ts`** changes in L09 (wave 1: `formatFlags` and `PROSE_KINDS`) and V09 (wave 2: the `notExact.clientId` keys). Different functions.
 - **`packages/recorder/src/recorder.ts`** changes in L09 (wave 1: the `buildFlags` call in `close`) and D09 (wave 2: the `hooked` names of `buildDataLayerNotHookedFlag`).
 - **`fixtures/site/src/index.ts` and `fixtures/site/README.md`** change in U09 (wave 1: one new page) and D09 (wave 2: one new page and the #1368 row). L09 uses existing pages.
 - **`docs/cli.md`, `docs/design.md` and `docs/guide/`** change in C09 only. C09 is in wave 2, so it documents the merged wave 1 code. For D09 and V09 in the same wave, C09 writes from this plan and merges after both; its reviewer checks the text against their merged code.
