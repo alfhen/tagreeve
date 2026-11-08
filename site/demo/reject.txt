@@ -13,18 +13,18 @@ Flags
 Expectations
   FAIL mustNot: {"vendor":["meta","google-ads"],"before":"consent"}
        Expected no matching hits before consent, found 2 matching hits (7 before narrowing).
-       evidence: hit_01M6Y4P4V3CETMJZHVXDVC7XSZ, hit_01M6Y4P4V3CETMJZHVXDVC7XT1
+       evidence: hit_01M6Y6T0C8EWFYFANRAJVCM7JZ, hit_01M6Y6T0C994MDFPWYA1JCG86N
   FAIL mustNot: {"vendor":"meta","in":"epoch(denied)"}
        Expected no matching hits in epoch(denied), found 2 matching hits (3 before narrowing).
-       evidence: hit_01M6Y4P4V462RC0MR1Q4F75QGM, hit_01M6Y4P4V50YF5ZEDZ5NEBD024
+       evidence: hit_01M6Y6T0CA3BJSAN75PPBQEGBC, hit_01M6Y6T0CB1Q4PC3NAMDVAPN3N
   PASS builtin: unknownDestination
-       evidence: flg_01M6Y4P4V784TW3NJH2B2ZJEEC, flg_01M6Y4P4V784TW3NJH2B2ZJEED
+       evidence: flg_01M6Y6T0CDA7HNYQNZJ27MQ97K, flg_01M6Y6T0CE3K6E24HKBNX7F2G6
   WARN builtin: sandboxPageUrl
        Expected no hit to carry a sandbox URL as its page, found 2: staging.northwind.example/web-pixels@0.0.0-fixture/sandbox/modern/.
-       evidence: hit_01M6Y4P4V3CETMJZHVXDVC7XSY, hit_01M6Y4P4V462RC0MR1Q4F75QGK
+       evidence: hit_01M6Y6T0C8EWFYFANRAJVCM7JY, hit_01M6Y6T0CA3BJSAN75PPBQEGBB
   PASS builtin: deniedIdentifiers
   PASS builtin: earlyIdentifiers
   PASS builtin: consentModeSetup
   PASS builtin: possibleRealData
 Result: fail (2 of 8) with 1 warning
-Record: tagreeve/runs/2026-01-15/run_01M6Y4NYZCA43YD4V4Y6VRMKC3.jsonl
+Record: tagreeve/runs/2026-01-15/run_01M6Y6STBC4RXF1JTX8G3864ND.jsonl
