@@ -41,7 +41,10 @@ Not released yet. The newest release is 0.6.0-rc.2, below.
 
 - Fixed: a card frame that moves or reloads while a test payment fill runs out of time now fails with the gone-frame reason, not a Playwright timeout message (#1164, #1161, #1163).
 
-<!-- M30 -->
+- An option with no command, such as `tagreeve --event-map x.json`, exits 2 (#1255).
+- `template` with an unknown name says so without echoing it, and extra arguments get their own message (#1182).
+- The `template web --json` steps say the override file holds the secret `gtmAuth` (#1104).
+- A plain key with a control byte in the project config exits 2 and is not printed (#1269).
 
 <!-- M31 -->
 
