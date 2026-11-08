@@ -46,7 +46,7 @@ Not released yet. The newest release is 0.6.0-rc.2, below.
 - The `template web --json` steps say the override file holds the secret `gtmAuth` (#1104).
 - A plain key with a control byte in the project config exits 2 and is not printed (#1269).
 
-<!-- M31 -->
+- `possibleRealData` counts a shorter email or phone value that has its own place in a body, such as `ann%40shop.example` next to `joann%40shop.example`, in every form it reads (#848). The `dataLayerNotHooked` flag names every missed layer, up to five, and says how many more there are (#1239).
 
 <!-- M32 -->
 
