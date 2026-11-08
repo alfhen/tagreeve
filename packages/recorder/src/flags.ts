@@ -1,5 +1,5 @@
 import { globToRegExp, newId, type DataLayerEvent, type Flag, type Hit, type Id, type Identity, type NetworkMode, type Request, type Response } from '@tagreeve/core';
-import { decoders, ga4EventName, guardFieldName, isCollectionEndpoint, isSandboxPageUrl, platformHostFor, trackerList, type TrackerEntry } from '@tagreeve/decoders';
+import { decoders, ga4EventName, guardFieldName, isCollectionEndpoint, isValueSegment, OTHER_NAME, isSandboxPageUrl, platformHostFor, trackerList, type TrackerEntry } from '@tagreeve/decoders';
 import { findForeignData, hostMatches } from '@tagreeve/expect';
 import { getDomain } from 'tldts';
 import { isKnownVendorCollection } from './stub.ts';
@@ -196,7 +196,7 @@ export function buildUnloadGapFlags({ runId, networkMode, events, hits, navigati
         runId,
         'unloadGap',
         [event.id],
-        `A frame pushed "${guardFieldName(name)}" ${seconds} s before ${unload} and no ga4 hit for it was recorded after it. The frame may have sent the hit while unloading, ${unloadGapAdvice(networkMode)} (design §5.3).`,
+        `A frame pushed "${guardFieldName(name) === name && !isValueSegment(name) ? name : OTHER_NAME}" ${seconds} s before ${unload} and no ga4 hit for it was recorded after it. The frame may have sent the hit while unloading, ${unloadGapAdvice(networkMode)} (design §5.3).`,
       ),
     );
   }
