@@ -101,3 +101,42 @@ test('a pushed string never prints, and a known gtag command keeps its label', (
   const known = ['config', 'consent', 'event', 'get', 'js', 'set'].map((c) => push(null, { args: [c, 'x'] }));
   expect(first(...known).map((g) => g.event)).toEqual(['gtag config', 'gtag consent', 'gtag event', 'gtag get', 'gtag js', 'gtag set']);
 });
+
+test('the two purchase forms are two groups with a kind each', () => {
+  const groups = first(push(null, { event: 'purchase', args: ['event', 'purchase', { value: 1 }] }), push({ event: 'purchase', ecommerce: { value: 1 } }));
+  expect(groups.map((g) => [g.event, g.kind])).toEqual([['purchase', 'gtag'], ['purchase', 'object']]);
+  expect(groups[0]!.paths).toEqual([{ path: 'value', types: ['number'] }]);
+});
+
+test('an arguments-like consent update reads as the gtag command it holds', () => {
+  const [group] = first(push({ 0: 'consent', 1: 'update', 2: { ad_storage: 'granted' } }));
+  expect(group).toMatchObject({ event: 'consent update', kind: 'gtag', paths: [{ path: 'ad_storage', types: ['string'] }] });
+  expect(JSON.stringify(group)).not.toContain('granted');
+});
+
+test('an arguments-like event, config and unknown command read as gtag', () => {
+  const groups = first(
+    push({ 0: 'event', 1: 'purchase', 2: { value: 1 } }),
+    push({ 0: 'config', 1: 'G-PWTEST0001' }),
+    push({ 0: 'custom', 1: 'x' }),
+  );
+  expect(groups.map((g) => [g.event, g.kind])).toEqual([['purchase', 'gtag'], ['gtag config', 'gtag'], ['gtag (other)', 'gtag']]);
+  expect(groups[0]!.paths).toEqual([{ path: 'value', types: ['number'] }]);
+  expect(groups[1]!.paths).toEqual([]);
+});
+
+test('an object that is not arguments-like stays an object push', () => {
+  const nonString = { 0: 1, 1: 'update' };
+  const gap = { 0: 'consent', 2: { a: 1 } };
+  const extraKey = { 0: 'consent', extra: 1 };
+  const tooLong = Object.fromEntries(Array.from({ length: 17 }, (_, i) => [String(i), i === 0 ? 'event' : 'x']));
+  for (const item of [nonString, gap, extraKey, tooLong]) {
+    const [group] = first(push(item));
+    expect(group).toMatchObject({ event: '(no event)', kind: 'object' });
+  }
+});
+
+test('an arguments-like event name that looks like a value reads (other)', () => {
+  const [group] = first(push({ 0: 'event', 1: 'fake.person@example.test' }));
+  expect(group!.event).toBe('(other)');
+});

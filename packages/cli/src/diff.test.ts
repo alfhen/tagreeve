@@ -159,6 +159,7 @@ describe('dataLayer lines', () => {
     pathsRemoved: [{ epoch: 'undecided', event: 'purchase', frame: 'main', path: 'ecommerce.value', types: ['number'] }],
     typeChanges: [{ epoch: 'undecided', event: 'purchase', frame: 'main', path: 'value', a: ['number'], b: ['string'] }],
     moved: [{ event: 'view_item', kind: 'frame' as const, epoch: 'undecided', from: 'embedded', to: 'main' }],
+    kindChanged: [],
     changed: true,
   };
 
@@ -180,7 +181,7 @@ describe('dataLayer lines', () => {
   });
 
   test('an unchanged dataLayer section still says no differences', () => {
-    const none = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], typeChanges: [], moved: [], changed: false };
+    const none = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], typeChanges: [], moved: [], kindChanged: [], changed: false };
     expect(formatDiff({ ...empty, dataLayer: none }, 'a', 'b')).toContain('No differences.');
   });
 });

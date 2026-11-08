@@ -44,7 +44,7 @@ export function flagChangeLabel(f: { kind: string; host: string; a: number; b: n
 
 /** One line per push change, with key paths and types only. */
 export function describePushDiff(d: PushDiff): string[] {
-  const at = (r: { epoch: string; frame: string }) => `[epoch ${r.epoch}, frame ${r.frame}]`;
+  const at = (r: { epoch: string; frame: string; kind?: string }) => `[epoch ${r.epoch}, frame ${r.frame}${r.kind === undefined ? '' : `, kind ${r.kind}`}]`;
   return [
     ...d.eventsRemoved.map((r) => `removed event ${r.event} ${at(r)}`),
     ...d.eventsAdded.map((r) => `new event ${r.event} ${at(r)}`),

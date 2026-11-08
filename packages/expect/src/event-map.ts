@@ -86,7 +86,7 @@ export function mapPushGroups(
     if (under !== undefined) {
       // A gtag event push has no `event` key; the object push it maps to has one.
       const moved = g.paths.map((p) => ({ ...p, path: p.path.startsWith('[') ? `${under}${p.path}` : `${under}.${p.path}` }));
-      return { ...g, event, paths: g.paths.some((p) => p.path === 'event') ? g.paths : [{ path: 'event', types: ['string'] }, ...moved] };
+      return { ...g, event, ...(g.kind === undefined ? {} : { kind: 'object' as const }), paths: g.paths.some((p) => p.path === 'event') ? g.paths : [{ path: 'event', types: ['string'] }, ...moved] };
     }
     // A root rename maps an object push to a gtag event push, which has no `event` key.
     const toGtag = Object.values(renames).includes(ROOT);
@@ -96,7 +96,7 @@ export function mapPushGroups(
       const path = renamePath(p.path, renames);
       if (path !== undefined) mapped.push({ ...p, path });
     }
-    return { ...g, event, paths: mapped };
+    return { ...g, event, ...(toGtag && g.kind !== undefined ? { kind: 'gtag' as const } : {}), paths: mapped };
   });
 }
 

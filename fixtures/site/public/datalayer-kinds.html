@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DataLayer kinds</title>
+</head>
+<body>
+<h1>DataLayer kinds</h1>
+<p>Pushes a <code>purchase</code> as a gtag command and as an object, a plain object without <code>event</code>, and a consent update pushed as an object with the keys 0, 1 and 2. The planted value is fake.</p>
+<script>
+window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+window.gtag('event', 'purchase', { value: 25.5 });
+window.dataLayer.push({ event: 'purchase', ecommerce: { value: 25.5 } });
+window.dataLayer.push({ page_type: 'checkout', note: 'pw-planted-value-1' });
+window.dataLayer.push({ 0: 'consent', 1: 'update', 2: { ad_storage: 'granted' } });
+</script>
+</body>
+</html>

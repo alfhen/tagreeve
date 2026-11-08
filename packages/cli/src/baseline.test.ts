@@ -351,7 +351,7 @@ test('a baseline holds masked push shapes and no pushed value', () => {
   const baseline = buildBaseline(run, false);
   expect(baseline.dataLayer).toEqual([
     {
-      epoch: 'undecided', event: 'purchase', frame: 'main',
+      epoch: 'undecided', event: 'purchase', kind: 'object', frame: 'main',
       paths: [{ path: 'event', types: ['string'] }, { path: 'extra.(other)', types: ['string'] }, { path: 'value', types: ['number'] }],
     },
   ]);
@@ -370,9 +370,9 @@ test('push drift is a warning and never drift', () => {
   expect(summary.drift).toBe(false);
   expect(summary.warnings).toEqual(
     expect.arrayContaining([
-      'dataLayer new event view_item [epoch undecided, frame main]',
-      'dataLayer missing path gone (string) in purchase [epoch undecided, frame main]',
-      'dataLayer type change value: number -> string in purchase [epoch undecided, frame main]',
+      'dataLayer new event view_item [epoch undecided, frame main, kind object]',
+      'dataLayer missing path gone (string) in purchase [epoch undecided, frame main, kind object]',
+      'dataLayer type change value: number -> string in purchase [epoch undecided, frame main, kind object]',
     ]),
   );
 });
@@ -454,4 +454,44 @@ test('baseline save with one path wraps a failing folder or write', async () => 
   } finally {
     process.chdir(before);
   }
+});
+
+function pushGtagPurchase(run: RunRecords): void {
+  run.dataLayerEvents.push({
+    type: 'dataLayerEvent', id: 'dle_9', runId: run.run.id, stepId: null, t: 1, event: 'purchase', gtmUniqueEventId: null,
+    args: ['event', 'purchase', { value: 1 }], isConsentCommand: false, frame: { main: true, n: 0 },
+  } as never);
+}
+
+test('a baseline saved by 0.6.0-rc.2 has no kind, compares with kinds merged and warns once', () => {
+  const saved = makeRun(['page_view']);
+  pushTo(saved, { event: 'purchase', value: 1 }, 'dle_1');
+  const file = buildBaseline(saved, false);
+  const rc2 = { ...file, dataLayer: file.dataLayer!.map((g) => ({ epoch: g.epoch, event: g.event, frame: g.frame, paths: g.paths })) };
+  expect(JSON.stringify(rc2)).not.toContain('"kind"');
+  const baseline = parseBaseline(JSON.stringify(rc2), 'rc2.json');
+  const notice = 'dataLayer push kinds not compared: the baseline was saved by 0.6.0-rc.2. Save it again to compare them.';
+  expect(compareBaseline(baseline, saved).warnings).toEqual([notice]);
+  const now = makeRun(['page_view']);
+  pushGtagPurchase(now);
+  const summary = compareBaseline(baseline, now);
+  expect(summary.drift).toBe(false);
+  expect(summary.warnings.filter((w) => w === notice)).toHaveLength(1);
+  expect(summary.warnings.some((w) => w.includes('new event') || w.includes('removed event') || w.includes('kind changed'))).toBe(false);
+});
+
+test('a baseline push group with an unknown kind is invalid', () => {
+  const file = { ...buildBaseline(makeRun(['page_view']), false), dataLayer: [{ epoch: 'x', event: 'e', kind: 'array', frame: 'main', paths: [] }] };
+  expect(() => parseBaseline(JSON.stringify(file), 'b.json')).toThrow('invalid dataLayer section');
+});
+
+test('a gtag purchase against an object purchase baseline pairs and warns', () => {
+  const saved = makeRun(['page_view']);
+  pushTo(saved, { event: 'purchase', value: 1 }, 'dle_1');
+  const baseline = parseBaseline(JSON.stringify(buildBaseline(saved, false)), 'b.json');
+  const now = makeRun(['page_view']);
+  pushGtagPurchase(now);
+  const warnings = compareBaseline(baseline, now).warnings;
+  expect(warnings).toContain('dataLayer push kind changed: purchase');
+  expect(warnings.some((w) => w.startsWith('dataLayer new event') || w.startsWith('dataLayer removed event'))).toBe(false);
 });

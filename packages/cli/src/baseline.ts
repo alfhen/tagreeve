@@ -75,6 +75,7 @@ function validPushGroup(g: unknown): g is PushGroup {
     isRecord(g) &&
     typeof g.epoch === 'string' &&
     typeof g.event === 'string' &&
+    (g.kind === undefined || g.kind === 'gtag' || g.kind === 'object') &&
     typeof g.frame === 'string' &&
     FRAME_KINDS.has(g.frame) &&
     Array.isArray(g.paths) &&
@@ -185,6 +186,10 @@ export function compareBaseline(baseline: BaselineFile, records: RunRecords): Ba
   } else {
     const pushes = diffPushes(baseline.dataLayer, pushGroups(records), { epochOrder });
     warnings.push(...describePushDiff(pushes).map((line) => `dataLayer ${line}`));
+    warnings.push(...pushes.kindChanged.map((k) => `dataLayer push kind changed: ${k.event}`));
+    if (baseline.dataLayer.some((g) => g.kind === undefined)) {
+      warnings.push('dataLayer push kinds not compared: the baseline was saved by 0.6.0-rc.2. Save it again to compare them.');
+    }
   }
   return {
     drift: diff.drift,
