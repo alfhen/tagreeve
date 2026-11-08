@@ -229,6 +229,13 @@ test('unload gap: an event that never produced a hit is skipped', () => {
   expect(gap({ events: [pushed('consent_update', 1000)], hits: [ga4Hit('page_view', 500)], navigations: [4000] })).toEqual([]);
 });
 
+test.each(['pw-test@example.test', 'a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6'])('unload gap: the value-like event name %s reads (other) in the detail', (name) => {
+  const flags = gap({ events: [pushed(name, 1000)], hits: [sgtmHit(name, 1100), ga4Hit('page_view', 500)], navigations: [4000] });
+  expect(flags).toHaveLength(1);
+  expect(flags[0]!.detail).toContain('A frame pushed "(other)" 3.0 s');
+  expect(flags[0]!.detail).not.toContain(name);
+});
+
 test('unload gap: ignore takes names and globs', () => {
   const input = { events: [pushed('add_to_cart', 1000)], navigations: [4000] };
   expect(gap({ ...input, ignore: ['add_*'] })).toEqual([]);

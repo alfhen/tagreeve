@@ -1,4 +1,5 @@
-import type { Hit, Result, RunRecords } from '@tagreeve/core';
+import type { DataLayerEvent, Hit, Result, RunRecords } from '@tagreeve/core';
+import { buildUnloadGapFlags } from '@tagreeve/recorder';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -453,16 +454,38 @@ test.each([
   expect(redactFlagDetail(detail, 'sandboxPageUrl')).toBe(shown);
 });
 
-test('an unloadGap detail whose event name holds ": /" keeps its advice text', () => {
-  const detail = 'dataLayer event x: /pw-test@example.test was pushed after unload. Wait longer before leaving the page.';
-  expect(redactFlagDetail(detail, 'unloadGap')).toBe(detail);
-  expect(redactFlagDetail('GET /a?email=1', 'stubBypass')).toBe('GET /a?email');
+test('an unloadGap detail built by the recorder keeps its advice text and prints no event name value', () => {
+  const name = 'pw-test@example.test';
+  const event = { type: 'dataLayerEvent', id: 'dle_1', runId: 'run_1', stepId: null, t: 1000, event: name, gtmUniqueEventId: null, args: [{ event: name }], isConsentCommand: false } as unknown as DataLayerEvent;
+  const hit = (vendor: string, hitEvent: string, t: number) => ({ type: 'hit', id: `hit_${vendor}`, runId: 'run_1', stepId: null, requestId: `req_${vendor}`, t, vendor, event: hitEvent });
+  const [flag] = buildUnloadGapFlags({ runId: 'run_1' as never, events: [event], hits: [hit('sgtm', name, 1100), hit('ga4', 'page_view', 500)] as never, navigations: [4000] });
+  expect(flag!.detail).toContain('"(other)"');
+  const records = { run: { id: 'run_1' }, hits: [], consentEpochs: [], flags: [{ kind: 'unloadGap', detail: flag!.detail }], steps: [] } as unknown as RunRecords;
+  const shown = buildSummary(records, [], 'p').flags[0]!.detail;
+  expect(shown).toBe(flag!.detail);
+  expect(shown).not.toContain(name);
+  expect(shown).toContain('(design §5.3)');
 });
 
-test('buildSummary keeps the advice text of an unloadGap flag whose event name holds ": /"', () => {
-  const detail = 'dataLayer event x: /pw-test@example.test was pushed after unload. Wait longer before leaving the page.';
-  const records = { run: { id: 'run_1' }, hits: [], consentEpochs: [], flags: [{ kind: 'unloadGap', detail }], steps: [] } as unknown as RunRecords;
-  expect(buildSummary(records, [], 'p').flags[0]!.detail).toBe(detail);
+test('an unlisted flag kind is masked at the end of its detail', () => {
+  expect(redactFlagDetail('GET /a?email=1', 'futureKind')).toBe('GET /a?email');
+  expect(redactFlagDetail('GET /a?email=1', 'unloadGap')).toBe('GET /a?email=1');
+});
+
+test.each([
+  ['unknownDestination', 'GET https://t.example.net/a?email=1', 'GET https://t.example.net/a?email'],
+  ['firstPartySubdomain', 'GET https://t.example.net/a?email=1', 'GET https://t.example.net/a?email'],
+  ['platformHost', 'GET https://www.googletagmanager.com/gtag/js?id=1', 'GET https://www.googletagmanager.com/gtag/js?id'],
+  ['stubBypass', 'It was not routed, so it was not stubbed: https://px.example.net/c?u=1', 'It was not routed, so it was not stubbed: https://px.example.net/c?u'],
+  ['possibleRedirectHop', 'x; Chromium may have followed a redirect that was not recorded and not stubbed: https://px.example.net/c?u=1', 'x; Chromium may have followed a redirect that was not recorded and not stubbed: https://px.example.net/c?u'],
+  ['sandboxPageUrl', 'ga4 received https://s.example.com/a?q=1 as the page', 'ga4 received https://s.example.com/a?q as the page'],
+  ['netLogUnreadable', 'The net log could not be read, so requests sent while a frame unloads may be missing.', 'The net log could not be read, so requests sent while a frame unloads may be missing.'],
+  ['serverContainerFailed', 'The server container did not run: timeout.', 'The server container did not run: timeout.'],
+  ['dataLayerReassigned', 'Frame 0 replaced window.dataLayer with a new array after a Google loader request. Pushes to the new array are still recorded.', 'Frame 0 replaced window.dataLayer with a new array after a Google loader request. Pushes to the new array are still recorded.'],
+  ['dataLayerNotHooked', 'A Google loader names the data layer "x", which is not hooked, so pushes to it are not recorded. Add it to options.dataLayerNames.', 'A Google loader names the data layer "x", which is not hooked, so pushes to it are not recorded. Add it to options.dataLayerNames.'],
+  ['dataLayerIncomplete', 'Frame 0: dataLayer holds 3 items, and 2 were recorded. A page script may have replaced dataLayer.push or the array.', 'Frame 0: dataLayer holds 3 items, and 2 were recorded. A page script may have replaced dataLayer.push or the array.'],
+])('redactFlagDetail handles a %s detail as the recorder writes it', (kind, detail, shown) => {
+  expect(redactFlagDetail(detail, kind)).toBe(shown);
 });
 
 test('a path segment that holds an email, a phone or a hash reads (other)', () => {
@@ -598,4 +621,16 @@ test('a checkout token or a GID in a tag name reads (other) in the JSON and the 
   expect(all).not.toContain('5551234567890');
   expect(formatSummary(summary)).toContain('90 (other): failure');
   expect(formatSummary(summary)).toContain('91 (other): failure');
+});
+
+test('the dataLayer line lists page events before consent, gtag and gtm labels', () => {
+  const frame = { main: true, n: 0 };
+  const dataLayerEvents = [
+    { id: 'dle_1', stepId: null, event: null, args: ['consent', 'default', { ad_storage: 'denied' }], isConsentCommand: true, frame },
+    { id: 'dle_2', stepId: null, event: null, args: ['config', 'G-PWTEST0001'], isConsentCommand: false, frame },
+    { id: 'dle_3', stepId: null, event: 'gtm.js', args: [{ event: 'gtm.js' }], isConsentCommand: false, frame },
+    { id: 'dle_4', stepId: null, event: 'purchase', args: [{ event: 'purchase' }], isConsentCommand: false, frame },
+  ];
+  const records = { run: { id: 'run_1' }, hits: [], consentEpochs: [], flags: [], steps: [], dataLayerEvents } as unknown as RunRecords;
+  expect(formatSummary(buildSummary(records, [result(true)], 'p'))).toContain('dataLayer: 4 pushes, 4 events (purchase, consent default, gtag config, …); shapes in --json');
 });
