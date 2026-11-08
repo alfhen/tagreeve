@@ -13,17 +13,17 @@ Flags
 Expectations
   FAIL mustNot: {"vendor":["meta","google-ads"],"before":"consent"}
        Expected no matching hits before consent, found 2 matching hits (17 before narrowing).
-       evidence: hit_01M6Y4NYEA472QRP1RR8B31RDP, hit_01M6Y4NYEA472QRP1RR8B31RDR
+       evidence: hit_01M6Y6SSRY39B3RSDEGEH7F44E, hit_01M6Y6SSRY39B3RSDEGEH7F44G
   PASS must: {"vendor":"meta","event":"AddToCart","in":"epoch(granted)"}
-       evidence: hit_01M6Y4NYEDB1CQZ03Z0MJZK9AC
+       evidence: hit_01M6Y6SSS14JA9VFPGBZ52X40M
   PASS builtin: unknownDestination
-       evidence: flg_01M6Y4NYEE9S5W2BAF5QGDVA8T, flg_01M6Y4NYEF04GPHTA3ZTP4VHK0
+       evidence: flg_01M6Y6SSS2EJ1K4A235X6779RS, flg_01M6Y6SSS3F1T52HRF0M69SRQQ
   WARN builtin: sandboxPageUrl
        Expected no hit to carry a sandbox URL as its page, found 2: staging.northwind.example/web-pixels@0.0.0-fixture/sandbox/modern/.
-       evidence: hit_01M6Y4NYE972D5B3DWGDH0RVCA, hit_01M6Y4NYEB71M19G7S7XV29B9S
+       evidence: hit_01M6Y6SSRX9HGHZS229KFGPDSM, hit_01M6Y6SSRZ2ZWJ4BTC8J7JGD7S
   PASS builtin: deniedIdentifiers
   PASS builtin: earlyIdentifiers
   PASS builtin: consentModeSetup
   PASS builtin: possibleRealData
 Result: fail (1 of 8) with 1 warning
-Record: tagreeve/runs/2026-01-15/run_01M6Y4NRJ206YES7YA8GFTVGXF.jsonl
+Record: tagreeve/runs/2026-01-15/run_01M6Y6SKRA2VABAMWNQW6PMGK3.jsonl

@@ -2,7 +2,19 @@
 
 ## 0.6.0-rc.3
 
-Not released yet. The newest release is 0.6.0-rc.2, below.
+Release candidate. Install it with `npm i -g tagreeve@next`.
+
+### Upgrading from 0.6.0-rc.2
+
+- **The record stays at schema version 5.** The flag kinds `dataLayerIncomplete` (a frame whose `dataLayer` holds pushes the run did not record, from C08) and `dataLayerReassigned` (a page replaced `window.dataLayer` after a Google loader request, now written by J08) and the optional field `InvalidReport.got` are new within version 5. A 0.6.0-rc.2 reader reads these records as before.
+- **The handoff text is on stderr.** Under `run --json` and `suite --json`, stdout holds only the JSON.
+- **The reporter template sends tag IDs as strings.** A 0.6.0-rc.2 template still works, because the parser also accepts numbers.
+- **The Result line counts baseline warnings.** The exit code does not change.
+- **Push shapes have a `kind`.** A baseline saved by 0.6.0-rc.2 compares with kinds merged and warns once. Save it again to compare kinds.
+- **The `consentModeSetup` message names the `gcd` letters.**
+- **Small changes you can see:** a `tag` rule with an unknown `status` exits 2; an option with no command exits 2; a config key with a control byte exits 2; a pushed string that is not a known `gtag` command reads `gtag (other)`, so an rc.2 baseline can warn once; the HTML report shows `noTagReports` and `tagNameUnknown` as CANNOT EVALUATE; `init --json` prints the items done before a failure.
+
+### What 0.6.0-rc.3 adds
 
 - Fixed: the web tag reporter works in real GTM, which gives tag IDs as numbers. In 0.6.0-rc.2 every report from a published container was recorded as an invalid report (`tagReport:tagId`). The template now sends IDs as strings, and the parser also accepts numbers, so a 0.6.0-rc.2 template keeps working.
 - An invalid tag report now has `got`, the type of the rejected value. It never holds the value. The record stays at version 5.
@@ -51,9 +63,21 @@ Not released yet. The newest release is 0.6.0-rc.2, below.
 - The `unloadGap` detail prints a value-like event name as `(other)` (#1267). A flag kind that is not listed as prose has any URL at the end of its detail masked, so a new kind is masked by default (#1268).
 - The summary `dataLayer:` line lists page events before `consent …`, `gtag …` and `gtm.*` labels (#1173). The demo diff uses the paths the run panel shows (#1199).
 
-<!-- M32 -->
+### Known in 0.6.0-rc.3
 
-<!-- R13 -->
+Issues still open that you can meet:
+
+- The reporter's own entry is in `tags[]` once for each event. The timeout status and the version string of a published container are field checks.
+- A report sent while the page navigates can be lost, so `notFired` can list a tag that fired.
+- Any page script can call the binding or change what the tally reads, so a tag report and the count check are what the page said, not proof.
+- The server tag reporter is not built.
+- The `dataLayer` hook after real `gtm.js` re-wraps, and `gtm.uniqueEventId` on real pushes, are field checks (#922). Arguments-like pushes from the pixel sandbox are read as `gtag` commands in shapes only, so consent commands in them do not count as a `consent default` push for `consentModeSetup`.
+- The count check compares only the document each frame holds when the run closes. A page that replaced `push` on an earlier page of the run only is not flagged, and a page that edits its `dataLayer` in place can be flagged.
+- `consentModeSetup` reads the `gcd` letters, whose format is documented only by the community.
+- Hits and pushes are not joined per frame (#931, #932).
+- An exact client ID link can go to the wrong browser hit (#1029), and rule 2 rarely fires on a multi-page run (#1084).
+- A `wait` timeout can list a blocking control outside the submitted form (#990).
+- A blocking control with no `aria-label`, `name` or `id` has no name in a `wait` timeout message (#1004).
 
 ## 0.6.0-rc.2
 
@@ -69,7 +93,7 @@ Release candidate. Install it with `npm i -g tagreeve@next`.
 
 ### What 0.6.0-rc.2 adds
 
-- Record schema version 5. It adds `TagReport.t`, `TagReport.frame` and `TagReport.client`, `Request.frame`, `DataLayerEvent.layer` and `Hit.linkMiss`, the notes `noTagReports` and `tagNameUnknown`, and the flag kinds `dataLayerReassigned` and `dataLayerNotHooked`. `dataLayerReassigned` is reserved and not written yet (#1266). A version 4 record reads as before.
+- Record schema version 5. It adds `TagReport.t`, `TagReport.frame` and `TagReport.client`, `Request.frame`, `DataLayerEvent.layer` and `Hit.linkMiss`, the notes `noTagReports` and `tagNameUnknown`, and the flag kinds `dataLayerReassigned` and `dataLayerNotHooked`. `dataLayerReassigned` was not written until 0.6.0-rc.3 (#1266). A version 4 record reads as before.
 
 - Added the built-in check `consentModeSetup`. It warns when a Google hit shows a Consent Mode signal that was never set (`gcd` letter `l`), for example a default without `ad_user_data` and `ad_personalization`. It is `warn` by default and `options.builtins.consentModeSetup: fail` makes it fail the run.
 

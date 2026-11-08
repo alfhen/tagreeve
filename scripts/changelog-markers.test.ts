@@ -123,4 +123,32 @@ describe('CHANGELOG.md', () => {
   it('starts with a real version section and has blank lines around every marker', () => {
     expect(markerProblems(text, pkg.version)).toEqual([]);
   });
+
+  describe.each(['0.6.0-rc.3', '0.6.0-rc.2'])('released section %s', (version) => {
+    const section = (() => {
+      const start = text.indexOf(`## ${version}\n`);
+      const next = text.indexOf('\n## ', start + 1);
+      return start === -1 ? '' : text.slice(start, next === -1 ? undefined : next);
+    })();
+
+    it('exists with the install line and its Known heading', () => {
+      expect(section).not.toBe('');
+      expect(section).toContain('Install it with `npm i -g tagreeve@next`.');
+      expect(section).toContain(`### Known in ${version}\n`);
+    });
+
+    it('has no marker and no "Not released yet" line', () => {
+      expect(section).not.toMatch(/^<!-- [A-Z]\d{2} -->$/m);
+      expect(section).not.toContain('Not released yet');
+    });
+  });
+
+  it('lists 0.6.0-rc.3 and 0.6.0-rc.2 above 0.6.0-rc.1 in order', () => {
+    const rc3 = text.indexOf('## 0.6.0-rc.3\n');
+    const rc2 = text.indexOf('## 0.6.0-rc.2\n');
+    const rc1 = text.indexOf('## 0.6.0-rc.1\n');
+    expect(rc3).toBeGreaterThan(-1);
+    expect(rc3).toBeLessThan(rc2);
+    expect(rc2).toBeLessThan(rc1);
+  });
 });
