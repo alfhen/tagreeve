@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.6.0
+
+`npm i -g tagreeve` installs this release. 0.6.0 adds everything in the 0.6.0 release candidates (below). To upgrade from 0.5.0, read the next section.
+
+### What 0.6.0 adds
+
+- Project folder and config: `tagreeve init` makes `tagreeve/scenarios/` and `tagreeve/baselines/`, writes a starter `tagreeve/config.yml` and keeps `tagreeve/runs/` out of git. `run` and `suite` write to `tagreeve/runs/<date>/` by default, read their other defaults from the `tagreeve/` folder, and take `--label <name>`. `baseline save` and `run --baseline` have default paths, and `suite --baseline` checks every cell against its own baseline.
+- Server container: a container call links to a browser hit by client ID and event name, so a leak through the container's forwarding can fail a run. A call that is not an exact link records why, and `--json` counts them in `serverContainer.notExact`.
+- Web tag reports: `tagreeve template web` prints a GTM template that reports the status of each tag. The run record holds the reports. `tag` rules in `must` and `mustNot` read them, and `expectedTags` in the GTM override file names the tags that should fire. The reporter template works in real GTM.
+- `dataLayer`: each push records its frame and its layer, and `options.dataLayerNames` hooks a custom layer name. The summary, `diff` and baselines compare masked push shapes, each with a kind (`gtag` or `object`). The hook leaves `push` as the page assigned it, so a theme that wraps `push` no longer hides pushes. A `dataLayerReassigned` flag and a `dataLayerIncomplete` flag name the cases the hook cannot follow.
+- Consent Mode: the `consentModeSetup` check warns when a Google hit shows a signal that was never set, and names the `gcd` letters per Google tag ID.
+- Handoff text goes to stderr, so `--json` stdout is only JSON. `wait` with a `url` takes a `timeout`.
+
+### Upgrading from 0.5.0
+
+- **Record schema version 5.** A 0.5 reader warns on a version 5 record. Records from 0.5.0 still read. `suite.json` is version 3, and `report` reads versions 1 to 3.
+- **The default `--out` changes.** `run` and `suite` write to `tagreeve/runs/<date>/`, not `runs/`. Pass `--out runs` to keep the old folder.
+- **A scenario with `options.network: live` no longer loads** (exit 2). Pass `--network live` on the command line.
+- **A new `consentModeSetup` line in every summary.** It is a warning by default. `options.builtins.consentModeSetup: fail` makes it fail the run. The text summary also has a `dataLayer:` line.
+- **A leak through a server container call can now fail a run.** A call that links exactly by client ID and event name is checked like a browser hit, so a rule that only warned before can fail.
+- **`tagreeve init` writes `tagreeve/config.yml`.** The config refuses unknown keys, and a plain key with a control byte exits 2.
+- **The handoff text is on stderr.** Under `run --json` and `suite --json`, stdout holds only the JSON.
+- **A blocking form control is named only by its `aria-label`, `name` or `id` attribute,** never by page text, in a `wait` timeout message.
+- **Baselines.** A baseline saved by 0.5.0 still loads and warns "pushes not compared". A baseline that holds push shapes from 0.6.0-rc.2 compares with kinds merged and warns once. Save it again to compare kinds. `baseline save` refuses a name that could write outside `tagreeve/baselines/`. The Result line counts baseline warnings, and the exit code does not change.
+- **Small changes you can see:** an option with no command exits 2; `init --json` prints `{ "items": [...] }`; the `consentModeSetup` message names the `gcd` letters; a pushed string that is not a known `gtag` command reads `gtag (other)`.
+
+### Known in 0.6.0
+
+Issues still open that you can meet:
+
+- The reporter's own entry is in `tags[]` once for each event. The timeout status and the version string of a published container are field checks.
+- A report sent while the page navigates can be lost, so `notFired` can list a tag that fired.
+- Any page script can call the binding or change what the tally reads, so a tag report and the count check are what the page said, not proof.
+- The server tag reporter is not built.
+- The `dataLayer` hook after real `gtm.js` re-wraps, and `gtm.uniqueEventId` on real pushes, are field checks (#922). Arguments-like pushes from the pixel sandbox are read as `gtag` commands in shapes only, so consent commands in them do not count as a `consent default` push for `consentModeSetup`.
+- The count check compares only the document each frame holds when the run closes. A page that replaced `push` on an earlier page of the run only is not flagged, and a page that edits its `dataLayer` in place can be flagged.
+- `consentModeSetup` reads the `gcd` letters, whose format is documented only by the community. It labels some Google hits "(no tag ID)" (#1385).
+- Hits and pushes are not joined per frame (#931, #932).
+- An exact client ID link can go to the wrong browser hit (#1029), and rule 2 rarely fires on a multi-page run (#1084).
+- A `wait` timeout can list a blocking control outside the submitted form (#990).
+- A blocking control with no `aria-label`, `name` or `id` has no name in a `wait` timeout message (#1004).
+- The handoff bar truncates long instruction text. The full text is on stderr (#1384).
+
+Field-tested on a real store with a real GTM web container in a workspace preview (0.6.0-rc.2 and rc.3).
+
 ## 0.6.0-rc.3
 
 Release candidate. Install it with `npm i -g tagreeve@next`.
