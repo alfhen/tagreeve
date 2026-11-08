@@ -32,7 +32,7 @@ Not released yet. The newest release is 0.6.0-rc.2, below.
 - `wait` with a `url` takes an optional `timeout`, such as `wait: { url: "/thank-you*", timeout: 90s }`. Any other key next to `url` is refused with "url only takes timeout" (#1283).
 - The `wait` URL docs say how a blocking control is printed (#1205).
 
-<!-- K08 -->
+- Push shapes have a `kind`, `gtag` or `object`, so `gtag('event', 'purchase', …)` and `{ event: 'purchase', … }` are two groups. A `gtag()` call pushed as an object with the keys `0`, `1` and `2` reads as the command it holds. A baseline saved by 0.6.0-rc.2 compares with kinds merged and warns once (#1247).
 
 - `init` exits 2 and says the path is not a folder when a file is at `tagreeve/scenarios` or `tagreeve/baselines` (#1052).
 - `init --json` prints the items done so far when a step fails, then exits 2 (#1133).

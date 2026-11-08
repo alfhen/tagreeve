@@ -495,9 +495,9 @@ describe('push shapes in diffRuns', () => {
     addPush(a, { event: 'purchase', ecommerce: { value: 1, currency: 'EUR' }, value: 3 });
     addPush(b, { event: 'purchase', value: '10', ecommerce: { currency: 'USD' }, extra: true });
     const d = diffRuns(a, b).dataLayer!;
-    expect(d.pathsRemoved).toEqual([{ epoch: 'undecided', event: 'purchase', frame: 'main', path: 'ecommerce.value', types: ['number'] }]);
-    expect(d.pathsAdded).toEqual([{ epoch: 'undecided', event: 'purchase', frame: 'main', path: 'extra', types: ['boolean'] }]);
-    expect(d.typeChanges).toEqual([{ epoch: 'undecided', event: 'purchase', frame: 'main', path: 'value', a: ['number'], b: ['string'] }]);
+    expect(d.pathsRemoved).toEqual([{ epoch: 'undecided', event: 'purchase', kind: 'object', frame: 'main', path: 'ecommerce.value', types: ['number'] }]);
+    expect(d.pathsAdded).toEqual([{ epoch: 'undecided', event: 'purchase', kind: 'object', frame: 'main', path: 'extra', types: ['boolean'] }]);
+    expect(d.typeChanges).toEqual([{ epoch: 'undecided', event: 'purchase', kind: 'object', frame: 'main', path: 'value', a: ['number'], b: ['string'] }]);
     expect(d.changed).toBe(true);
     expect(JSON.stringify(d)).not.toContain('25.5');
   });
@@ -519,8 +519,8 @@ describe('push shapes in diffRuns', () => {
     addPush(a, { event: 'old_event' });
     addPush(b, { event: 'new_event' });
     const d = diffRuns(a, b).dataLayer!;
-    expect(d.eventsRemoved).toEqual([{ epoch: 'undecided', event: 'old_event', frame: 'main' }]);
-    expect(d.eventsAdded).toEqual([{ epoch: 'undecided', event: 'new_event', frame: 'main' }]);
+    expect(d.eventsRemoved).toEqual([{ epoch: 'undecided', event: 'old_event', kind: 'object', frame: 'main' }]);
+    expect(d.eventsAdded).toEqual([{ epoch: 'undecided', event: 'new_event', kind: 'object', frame: 'main' }]);
   });
 
   test('an event in another frame is removed and new, and the same event with acrossFrames', () => {
@@ -529,8 +529,8 @@ describe('push shapes in diffRuns', () => {
     addPush(a, { event: 'add_to_cart', currency: 'USD' }, embedded);
     addPush(b, { event: 'add_to_cart', currency: 'USD' });
     const split = diffRuns(a, b).dataLayer!;
-    expect(split.eventsRemoved).toEqual([{ epoch: 'undecided', event: 'add_to_cart', frame: 'embedded' }]);
-    expect(split.eventsAdded).toEqual([{ epoch: 'undecided', event: 'add_to_cart', frame: 'main' }]);
+    expect(split.eventsRemoved).toEqual([{ epoch: 'undecided', event: 'add_to_cart', kind: 'object', frame: 'embedded' }]);
+    expect(split.eventsAdded).toEqual([{ epoch: 'undecided', event: 'add_to_cart', kind: 'object', frame: 'main' }]);
     expect(split.moved).toEqual([]);
     const merged = diffRuns(a, b, { acrossFrames: true }).dataLayer!;
     expect(merged.eventsRemoved).toEqual([]);
@@ -581,7 +581,7 @@ describe('push shapes in diffRuns', () => {
 });
 
 describe('diffPushes', () => {
-  const group = (over: Partial<PushGroup> = {}): PushGroup => ({ epoch: 'undecided', event: 'e', frame: 'main', paths: [], ...over });
+  const group = (over: Partial<PushGroup> = {}): PushGroup => ({ epoch: 'undecided', event: 'e', kind: 'object', frame: 'main', paths: [], ...over });
 
   test('a move needs neighbouring epochs and equal paths', () => {
     const paths = [{ path: 'x', types: ['string'] }];
@@ -604,5 +604,26 @@ describe('diffPushes', () => {
     const b = [group({ event: 'custom_b', paths: [{ path: 'value', types: ['number'] }] })];
     expect(diffPushes(a, b, { eventMap }).changed).toBe(false);
     expect(diffPushes(a, b).changed).toBe(true);
+  });
+});
+
+describe('push kind in diffRuns', () => {
+  test('a gtag purchase and an object purchase in one run are two groups', () => {
+    const run = makeRun();
+    addPush(run, { event: 'purchase', ecommerce: { value: 1 } });
+    addPush(run, { event: 'purchase' }, { args: ['event', 'purchase', { value: 1 }] });
+    expect(pushGroups(run).map((g) => [g.event, g.kind])).toEqual([['purchase', 'gtag'], ['purchase', 'object']]);
+  });
+
+  test('one purchase on each side with different kinds pairs and adds one warning', () => {
+    const a = makeRun();
+    const b = makeRun();
+    addPush(a, { event: 'checkout_completed', value: 1 });
+    addPush(b, { event: 'purchase' }, { args: ['event', 'purchase', { value: 1 }] });
+    const result = diffRuns(a, b);
+    expect(result.warnings).toEqual(['push kind changed: purchase']);
+    expect(result.dataLayer!.eventsRemoved).toEqual([]);
+    expect(result.dataLayer!.eventsAdded).toEqual([]);
+    expect(result.dataLayer!.pathsRemoved.map((p) => p.path)).toEqual(['event']);
   });
 });

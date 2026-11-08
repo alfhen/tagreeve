@@ -99,8 +99,8 @@ test('a baseline of build a and a run of build b exit 0 with push warnings, and 
   expect(summary.ok).toBe(true);
   expect(summary.baseline?.drift).toBe(false);
   const warnings = summary.baseline!.warnings;
-  expect(warnings).toContain('dataLayer missing path ecommerce.value (number) in purchase [epoch undecided, frame main]');
-  expect(warnings).toContain('dataLayer type change value: number -> string in purchase [epoch undecided, frame main]');
+  expect(warnings).toContain('dataLayer missing path ecommerce.value (number) in purchase [epoch undecided, frame main, kind object]');
+  expect(warnings).toContain('dataLayer type change value: number -> string in purchase [epoch undecided, frame main, kind object]');
   expect(warnings.some((w) => w.startsWith('dataLayer removed event add_to_cart'))).toBe(true);
   expect(warnings.some((w) => w.includes('(other)'))).toBe(true);
   expectNoLeaks(b.stdout, b.stderr);

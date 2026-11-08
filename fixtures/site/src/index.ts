@@ -84,6 +84,7 @@ const pages: Record<string, string> = {
   '/meta-early-ids': 'meta-early-ids.html',
   '/consent-mode-hits': 'consent-mode-hits.html',
   '/datalayer-shapes': 'datalayer-shapes.html',
+  '/datalayer-kinds': 'datalayer-kinds.html',
   '/datalayer-build': 'datalayer-build.html',
   '/datalayer-renamed': 'datalayer-renamed.html',
   '/datalayer-theme': 'datalayer-theme.html',

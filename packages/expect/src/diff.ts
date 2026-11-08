@@ -3,7 +3,7 @@ import type { ConsentEpoch, Hit, HitIds, RunRecords } from '@tagreeve/core';
 import { consentFields } from './scenario.ts';
 import { epochForHit, judgeIndex, judgedAt } from './evaluate.ts';
 import { normalizePushGroups, type EventMap } from './event-map.ts';
-import { pushShapes, type PushFrameKind, type PushPath } from './push-shape.ts';
+import { pushShapes, type PushFrameKind, type PushKind, type PushPath } from './push-shape.ts';
 
 export interface DiffOptions {
   /** Adds the page path to the match key, with the Shopify sandbox prefix stripped. */
@@ -115,14 +115,17 @@ export function diffRuns(a: RunRecords, b: RunRecords, options: DiffOptions = {}
   const pushesB = pushGroups(b);
   if (pushesA.length > 0 || pushesB.length > 0) {
     result.dataLayer = diffPushes(pushesA, pushesB, { acrossFrames: options.acrossFrames, epochOrder: epochOrder(b), eventMap: options.eventMap });
+    result.warnings.push(...result.dataLayer.kindChanged.map((k) => `push kind changed: ${k.event}`));
   }
   return result;
 }
 
-/** The masked shape of the pushes of one consent epoch, event and frame kind. Holds no value and no count. */
+/** The masked shape of the pushes of one consent epoch, event, push kind and frame kind. Holds no value and no count. */
 export interface PushGroup {
   epoch: string;
   event: string;
+  /** Absent in a baseline saved by 0.6.0-rc.2. */
+  kind?: PushKind;
   frame: PushFrameKind;
   paths: PushPath[];
 }
@@ -130,6 +133,8 @@ export interface PushGroup {
 export interface PushRef {
   epoch: string;
   event: string;
+  /** Absent when the push kinds were merged. */
+  kind?: PushKind;
   /** A frame kind, or `any` when the frame kinds were merged. */
   frame: string;
 }
@@ -156,6 +161,14 @@ export interface PushMove {
   epoch?: string;
 }
 
+export interface PushKindChange {
+  epoch: string;
+  event: string;
+  frame: string;
+  from: PushKind;
+  to: PushKind;
+}
+
 export interface PushDiff {
   eventsAdded: PushRef[];
   eventsRemoved: PushRef[];
@@ -163,6 +176,8 @@ export interface PushDiff {
   pathsRemoved: PushPathChange[];
   typeChanges: PushTypeChange[];
   moved: PushMove[];
+  /** An event that has one group on each side, and a different push kind on each. The two groups are compared. */
+  kindChanged: PushKindChange[];
   /** An event, a key path or a type on one side only. A move is not a change. Order and counts are not compared. */
   changed: boolean;
 }
@@ -179,7 +194,7 @@ function epochOrder(run: RunRecords): string[] {
   return [...run.consentEpochs].sort((x, y) => x.startT - y.startT).map((e) => e.label);
 }
 
-/** The push shapes of a run per consent epoch, event and frame kind. */
+/** The push shapes of a run per consent epoch, event, push kind and frame kind. */
 export function pushGroups(run: RunRecords): PushGroup[] {
   const epochs = [...run.consentEpochs].sort((x, y) => x.startT - y.startT);
   const byEpoch = new Map<string, RunRecords['dataLayerEvents']>();
@@ -191,8 +206,8 @@ export function pushGroups(run: RunRecords): PushGroup[] {
   for (const [epoch, dataLayerEvents] of [...byEpoch].sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))) {
     for (const step of pushShapes({ steps: run.steps, dataLayerEvents }).steps) {
       for (const shape of step.events) {
-        const id = JSON.stringify([epoch, shape.event, shape.frame]);
-        const entry = groups.get(id) ?? groups.set(id, { group: { epoch, event: shape.event, frame: shape.frame, paths: [] }, types: new Map() }).get(id)!;
+        const id = JSON.stringify([epoch, shape.event, shape.kind, shape.frame]);
+        const entry = groups.get(id) ?? groups.set(id, { group: { epoch, event: shape.event, kind: shape.kind, frame: shape.frame, paths: [] }, types: new Map() }).get(id)!;
         for (const p of shape.paths) {
           const set = entry.types.get(p.path) ?? entry.types.set(p.path, new Set()).get(p.path)!;
           for (const t of p.types) set.add(t);
@@ -211,17 +226,19 @@ export function pushGroups(run: RunRecords): PushGroup[] {
 interface PushNode {
   epoch: string;
   event: string;
+  kind?: PushKind;
   frame: string;
   frames: string[];
   types: Map<string, string[]>;
 }
 
-function pushNodes(groups: PushGroup[], acrossFrames: boolean): Map<string, PushNode> {
+function pushNodes(groups: PushGroup[], acrossFrames: boolean, mergeKinds: boolean): Map<string, PushNode> {
   const nodes = new Map<string, PushNode>();
   for (const g of groups) {
     const frame = acrossFrames ? 'any' : g.frame;
-    const id = JSON.stringify([g.epoch, g.event, frame]);
-    const node: PushNode = nodes.get(id) ?? { epoch: g.epoch, event: g.event, frame, frames: [], types: new Map() };
+    const kind = mergeKinds ? undefined : g.kind;
+    const id = JSON.stringify([g.epoch, g.event, kind ?? null, frame]);
+    const node: PushNode = nodes.get(id) ?? { epoch: g.epoch, event: g.event, ...(kind === undefined ? {} : { kind }), frame, frames: [], types: new Map() };
     if (!node.frames.includes(g.frame)) node.frames.push(g.frame);
     for (const p of g.paths) node.types.set(p.path, [...new Set([...(node.types.get(p.path) ?? []), ...p.types])].sort());
     nodes.set(id, node);
@@ -229,32 +246,45 @@ function pushNodes(groups: PushGroup[], acrossFrames: boolean): Map<string, Push
   return nodes;
 }
 
-const nodeRef = (n: PushNode): PushRef => ({ epoch: n.epoch, event: n.event, frame: n.frame });
+const nodeRef = (n: PushNode): PushRef => ({ epoch: n.epoch, event: n.event, ...(n.kind === undefined ? {} : { kind: n.kind }), frame: n.frame });
 const typesId = (n: PushNode) => JSON.stringify([...n.types].sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)));
 
 /** Compares push shapes. Nothing here is drift: the caller reports the changes as warnings. */
 export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOptions = {}): PushDiff {
-  const result: PushDiff = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], typeChanges: [], moved: [], changed: false };
-  const na = pushNodes(normalizePushGroups(a, options.eventMap), options.acrossFrames ?? false);
-  const nb = pushNodes(normalizePushGroups(b), options.acrossFrames ?? false);
+  const result: PushDiff = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], typeChanges: [], moved: [], kindChanged: [], changed: false };
+  const mergeKinds = [...a, ...b].some((g) => g.kind === undefined);
+  const na = pushNodes(normalizePushGroups(a, options.eventMap), options.acrossFrames ?? false, mergeKinds);
+  const nb = pushNodes(normalizePushGroups(b), options.acrossFrames ?? false, mergeKinds);
   const gone: PushNode[] = [];
   const fresh: PushNode[] = [];
+  const compare = (x: PushNode, y: PushNode): void => {
+    for (const [path, types] of y.types) {
+      const before = x.types.get(path);
+      if (!before) result.pathsAdded.push({ ...nodeRef(y), path, types });
+      else if (before.join() !== types.join()) result.typeChanges.push({ ...nodeRef(y), path, a: before, b: types });
+    }
+    for (const [path, types] of x.types) if (!y.types.has(path)) result.pathsRemoved.push({ ...nodeRef(x), path, types });
+    if (x.frames.slice().sort().join() !== y.frames.slice().sort().join()) {
+      result.moved.push({ event: y.event, kind: 'frame', epoch: y.epoch, from: x.frames.slice().sort().join('+'), to: y.frames.slice().sort().join('+') });
+    }
+  };
   for (const id of [...new Set([...na.keys(), ...nb.keys()])].sort()) {
     const x = na.get(id);
     const y = nb.get(id);
     if (!x) fresh.push(y!);
     else if (!y) gone.push(x);
-    else {
-      for (const [path, types] of y.types) {
-        const before = x.types.get(path);
-        if (!before) result.pathsAdded.push({ ...nodeRef(y), path, types });
-        else if (before.join() !== types.join()) result.typeChanges.push({ ...nodeRef(y), path, a: before, b: types });
-      }
-      for (const [path, types] of x.types) if (!y.types.has(path)) result.pathsRemoved.push({ ...nodeRef(x), path, types });
-      if (x.frames.slice().sort().join() !== y.frames.slice().sort().join()) {
-        result.moved.push({ event: y.event, kind: 'frame', epoch: y.epoch, from: x.frames.slice().sort().join('+'), to: y.frames.slice().sort().join('+') });
-      }
-    }
+    else compare(x, y);
+  }
+
+  const sole = (nodes: Map<string, PushNode>, n: PushNode): boolean =>
+    [...nodes.values()].filter((o) => o.epoch === n.epoch && o.event === n.event && o.frame === n.frame).length === 1;
+  for (const g of [...gone]) {
+    const f = fresh.find((o) => o.epoch === g.epoch && o.event === g.event && o.frame === g.frame && g.kind !== undefined && o.kind !== undefined && sole(na, g) && sole(nb, o));
+    if (!f) continue;
+    gone.splice(gone.indexOf(g), 1);
+    fresh.splice(fresh.indexOf(f), 1);
+    result.kindChanged.push({ epoch: g.epoch, event: g.event, frame: g.frame, from: g.kind!, to: f.kind! });
+    compare(g, f);
   }
 
   const order = options.epochOrder ?? [];
@@ -262,7 +292,7 @@ export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOpti
   for (const g of gone) {
     const i = order.indexOf(g.epoch);
     const match = fresh.find((f) => {
-      if (taken.has(f) || f.event !== g.event || f.frame !== g.frame || typesId(f) !== typesId(g)) return false;
+      if (taken.has(f) || f.event !== g.event || f.kind !== g.kind || f.frame !== g.frame || typesId(f) !== typesId(g)) return false;
       const j = order.indexOf(f.epoch);
       return i >= 0 && j >= 0 && Math.abs(i - j) === 1 && order.filter((l) => l === g.epoch || l === f.epoch).length === 2;
     });

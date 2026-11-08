@@ -117,3 +117,56 @@ describe('normalizePushGroups', () => {
     expect(() => parseEventMap('{"paths":{"purchase":{".":"."}}}', 'm.json')).toThrow('paths.purchase');
   });
 });
+
+describe('push kind', () => {
+  const kinded = (event: string, kind: 'gtag' | 'object', paths: string[] = []): PushGroup => ({ ...group(event, paths), kind });
+  const kindsOf = (groups: PushGroup[]) => groups.map((g) => g.kind);
+
+  test('a root rename sets the kind of the mapped shape', () => {
+    const toGtag = parseEventMap(JSON.stringify({ paths: { purchase: { ecommerce: '.' } } }), 'm.json');
+    expect(kindsOf(normalizePushGroups([kinded('purchase', 'object', ['event', 'ecommerce.value'])], toGtag))).toEqual(['gtag']);
+    const toObject = parseEventMap(JSON.stringify({ paths: { purchase: { '.': 'ecommerce' } } }), 'm.json');
+    expect(kindsOf(normalizePushGroups([kinded('purchase', 'gtag', ['value'])], toObject))).toEqual(['object']);
+    const under = parseEventMap(JSON.stringify({ paths: { purchase: { value: 'ecommerce.value' } } }), 'm.json');
+    expect(kindsOf(normalizePushGroups([kinded('purchase', 'object', ['value'])], under))).toEqual(['object']);
+  });
+
+  test('a built-in rename keeps the kind', () => {
+    expect(kindsOf(normalizePushGroups([kinded('checkout_completed', 'object')]))).toEqual(['object']);
+  });
+
+  test('a gtag and an object purchase still pair and give path changes with a root rename', () => {
+    const map = parseEventMap(JSON.stringify({ paths: { purchase: { '.': 'ecommerce' } } }), 'm.json');
+    const d = diffPushes([kinded('purchase', 'gtag', ['value', 'currency'])], [kinded('purchase', 'object', ['event', 'ecommerce.value'])], { eventMap: map });
+    expect(d.eventsAdded).toEqual([]);
+    expect(d.eventsRemoved).toEqual([]);
+    expect(d.pathsRemoved.map((p) => p.path)).toEqual(['ecommerce.currency']);
+    expect(d.kindChanged).toEqual([]);
+  });
+
+  test('a Shopify object push pairs with a gtag purchase and warns once', () => {
+    const d = diffPushes([kinded('checkout_completed', 'object', ['event', 'value'])], [kinded('purchase', 'gtag', ['value', 'currency'])]);
+    expect(d.kindChanged).toEqual([{ epoch: 'undecided', event: 'purchase', frame: 'main', from: 'object', to: 'gtag' }]);
+    expect(d.eventsRemoved).toEqual([]);
+    expect(d.eventsAdded).toEqual([]);
+    expect(d.pathsRemoved.map((p) => p.path)).toEqual(['event']);
+    expect(d.pathsAdded.map((p) => p.path)).toEqual(['currency']);
+  });
+
+  test('a user entry for a Shopify name gives the same pairing', () => {
+    const map = parseEventMap(JSON.stringify({ events: { checkout_completed: 'purchase' } }), 'm.json');
+    const d = diffPushes([kinded('checkout_completed', 'object', ['value'])], [kinded('purchase', 'gtag', ['value'])], { eventMap: map });
+    expect(d.kindChanged).toHaveLength(1);
+    expect(d.eventsRemoved).toEqual([]);
+  });
+
+  test('two purchase groups of different kinds on one side stay two nodes', () => {
+    const both = [kinded('purchase', 'gtag', ['value']), kinded('purchase', 'object', ['event'])];
+    const d = diffPushes(both, [kinded('purchase', 'gtag', ['value'])]);
+    expect(d.kindChanged).toEqual([]);
+    expect(d.eventsRemoved).toEqual([{ epoch: 'undecided', event: 'purchase', kind: 'object', frame: 'main' }]);
+    const e = diffPushes([kinded('checkout_completed', 'object', ['event'])], both);
+    expect(e.kindChanged).toEqual([]);
+    expect(e.eventsAdded).toEqual([{ epoch: 'undecided', event: 'purchase', kind: 'gtag', frame: 'main' }]);
+  });
+});
