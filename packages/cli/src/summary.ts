@@ -1,5 +1,5 @@
 import { guardFieldName, maskValuePath, OTHER_NAME, platformHostFor } from '@tagreeve/decoders';
-import type { HitLinkMiss, Result, ResultNote, RunRecords, ServerContainerErrorClass, Severity } from '@tagreeve/core';
+import type { FlagKind, HitLinkMiss, Result, ResultNote, RunRecords, ServerContainerErrorClass, Severity } from '@tagreeve/core';
 import { isServerHit, judgeIndex, NO_EVENT, pushShapes, summarizeTags, tagLabel, viaHitOf, type PushShapes, type TagsContainerSummary } from '@tagreeve/expect';
 import { formatDefaults, type DefaultEntry } from './project-config.ts';
 import { NOTE_TEXT } from './report/model.ts';
@@ -199,7 +199,8 @@ const URL_TOKEN = /[a-z][a-z0-9+.-]*:\/\/\S+/gi;
 const URL_PARTS = /^(?:(?:([a-z][a-z0-9+.-]*:)?\/\/)([^/?#]*))?([^?#]*)(?:\?([^#]*))?(?:#.*)?$/is;
 // The URL runs to the end of the detail, so a space inside it does not end it.
 const RECEIVED_PAGE = /^(\S+ received )(.+)( as the page)$/s;
-const URL_ENDING_KINDS = new Set(['unknownDestination', 'firstPartySubdomain', 'platformHost', 'stubBypass', 'possibleRedirectHop']);
+// A kind not listed here is masked by default, so a new kind cannot leak a URL at the end of its detail.
+const PROSE_KINDS = new Set(['possibleRealData', 'unloadGap', 'netLogUnreadable', 'serverContainerFailed', 'dataLayerReassigned', 'dataLayerNotHooked', 'dataLayerIncomplete']);
 const URL_AT_END = /^(.*?(?:\b[A-Z]+ |: ))((?:[a-z][a-z0-9+.-]*:)?\/\/.*|\/.*)$/s;
 
 // A raw name is checked, so a decoded `&`, `=`, `?` or space cannot break the shape. A bare item may be a value.
@@ -217,10 +218,10 @@ function redactUrl(raw: string): string {
 }
 
 /** Replaces each URL in a flag detail and keeps the words around it, so the host parsers still match. */
-export function redactFlagDetail(detail: string, kind: string): string {
+export function redactFlagDetail(detail: string, kind: FlagKind): string {
   const page = RECEIVED_PAGE.exec(detail);
   if (page) return `${page[1]}${redactUrl(page[2]!)}${page[3]}`;
-  const tail = URL_ENDING_KINDS.has(kind) ? URL_AT_END.exec(detail) : null;
+  const tail = PROSE_KINDS.has(kind) ? null : URL_AT_END.exec(detail);
   if (tail) return `${tail[1]}${redactUrl(tail[2]!)}`;
   return detail.replace(URL_TOKEN, redactUrl);
 }
@@ -265,8 +266,14 @@ function serverContainerLines(summary: Summary): string[] {
 
 const DATALAYER_EVENTS_SHOWN = 3;
 
+function dataLayerLabelRank(label: string): number {
+  if (label.startsWith('consent ')) return 1;
+  if (label.startsWith('gtag ')) return 2;
+  return label.startsWith('gtm.') ? 3 : 0;
+}
+
 function dataLayerLine({ pushes, steps }: PushShapes): string {
-  const events = [...new Set(steps.flatMap((s) => s.events.map((e) => e.event)))].filter((e) => e !== NO_EVENT).sort();
+  const events = [...new Set(steps.flatMap((s) => s.events.map((e) => e.event)))].filter((e) => e !== NO_EVENT).sort((a, b) => dataLayerLabelRank(a) - dataLayerLabelRank(b) || (a < b ? -1 : a > b ? 1 : 0));
   const shown = events.slice(0, DATALAYER_EVENTS_SHOWN).join(', ');
   const list = events.length > 0 ? ` (${shown}${events.length > DATALAYER_EVENTS_SHOWN ? ', …' : ''})` : '';
   return `dataLayer: ${pushes} push${pushes === 1 ? '' : 'es'}, ${events.length} event${events.length === 1 ? '' : 's'}${list}; shapes in --json`;

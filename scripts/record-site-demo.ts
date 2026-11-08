@@ -191,7 +191,8 @@ async function record(): Promise<void> {
   try {
     await cp(join(demoDir, 'scenarios'), join(work, 'tagreeve'), { recursive: true });
     const clean = join(work, 'clean');
-    await mkdir(join(clean, 'runs'), { recursive: true });
+    const cleanRuns = join(clean, 'tagreeve/runs/2026-01-15');
+    await mkdir(cleanRuns, { recursive: true });
     const runIds = new Map<DemoScenario, string>();
 
     for (const s of demoScenarios) {
@@ -206,13 +207,13 @@ async function record(): Promise<void> {
       const scrubbed = rewriteHosts(toJsonl(scrubRecords(raw)), site);
       const runId = /run_[0-9A-Z]+/.exec(path)![0];
       runIds.set(s, runId);
-      await writeFile(join(clean, 'runs', `${runId}.jsonl`), scrubbed);
+      await writeFile(join(cleanRuns, `${runId}.jsonl`), scrubbed);
       written.set(`${s}.jsonl`, scrubbed);
       written.set(`${s}.txt`, fixDate(rewriteHosts(result.stdout, site)));
       if (s === 'reject') written.set('reject.json', rewriteHosts(firstJsonResult(await readRun(join(work, path)), path), site));
     }
 
-    const diff = check('diff', await cli(['diff', `runs/${runIds.get('reject')}.jsonl`, `runs/${runIds.get('accept')}.jsonl`], clean));
+    const diff = check('diff', await cli(['diff', `tagreeve/runs/2026-01-15/${runIds.get('reject')}.jsonl`, `tagreeve/runs/2026-01-15/${runIds.get('accept')}.jsonl`], clean));
     written.set('diff.txt', diff.stdout);
 
     console.error('Recording the suite');

@@ -1,81 +1,81 @@
-Diff runs/run_01M6Y0EXP32PJTJX66NBTMTJJT.jsonl -> runs/run_01M6Y0EQ88CETHHACWY9JZBCBD.jsonl
+Diff tagreeve/runs/2026-01-15/run_01M6Y4NYZCA43YD4V4Y6VRMKC3.jsonl -> tagreeve/runs/2026-01-15/run_01M6Y4NRJ206YES7YA8GFTVGXF.jsonl
 
 Epoch denied
   ga4
     page_view
-      removed (step "visit-3"): hit_01M6Y0F3J52D93RJ5352C0N1VR
-      removed (step "visit-3"): hit_01M6Y0F3J52D93RJ5352C0N1VT
-      removed (step "visit-3"): hit_01M6Y0F3J68T2J984GY7F13K0P
+      removed (step "visit-3"): hit_01M6Y4P4V462RC0MR1Q4F75QGH
+      removed (step "visit-3"): hit_01M6Y4P4V462RC0MR1Q4F75QGK
+      removed (step "visit-3"): hit_01M6Y4P4V462RC0MR1Q4F75QGN
       count 3 -> 0 (pairing by order)
     user_engagement
-      removed (step "visit-3"): hit_01M6Y0F3J7C40GWJHKFZQ5K074
+      removed (step "visit-3"): hit_01M6Y4P4V50YF5ZEDZ5NEBD026
       count 1 -> 0 (pairing by order)
   google-ads
     add_to_cart
-      removed (step "addToCart-4"): hit_01M6Y0F3J68T2J984GY7F13K0S
+      removed (step "addToCart-4"): hit_01M6Y4P4V50YF5ZEDZ5NEBD025
       count 1 -> 0 (pairing by order)
     page_view
-      removed (step "visit-3"): hit_01M6Y0F3J68T2J984GY7F13K0Q
+      removed (step "visit-3"): hit_01M6Y4P4V50YF5ZEDZ5NEBD022
       count 1 -> 0 (pairing by order)
     view_item
-      removed (step "visit-3"): hit_01M6Y0F3J68T2J984GY7F13K0R
+      removed (step "visit-3"): hit_01M6Y4P4V50YF5ZEDZ5NEBD023
       count 1 -> 0 (pairing by order)
   meta
     AddToCart
-      removed (step "addToCart-4"): hit_01M6Y0F3J68T2J984GY7F13K0T
+      removed (step "addToCart-4"): hit_01M6Y4P4V50YF5ZEDZ5NEBD024
       count 1 -> 0 (pairing by order)
     PageView
-      removed (step "visit-3"): hit_01M6Y0F3J52D93RJ5352C0N1VV
+      removed (step "visit-3"): hit_01M6Y4P4V462RC0MR1Q4F75QGM
       count 1 -> 0 (pairing by order)
   sgtm
     (no event)
-      removed (step "visit-3"): hit_01M6Y0F3J52D93RJ5352C0N1VS
+      removed (step "visit-3"): hit_01M6Y4P4V462RC0MR1Q4F75QGJ
       count 1 -> 0 (pairing by order)
 
 Epoch granted
   ga4
     page_view
-      added (step "visit-3"): hit_01M6Y0EX5VCR094M1YQJ0E0A70
-      added (step "visit-3"): hit_01M6Y0EX5VCR094M1YQJ0E0A72
-      added (step "visit-3"): hit_01M6Y0EX5VCR094M1YQJ0E0A74
+      added (step "visit-3"): hit_01M6Y4NYEB71M19G7S7XV29B9Q
+      added (step "visit-3"): hit_01M6Y4NYEB71M19G7S7XV29B9S
+      added (step "visit-3"): hit_01M6Y4NYEC67E428SBKXJDE2XX
       count 0 -> 3 (pairing by order)
     user_engagement
-      added (step "visit-3"): hit_01M6Y0EX5X2HNPY8A57TERECZ7
+      added (step "visit-3"): hit_01M6Y4NYEDB1CQZ03Z0MJZK9AE
       count 0 -> 1 (pairing by order)
   google-ads
     add_to_cart
-      added (step "addToCart-4"): hit_01M6Y0EX5W907G1XXG9YH29F1H
-      added (step "addToCart-4"): hit_01M6Y0EX5X2HNPY8A57TERECZ4
-      added (step "addToCart-4"): hit_01M6Y0EX5X2HNPY8A57TERECZ5
+      added (step "addToCart-4"): hit_01M6Y4NYEDB1CQZ03Z0MJZK9AA
+      added (step "addToCart-4"): hit_01M6Y4NYEDB1CQZ03Z0MJZK9AB
+      added (step "addToCart-4"): hit_01M6Y4NYEDB1CQZ03Z0MJZK9AD
       count 0 -> 3 (pairing by order)
     consent_update
-      added (step "consent-2"): hit_01M6Y0EX5TBSZYVHA8HZH7P0YY
+      added (step "consent-2"): hit_01M6Y4NYEB71M19G7S7XV29B9N
       count 0 -> 1 (pairing by order)
     gtag.config
-      added (step "consent-2"): hit_01M6Y0EX5TBSZYVHA8HZH7P0YW
-      added (step "consent-2"): hit_01M6Y0EX5TBSZYVHA8HZH7P0YX
-      added (step "visit-3"): hit_01M6Y0EX5VCR094M1YQJ0E0A75
-      added (step "visit-3"): hit_01M6Y0EX5W907G1XXG9YH29F1C
+      added (step "consent-2"): hit_01M6Y4NYEB71M19G7S7XV29B9K
+      added (step "consent-2"): hit_01M6Y4NYEB71M19G7S7XV29B9M
+      added (step "visit-3"): hit_01M6Y4NYEC67E428SBKXJDE2XY
+      added (step "visit-3"): hit_01M6Y4NYEC67E428SBKXJDE2XZ
       count 0 -> 4 (pairing by order)
     page_view
-      added (step "visit-3"): hit_01M6Y0EX5W907G1XXG9YH29F1F
+      added (step "visit-3"): hit_01M6Y4NYEDB1CQZ03Z0MJZK9A8
       count 0 -> 1 (pairing by order)
     remarketing
-      added (step "consent-2"): hit_01M6Y0EX5VCR094M1YQJ0E0A6Z
+      added (step "consent-2"): hit_01M6Y4NYEB71M19G7S7XV29B9P
       count 0 -> 1 (pairing by order)
     view_item
-      added (step "visit-3"): hit_01M6Y0EX5W907G1XXG9YH29F1D
-      added (step "visit-3"): hit_01M6Y0EX5W907G1XXG9YH29F1E
-      added (step "visit-3"): hit_01M6Y0EX5W907G1XXG9YH29F1G
+      added (step "visit-3"): hit_01M6Y4NYEC67E428SBKXJDE2Y0
+      added (step "visit-3"): hit_01M6Y4NYEC67E428SBKXJDE2Y1
+      added (step "visit-3"): hit_01M6Y4NYEDB1CQZ03Z0MJZK9A9
       count 0 -> 3 (pairing by order)
   meta
     AddToCart
-      added (step "addToCart-4"): hit_01M6Y0EX5X2HNPY8A57TERECZ6
+      added (step "addToCart-4"): hit_01M6Y4NYEDB1CQZ03Z0MJZK9AC
       count 0 -> 1 (pairing by order)
     PageView
-      added (step "visit-3"): hit_01M6Y0EX5VCR094M1YQJ0E0A73
+      added (step "visit-3"): hit_01M6Y4NYEB71M19G7S7XV29B9T
       count 0 -> 1 (pairing by order)
   sgtm
     (no event)
-      added (step "visit-3"): hit_01M6Y0EX5VCR094M1YQJ0E0A71
+      added (step "visit-3"): hit_01M6Y4NYEB71M19G7S7XV29B9R
       count 0 -> 1 (pairing by order)
