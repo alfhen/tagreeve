@@ -39,7 +39,7 @@ Not released yet. The newest release is 0.6.0-rc.2, below.
 - The git-ignore probe file is `run_probe.jsonl`, so a `run_*.jsonl` rule counts as ignoring run records (#1139).
 - `init` asks git about the `tagreeve/runs/` folder itself, so a `.gitignore` with only `*.jsonl` still gets the `/tagreeve/runs/` line (#1140).
 
-<!-- M29 -->
+- Fixed: a card frame that moves or reloads while a test payment fill runs out of time now fails with the gone-frame reason, not a Playwright timeout message (#1164, #1161, #1163).
 
 <!-- M30 -->
 
