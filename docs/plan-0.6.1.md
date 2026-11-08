@@ -81,7 +81,7 @@ Decided in this plan:
 
 OPEN decisions (the maintainer decides before the wave that reads them):
 
-1. **OPEN: #937, what the push scan does.** Wave 1. Recommendation: scan each `DataLayerEvent.args` with the same scanner as hit parameters, and write a `possibleRealData` flag per push that holds a value not from the run identity. The flag detail reads `dataLayer push <id> in step <id> carries <n> <kinds> value(s) that are not from the run identity, in <paths>`, with paths masked as push shapes mask them. The `possibleRealData` check counts these flags, so they fail the run by default, as a request finding does. Reasons and costs:
+1. **OPEN: #937, what the push scan does.** Wave 1. Recommendation: scan each `DataLayerEvent.args` with the same scanner as hit parameters, and write a `possibleRealData` flag per push that holds a value not from the run identity. The flag detail reads `dataLayer push <id> in step <id> carries <n> <kinds> value(s) that are not from the run identity, in <paths>`, with each path named as `findForeignData` names a JSON body leaf (`guardFieldName` over the leaf path), so push and request findings read the same. L09 stays in `evaluate.ts` and does not touch `push-shape.ts`. The `possibleRealData` check counts these flags, so they fail the run by default, as a request finding does. Reasons and costs:
    - A real person's data in a push is the same risk as in a request. A tag can send it later, also from the container, where the request scan does not see it.
    - It can fail a run that passed in 0.6.0. The e2e scenarios on `/datalayer-shapes` and `/datalayer-build` then set `builtins: { possibleRealData: warn }`. The CHANGELOG upgrade notes say so.
    - The request scan already gives many findings on a Shopify storefront (the 0.6.0 Known list). Pushes can add more.
@@ -110,7 +110,7 @@ Why the waves are this way:
 - **`packages/recorder/src/recorder.ts`** changes in L09 (wave 1: the `buildFlags` call in `close`) and D09 (wave 2: the `hooked` names of `buildDataLayerNotHookedFlag`).
 - **`fixtures/site/src/index.ts` and `fixtures/site/README.md`** change in U09 (wave 1: one new page) and D09 (wave 2: one new page and the #1368 row). L09 uses existing pages.
 - **`docs/cli.md`, `docs/design.md` and `docs/guide/`** change in C09 only. C09 is in wave 2, so it documents the merged wave 1 code. For D09 and V09 in the same wave, C09 writes from this plan and merges after both; its reviewer checks the text against their merged code.
-- **`CHANGELOG.md`** is the one file every entry edits. Each entry replaces only its own marker line. C09 also edits two released lines of the `## 0.6.0-rc.3` section (#1294, #1337). R15 writes the section.
+- **`CHANGELOG.md`** is the one file every entry edits. The plan PR adds the `## 0.6.1` block with all markers. Each entry replaces only its own marker line. C09 also edits two released lines of the `## 0.6.0-rc.3` section (#1294, #1337). R15 writes the section.
 - **E09 and B09** both affect baseline compare. E09 changes `diffPushes` and its names, which `compareBaseline` calls. B09 changes `compareBaseline` and `validPushGroup` only. They touch different files.
 
 ## Rules for every PR
@@ -124,7 +124,7 @@ More for 0.6.1:
 - New e2e tests go in new files, unless the entry names an existing file.
 - Wave 1 code entries edit nothing under `docs/`. C09 writes their docs.
 - A message names a key by its position or a fixed label, never by its text from a file or a page.
-- CHANGELOG: the first entry to merge adds a `## 0.6.1` heading above `## 0.6.0`, with the line `Not released yet. The newest release is 0.6.0, below.` and every marker of "CHANGELOG markers". Each PR replaces only its own marker. R15 removes leftover markers and the "Not released yet" line.
+- CHANGELOG: the plan PR adds the `## 0.6.1` heading above `## 0.6.0`, with the line `Not released yet. The newest release is 0.6.0, below.` and every marker of "CHANGELOG markers". Each PR replaces only its own marker, so no two PRs add the heading. R15 removes leftover markers and the "Not released yet" line.
 
 ## PRs
 
@@ -135,7 +135,7 @@ Part of #937 (or `Closes #937`, if decision 1 takes both halves)
 Closes #1322
 
 Touches: `packages/expect/src/evaluate.ts` (`findForeignData` takes the `DataLayerEvent`s; the `possibleRealData` check passes them), `packages/expect/src/identity-values.test.ts`, `packages/expect/src/tags.ts` (`maskTagName` only), `packages/expect/src/tags.test.ts`, `packages/recorder/src/flags.ts` (`FlagInput` and `buildFlags`), `packages/recorder/src/flags-real-data.test.ts`, `packages/recorder/src/recorder.ts` (the `buildFlags` call in `close` only), `e2e/scenarios/datalayer-shapes.yml`, `e2e/scenarios/datalayer-build-b.yml` (the `builtins` line, if decision 1 makes the finding fail), `e2e/datalayer-push-real-data.e2e.test.ts` (new), `CHANGELOG.md` (the L09 marker).
-- `findForeignData` scans each push's `args` leaf by leaf, as it scans a JSON body. A finding is keyed by the push's record ID. Its detail names the push ID, the step and the masked key paths (decision 1), never the value.
+- `findForeignData` scans each push's `args` leaf by leaf, as it scans a JSON body, with the same leaf naming. A finding is keyed by the push's record ID. Its detail names the push ID, the step and the key paths named as decision 1 says, never the value.
 - `buildFlags` gets `dataLayerEvents` and writes one `possibleRealData` flag per push with a finding, with the push ID and the step in `recordIds`. `evaluate` skips a push that already has a flag, as it does for a request.
 - `maskTagName` adds a third split to its union, on each alphanumeric run (`/[^A-Za-z0-9]+/`). The coarse split stays, so a UUID or a hyphenated digest is still checked whole. `GA4 page_view` stays as it is (#1322).
 - Without decision 1, L09 builds only the `maskTagName` part.
@@ -150,7 +150,7 @@ Closes #1246
 Closes #1370
 Closes #1373
 
-Touches: `packages/expect/src/event-map.ts`, `packages/expect/src/event-map.test.ts`, `packages/expect/src/diff.ts` (`diffPushes`, `PushRef` and `PushDiff`), `packages/expect/src/diff.test.ts`, `packages/expect/src/push-shape.ts` (`commandLabel` and `collectPaths` only), `packages/expect/src/push-shape.test.ts`, `packages/cli/src/diff.ts` (`describePushDiff` only), `packages/cli/src/diff.test.ts`, `e2e/datalayer-event-map.e2e.test.ts` (only expectations that name a mapped event, if decision 2 changes them), `e2e/datalayer-recorded-names.e2e.test.ts` (new), `CHANGELOG.md` (the E09 marker).
+Touches: `packages/expect/src/event-map.ts`, `packages/expect/src/event-map.test.ts`, `packages/expect/src/diff.ts` (`diffPushes`, `PushRef` and `PushDiff`), `packages/expect/src/diff.test.ts`, `packages/expect/src/push-shape.ts` (`commandLabel` and `collectPaths` only), `packages/expect/src/push-shape.test.ts`, `packages/cli/src/diff.ts` (`describePushDiff` only), `packages/cli/src/diff.test.ts`, `fixtures/site/public/datalayer-event-map.html` (build b's `purchase` push gets a `coupon` key that build a's `checkout_completed` push lacks), `e2e/datalayer-event-map.e2e.test.ts` (the expectations that name a mapped event or read `changed`, which the new key and decision 2 change), `e2e/datalayer-recorded-names.e2e.test.ts` (new), `CHANGELOG.md` (the E09 marker).
 - An unknown top-level key reads `top-level key <n> is not "events" or "paths"`. A bad path key reads `paths.<event> key <n> is not a key path`. No key text is printed (#1316).
 - Key positions count the keys of `events` and `paths` in the order they are written in the file. A small scanner reads the key order from the JSON text after `JSON.parse` accepts it, so integer-like keys no longer come first (#1315).
 - `pathKeys` drops the recorded-name and user-renamed-name fallbacks when that name is also a target in `events`. A swap map and a chain map then apply each `paths` entry to one group only (#1314).
@@ -158,7 +158,7 @@ Touches: `packages/expect/src/event-map.ts`, `packages/expect/src/event-map.test
 - `changed` counts `kindChanged` (decision 6, #1370).
 - `commandLabel` and `collectPaths` give `consent <x>` and walk the consent signals only when the second item is `default` or `update`. An arguments-like event whose name starts with `gtm.` has a count and no paths, as the array form has (#1373).
 Regression test: `event-map.test.ts`: `{"zz<script>":1}` gives the position message and the text `zz<script>` is absent; `{"events":{"bad/name":"x","5":"y"}}` names key 1; a bad path key names its position; the swap map and the chain map of #1314 leave the second group's paths as they were. `diff.test.ts`: two runs that both push `checkout_completed` with a changed path report `checkout_completed`; a run with both `checkout_completed` and `purchase` against a run that drops one reports one removed event; a pair joined by the table has `renamedFrom`; a kind change with equal paths gives `changed: true`. `push-shape.test.ts`: `{0:'consent',1:'foo',2:{}}` reads `gtag consent`; `{0:'event',1:'gtm.dom',2:{a:1}}` has no paths.
-Acceptance: `pnpm exec vitest run --project e2e e2e/datalayer-recorded-names.e2e.test.ts` passes. It runs the scenarios `datalayer-event-map-a` and `datalayer-event-map-b`, then `diff --json` on the two records, without `--event-map`. Precondition: run a pushed `checkout_completed` and no `purchase`, and run b pushed `purchase` and no `checkout_completed`. Every `dataLayer` entry for that pair has `event: "purchase"` and `renamedFrom: "checkout_completed"`. On the old code no entry has `renamedFrom`, so the test fails.
+Acceptance: `pnpm exec vitest run --project e2e e2e/datalayer-recorded-names.e2e.test.ts` passes. It runs the scenarios `datalayer-event-map-a` and `datalayer-event-map-b`, then `diff --json` on the two records, without `--event-map`. Precondition: run a pushed `checkout_completed` and no `purchase`, run b pushed `purchase` and no `checkout_completed`, and only b's push has `coupon`. The test first asserts that `pathsAdded` has an entry with `path: "coupon"`, so the list cannot be empty. That entry has `event: "purchase"` and `renamedFrom: "checkout_completed"`, and no entry in `dataLayer` names `checkout_completed` as its `event`. On the old code the entry names the mapped event and has no `renamedFrom`, so the test fails. `diff.test.ts` has the same case for a pair with a path change.
 
 **G09 `consentModeSetup` messages and the Google Ads conversion ID.**
 Closes #1306
@@ -192,10 +192,10 @@ Closes #1384
 
 Touches: `packages/recorder/src/locators.ts` (`readBlockingControls` and `blockingControls`), `packages/recorder/src/locators.test.ts`, `packages/recorder/src/steps.ts` (the `wait` case passes the last clicked form, decision 4), `packages/recorder/src/steps.test.ts`, `packages/recorder/src/payment.ts` (the deadline path only), `packages/recorder/src/payment.test.ts`, `packages/recorder/src/handoff-overlay.ts` (the label style and `title` only), `packages/recorder/src/handoff-overlay.test.ts`, `fixtures/site/public/terms-footer.html` (new), `fixtures/site/src/index.ts` (its route only), `fixtures/site/README.md` (its row), `packages/recorder/test/e2e/wait-url-form.e2e.test.ts` (new), `packages/recorder/test/e2e/handoff-overlay.e2e.test.ts` (one new case), `CHANGELOG.md` (the U09 marker).
 - A `wait` timeout lists the controls decision 4 picks (#990).
-- The deadline path races `isConnected` and `frameStillServed` against 500 ms and rethrows the original timeout when the timer wins (#1339).
+- `fillVerified` has two paths at the deadline: the `TimeoutError` catch and the count-not-one branch. One helper races every await after the deadline against 500 ms: `frameStillServed`, `handle.evaluate(isConnected)` and `countReason`. When the timer wins in the catch, the fill rethrows the original timeout. In the count-not-one branch, a timer win reads as an unreadable count reason (`countReason` already has `inputs not readable`) (#1339).
 - The handoff label wraps as decided in this plan (#1384). The pill keeps its drag, its position and the Done button.
 - `/terms-footer` has the `pay-form` of `/terms-required` and a footer newsletter form with an empty required email field. Every value on it is fake.
-Regression test: `payment.test.ts`: a fake handle whose `evaluate` never settles makes the fill end within the step timeout plus 1 s with the original timeout error. `handoff-overlay.test.ts`: the label has no `nowrap` and has a `title` equal to the text. `locators.test.ts`: with a clicked form, a control outside it is not listed.
+Regression test: `payment.test.ts`: a fake handle whose `evaluate` never settles makes the fill end within the step timeout plus 1 s with the original timeout error. A second case: a frame whose `evaluateAll` and `contentFrame` never settle, with more than one visible input, ends within the timeout plus 1 s with an `OwnReason`. `handoff-overlay.test.ts`: the label has no `nowrap` and has a `title` equal to the text. `locators.test.ts`: with a clicked form, a control outside it is not listed.
 Acceptance: `pnpm exec vitest run --project e2e packages/recorder/test/e2e/wait-url-form.e2e.test.ts packages/recorder/test/e2e/handoff-overlay.e2e.test.ts` passes. The first clicks Pay on `/terms-footer` and waits for `/thank-you` with a short timeout. Precondition: the footer email field is invalid in the page. The message names the terms checkbox and not the footer field. On the old code it names both, so the test fails. The new overlay case gives a 140-character text and checks that the label's rendered height is more than one line and that the whole text is in `title`. On the old code it is one line, so the case fails.
 
 **W09 The wordmark script and the intro Skip button.**
@@ -250,14 +250,14 @@ Closes #1366
 Closes #1377
 Closes #1389
 
-Touches: `docs/design.md`, `docs/cli.md`, `docs/guide/tag-reports.md`, `CHANGELOG.md` (lines 83 and 118 of the `## 0.6.0-rc.3` section, and the C09 marker), `scripts/docs-text.docs.test.ts` (new cases).
+Touches: `docs/design.md`, `docs/cli.md`, `docs/guide/tag-reports.md`, `CHANGELOG.md` (the two rc.3 lines named below, found by their text, and the C09 marker), `scripts/docs-text.docs.test.ts` (new cases).
 - `docs/design.md` §12: the colon stays after "its flag is not given", and the unreadable-path sentence moves after the list (#1288). §12 and the `defaults` text of `docs/cli.md`: a path of the wrong kind is skipped like a missing one, and only a path that cannot be read exits 2 (#1289).
 - §11 tag rule row: `status` is one of `success`, `failure`, `exception` or `timeout`, and another value exits 2 (#1319).
 - §5.2: the `dataLayerNotHooked` flag lists each missed name once, at most five, with a count of the rest, and a name that is not a valid layer name or looks like a value reads `(other)` (#1353).
 - §13, the `--json` output bullet: the record masks a value-like `unloadGap` event name, and the summary masks a URL at the end of a detail for every flag kind except the prose kinds (#1377).
 - `docs/cli.md`: "No message holds any text from the file" (#1334). A `baseline save` failure names the output path, which is the default path in the one-path form (#1342). The exit 2 row lists `baseline save` that cannot name or write its file, and the record-path prefix covers every one-path refusal (#1344). The `diff` `dataLayer` field list has `kindChanged` with its shape, and says how `changed` treats it (#1366). A baseline with no push shapes is "saved before 0.6.0-rc.2" (#1389).
 - `docs/guide/tag-reports.md`: one sentence on the `noTagReports` advice, install the reporter and run with `--gtm-override` (#1323).
-- `CHANGELOG.md`: the rc.3 T08 line says the failure was seen in a GTM preview (#1294). The rc.3 M29 line says "a card frame that moves, or reloads after its input was found" (#1337).
+- `CHANGELOG.md`: find the lines by their text, not by line number. The rc.3 T08 line says the failure was seen in a GTM preview (#1294). The rc.3 M29 line says "a card frame that moves, or reloads after its input was found" (#1337).
 - Docs for wave 1: the push scan and its decision 1 severity (L09: the §13 leak detection paragraph, the `possibleRealData` sentence of `docs/cli.md`); the event map errors, recorded names, `renamedFrom` and `changed` (E09: the `diff` section and the `--event-map` row); the `(no tag ID)` labels and "and N more" (G09: the `consentModeSetup` section); the mixed-kind baseline and the `config.yml` folder (B09: the `baseline` and `tagreeve init` sections); the blocking controls of the clicked form and the wrapping handoff label (U09: the `wait` and `handoff` paragraphs; the "cut with an ellipsis" sentence changes).
 - Docs for wave 2, from this plan: untrapped names and the aliased and adopted arrays (D09: design §5.2); the exact count rule and the rule 2 tie (V09: the linking rules paragraph of design §4, and the `notExact` field of `docs/cli.md` if decision 3 adds a value). C09 merges after D09 and V09.
 Regression test: `docs-text.docs.test.ts` gets one case per issue that reads the fixed text and fails on the old text: "Neither message" is gone from `docs/cli.md`; `kindChanged` is in the `diff` section; "names the path you gave" is gone; the §12 colon comes before `` `suite` with no folder``; "only a missing path counts as absent" is gone; the §11 row lists `timeout`; "saved by 0.6.0-rc.1" is gone from `docs/cli.md`; the rc.3 T08 line does not say "published container"; the tag reports guide holds `--gtm-override` in the CANNOT EVALUATE paragraph.
@@ -265,7 +265,7 @@ Acceptance: `pnpm docs:build` and `pnpm docs:test` pass. Each new case fails on 
 
 ### Release
 
-**R15 Release prep.** Touches: `package.json` (the version), `packages/cli/src/summary.test.ts` (the `readVersion()` line only), `docs/cli.md` (the version sentence), `docs/design.md` (the status line, revision 16 and §15.6), `CHANGELOG.md` (the `## 0.6.1` section), `README.md` (the status block), `site/demo/` (rerun `scripts/record-site-demo.ts`, if the output it shows changed), the release pill and any other test or doc that pins `0.6.0` as the current version.
+**R15 Release prep.** Touches: `package.json` (the version), `packages/cli/src/summary.test.ts` (the `readVersion()` line only), `docs/cli.md` (the version sentence), `docs/design.md` (the status line, revision 16 and §15.6), `CHANGELOG.md` (the `## 0.6.1` section), `scripts/changelog-markers.test.ts` (one case: no `<!--` marker is left in the newest section), `README.md` (the status block), `site/demo/` (rerun `scripts/record-site-demo.ts`, if the output it shows changed), the release pill and any other test or doc that pins `0.6.0` as the current version.
 - Version `0.6.1`. The install line is `npm i -g tagreeve`.
 - `## 0.6.1`: remove the "Not released yet" line and the leftover markers. Write the section from the markers: a short intro, the fixes, "Upgrading from 0.6.0" and "Known in 0.6.1".
 - "Upgrading from 0.6.0" lists what a user can see: pushes are scanned for `possibleRealData` and can fail a run (decision 1); `diff` names events as recorded, with `renamedFrom` (decision 2); `changed` counts a kind change (decision 6); a baseline with mixed push kinds exits 2 (decision 5); a folder at `tagreeve/config.yml` exits 2; a `wait` timeout lists only the clicked form's controls (decision 4); the handoff label wraps; the rule 2 miss reason, if decision 3 adds one. The record stays version 5.
@@ -275,7 +275,7 @@ Acceptance: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm e2e`, `pnpm docs:b
 
 ## CHANGELOG markers
 
-The first PR to merge adds this above `## 0.6.0`, a blank line between each pair. Each entry replaces its marker with its line or lines.
+The plan PR adds this above `## 0.6.0`, a blank line between each pair. Each entry replaces its marker with its line or lines.
 
 ```markdown
 ## 0.6.1

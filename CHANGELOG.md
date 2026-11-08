@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.6.1
+
+Not released yet. The newest release is 0.6.0, below.
+
+<!-- L09 -->
+
+<!-- E09 -->
+
+<!-- G09 -->
+
+<!-- B09 -->
+
+<!-- U09 -->
+
+<!-- W09 -->
+
+<!-- D09 -->
+
+<!-- V09 -->
+
+<!-- C09 -->
+
+<!-- R15 -->
+
 ## 0.6.0
 
 `npm i -g tagreeve` installs this release. 0.6.0 adds everything in the 0.6.0 release candidates (below). To upgrade from 0.5.0, read the next section.
