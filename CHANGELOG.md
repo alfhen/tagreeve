@@ -15,7 +15,8 @@ Not released yet. The newest release is 0.6.0, below.
 
 <!-- U09 -->
 
-<!-- W09 -->
+- Fix: `scripts/wordmark.ts` takes the font path as an argument and no longer reads `node_modules` (#727).
+- Fix: in the site intro, focus moves to the new Skip button when the menubar one is hidden (#867).
 
 <!-- D09 -->
 

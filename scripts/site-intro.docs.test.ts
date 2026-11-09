@@ -178,6 +178,25 @@ test('a mouse click on "Skip intro →" lands late in the wasted hold at 1440x90
   await context.close();
 });
 
+test('focus moves to the new Skip button when the stage turns to wasted, and Enter ends the intro', async () => {
+  const context = await firstVisitContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  await openHome(page);
+  await page.getByRole('button', { name: 'Reply: "Sure, I\'ll take a look"' }).click();
+  await page.getByRole('button', { name: 'Skip intro →' }).focus();
+  expect(await page.evaluate(() => document.activeElement?.textContent)).toBe('Skip intro →');
+  await expect.poll(() => stage(page), { timeout: 10_000 }).toBe('wasted');
+  const focus = await page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    return { text: el?.textContent, visibility: el ? getComputedStyle(el).visibility : null, inOverlay: !!el?.closest('[data-intro-overlay]') };
+  });
+  expect(focus).toEqual({ text: 'Skip intro →', visibility: 'visible', inOverlay: true });
+  await page.keyboard.press('Enter');
+  expect(await introSeen(page)).toBe('1');
+  await expect.poll(() => page.locator(overlay).count(), { timeout: 5000 }).toBe(0);
+  await context.close();
+});
+
 test('the footer replay link opens the intro again with the flag set', async () => {
   const context = await newDocsContext(browser!, { viewport: wide });
   const page = await context.newPage();
