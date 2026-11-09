@@ -1,4 +1,3 @@
-import { HASH_REQUIRED_VENDORS } from './hash-vendors.ts';
 import {
   fieldHashes,
   findStableHashes,
@@ -871,6 +870,7 @@ function joinLabels(labels: Set<string>): string {
 const PLAIN_ADDRESS_PARAMS = new Set(['user_data.city', 'user_data.postal_code', 'user_data.country']);
 // Only these vendors document plain city, postal code and country. The Conversions API requires them hashed.
 const PLAIN_ADDRESS_VENDORS = new Set(['sgtm']);
+export const HASH_REQUIRED_VENDORS: ReadonlySet<string> = new Set(['meta-capi']);
 const DIGEST_SHAPE = /^(?:[0-9a-f]{64}|[A-Za-z0-9+/_-]{43}=?)$/i;
 
 function allForms(h: HashForms): string[] {
