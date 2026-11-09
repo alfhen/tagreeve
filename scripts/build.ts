@@ -1,5 +1,5 @@
 import { chmodSync, cpSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const path = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url));
@@ -10,6 +10,8 @@ const pkg = JSON.parse(readFileSync(path('package.json'), 'utf8')) as {
 const outdirFlag = process.argv.indexOf('--outdir');
 const outdir = outdirFlag < 0 ? path('dist') : resolve(process.argv[outdirFlag + 1] ?? '');
 if (outdirFlag >= 0 && !process.argv[outdirFlag + 1]) throw new Error('--outdir needs a folder.');
+// The build empties outdir, so it must not be the repo root or hold it.
+if (!relative(outdir, path('')).startsWith('..')) throw new Error('--outdir must not be the repo root or a folder that holds it.');
 
 const { build } = await import('esbuild');
 

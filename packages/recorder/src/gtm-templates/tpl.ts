@@ -77,7 +77,7 @@ function parsePermission(entry: RawPermission): TemplatePermission {
   return { id: entry.instance.key.publicId, keys: entries.map((e) => e.key), entries };
 }
 
-const PACKAGE_TEMPLATE_FILE = 'tagreeve-tag-reporter.tpl';
+export const PACKAGE_TEMPLATE_FILE = 'tagreeve-tag-reporter.tpl';
 
 // Bundled, import.meta.url is in dist/ and the build puts the file in dist/templates/. From source it sits next to this file.
 // Nothing outside the package is tried, and only a missing file moves on to the next place.

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readTemplateSections, readWebTagReporterTemplate } from './tpl.ts';
 
 describe('readTemplateSections', () => {
@@ -38,6 +38,7 @@ describe('readTemplateSections', () => {
                     mapKey: [{ type: 1, string: 'key' }],
                     mapValue: [{ type: 1, string: 'someFn' }],
                   },
+                  { type: 3, mapKey: [{ type: 1, string: 'read' }], mapValue: [{ type: 8, boolean: true }] },
                 ],
               },
             },
@@ -130,5 +131,25 @@ describe('readWebTagReporterTemplate', () => {
     const file = readFileSync(new URL('./web-tag-reporter.tpl', import.meta.url), 'utf8');
     expect(file).toContain('___WEB_PERMISSIONS___');
     expect(readWebTagReporterTemplate()).toBe(file);
+  });
+
+  it('surfaces an error other than ENOENT and does not try the next place', async () => {
+    const calls: string[] = [];
+    vi.resetModules();
+    vi.doMock('node:fs', () => ({
+      readFileSync: (place: URL) => {
+        calls.push(place.pathname);
+        throw Object.assign(new Error('is a directory'), { code: 'EISDIR' });
+      },
+    }));
+    try {
+      const mocked = await import('./tpl.ts');
+      expect(() => mocked.readWebTagReporterTemplate()).toThrow('is a directory');
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toContain('/templates/tagreeve-tag-reporter.tpl');
+    } finally {
+      vi.doUnmock('node:fs');
+      vi.resetModules();
+    }
   });
 });
