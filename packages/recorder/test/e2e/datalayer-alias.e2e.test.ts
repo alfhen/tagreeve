@@ -59,6 +59,8 @@ test('mode=status with dataLayerNames [status] gives one dataLayerNotHooked flag
 
 const STALLS = {
   'a dataLayer getter': `Object.defineProperty(window, 'dataLayer', { configurable: true, get() { const t = Date.now(); while (Date.now() - t < 3000) {} return []; } });`,
+  'window.eval hiding the answer': `const e = eval; window.eval = (x) => (String(x).includes('__tagreeve') ? '[]' : e(x));`,
+  'a forged later untrapped message': `window.__tagreeveDataLayer({ t: 1, args: '[]', untrapped: '[]' });`,
   'the unload flush': `window.__tagreeveFlushUnload = () => { const t = Date.now(); while (Date.now() - t < 5000) {} };`,
 };
 
@@ -70,3 +72,8 @@ for (const [name, sabotage] of Object.entries(STALLS)) {
     expect(flags[0]!.detail).toContain('"status"');
   }, 60_000);
 }
+
+test('page code that replaces window.eval cannot fake a dataLayerNotHooked flag', async () => {
+  const { records } = await run('alias', ['myLayer'], `const e = eval; window.eval = (x) => (String(x).includes('__tagreeve') ? '["myLayer"]' : e(x)); window.__tagreeveDataLayer({ t: 1, args: '[]', untrapped: '["myLayer"]' });`);
+  expect(kinds(records.flags, 'dataLayerNotHooked')).toEqual([]);
+}, 60_000);

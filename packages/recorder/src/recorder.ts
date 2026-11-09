@@ -49,7 +49,7 @@ import {
 } from 'playwright';
 import { routeCollector, type CollectorHandler, type ParsedReport } from './collector.ts';
 import { COLLECTOR_ORIGIN, SELFTEST_ORIGIN } from './origins.ts';
-import { DATALAYER_BINDING, DATALAYER_TALLY, DATALAYER_UNTRAPPED, dataLayerEventFromPayload, dataLayerInitScript, hookedLayerNames, type DataLayerPayload } from './datalayer.ts';
+import { DATALAYER_BINDING, DATALAYER_TALLY, dataLayerEventFromPayload, dataLayerInitScript, hookedLayerNames, type DataLayerPayload } from './datalayer.ts';
 import { buildTallyFlags, parseUntrapped, PayloadCounts, postedAhead, resolveOwners, validateTally, type FrameTally } from './datalayer-tally.ts';
 import { buildDataLayerNotHookedFlag, loaderLayerName } from './datalayer-names.ts';
 import { parseTagReport, TAG_REPORT_BINDING } from './tag-report.ts';
@@ -217,6 +217,7 @@ export class Recorder {
   private readonly dataLayerReassigns: Array<{ n: number; t: number; doc: string }> = [];
   private readonly payloadCounts = new PayloadCounts();
   private untrappedLayerNames: string[] = [];
+  private untrappedDocuments = new Set<string>();
   private readonly eventFrames = new Map<string, FrameRef>();
   private readonly frameNumbers = new WeakMap<Frame, number>();
   private readonly frameNavigations = new WeakMap<Frame, number>();
@@ -352,6 +353,15 @@ export class Recorder {
     };
     await context.exposeBinding(DATALAYER_BINDING, (source, payload: DataLayerPayload) => {
       const isMain = source.frame === source.page.mainFrame();
+      if (typeof payload?.untrapped === 'string') {
+        // Only the first message of a main-frame document is the init script's; later ones are page code.
+        const doc = this.frameDocumentId(source.frame);
+        if (isMain && !this.untrappedDocuments.has(doc)) {
+          this.untrappedDocuments.add(doc);
+          for (const name of parseUntrapped(payload.untrapped, hookedLayerNames(this.options.dataLayerNames))) if (!this.untrappedLayerNames.includes(name)) this.untrappedLayerNames.push(name);
+        }
+        return;
+      }
       if (payload?.reassigned) {
         if (typeof payload.t === 'number') this.dataLayerReassigns.push({ n: this.frameNumber(source.frame), doc: this.frameDocumentId(source.frame), t: pageTimeToEpoch(payload.t, this.clockOffset) });
         return;
@@ -1068,32 +1078,6 @@ export class Recorder {
     return resolveOwners(tallies);
   }
 
-  /** Reads the init script's frozen untrapped answer from each main frame, before any evaluate that runs page-reachable code, so page code cannot delay it. */
-  private async collectUntrapped(): Promise<string[]> {
-    const names = hookedLayerNames(this.options.dataLayerNames);
-    const found: string[] = [];
-    let mains: Frame[] = [];
-    try {
-      mains = this.context.pages().map((page) => page.mainFrame());
-    } catch {
-      return found;
-    }
-    const asking = mains.map(async (frame) => {
-      try {
-        found.push(...parseUntrapped(await frame.evaluate(`window.${DATALAYER_UNTRAPPED}`), names));
-      } catch {
-        // a frame that fails or detaches adds nothing
-      }
-    });
-    let timer: NodeJS.Timeout | undefined;
-    const deadline = new Promise<void>((resolve) => {
-      timer = setTimeout(resolve, TALLY_DEADLINE_MS);
-    });
-    await Promise.race([Promise.all(asking), deadline]);
-    clearTimeout(timer);
-    return [...found];
-  }
-
   private async tallyDataLayers(): Promise<Flag[]> {
     const tallies = await this.collectTallies();
     const start = Date.now();
@@ -1135,8 +1119,6 @@ export class Recorder {
   async close(): Promise<RunResult> {
     const closeStartedAt = nodeNow();
     this.noteContainerExit();
-    // Must stay the first page evaluate: later ones run page-reachable code that can stall the main thread past this read's deadline.
-    this.untrappedLayerNames = [...new Set(await this.collectUntrapped())];
     await this.waitForLateTagReports();
     if (this.options.networkMode !== 'live') await this.flushUnloadQueues();
     const tallyFlags = await this.tallyDataLayers();
