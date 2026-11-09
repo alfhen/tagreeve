@@ -1,6 +1,6 @@
 import { newId } from '@tagreeve/core';
 import { expect, test } from 'vitest';
-import { buildTallyFlags, MAX_TALLY_KEYS, PayloadCounts, postedAhead, validateTally, type FrameTally } from './datalayer-tally.ts';
+import { buildTallyFlags, MAX_TALLY_KEYS, parseUntrapped, PayloadCounts, postedAhead, resolveOwners, validateTally, type FrameTally } from './datalayer-tally.ts';
 
 const NAMES = ['dataLayer', 'myLayer'];
 const runId = newId('run');
@@ -15,7 +15,7 @@ function addTo(target: PayloadCounts, frame: number, d: string, layer: string | 
   for (let i = 0; i < n; i += 1) target.add({ d, a, ...(layer ? { layer } : {}) }, frame, NAMES);
 }
 
-const tally = (frame: number, d: string, arrays: FrameTally['arrays']): FrameTally => ({ frame, d, arrays, untrapped: [] });
+const tally = (frame: number, d: string, arrays: FrameTally['arrays']): FrameTally => ({ frame, d, arrays });
 
 test('equal counts give no flag', () => {
   const tallies = [tally(0, 'tok', [{ layer: 'dataLayer', a: 1, length: 3, posted: 3 }])];
@@ -131,11 +131,18 @@ test('postedAhead is true while fewer payloads arrived than the hook posted', ()
   expect(postedAhead([tally(0, 'tok', [{ layer: 'dataLayer', a: null, length: 3, posted: 0 }])], new PayloadCounts())).toBe(false);
 });
 
-test('validateTally keeps an untrapped name only when it is a hooked name', () => {
+test('parseUntrapped keeps an untrapped name only when it is a hooked name', () => {
   const text = JSON.stringify(['myLayer', 'status', 'dataLayer', 'https://planted.example.test/x', 7, 'myLayer']);
-  const kept = validateTally(0, { d: 'tok', arrays: [], untrapped: text }, NAMES);
-  expect(kept?.untrapped).toEqual(['myLayer']);
-  expect(validateTally(0, { d: 'tok', arrays: [], untrapped: 'myLayer' }, NAMES)?.untrapped).toEqual([]);
-  expect(validateTally(0, { d: 'tok', arrays: [], untrapped: ['myLayer'] }, NAMES)?.untrapped).toEqual([]);
-  expect(validateTally(0, { d: 'tok', arrays: [] }, NAMES)?.untrapped).toEqual([]);
+  expect(parseUntrapped(text, NAMES)).toEqual(['myLayer']);
+  expect(parseUntrapped('myLayer', NAMES)).toEqual([]);
+  expect(parseUntrapped(['myLayer'], NAMES)).toEqual([]);
+  expect(parseUntrapped(undefined, NAMES)).toEqual([]);
+});
+
+test('resolveOwners drops an array another frame owns and keeps one with no owning frame', () => {
+  const owned = { layer: 'dataLayer', a: null, length: 2, posted: 0, owner: 'parent' };
+  const parent = tally(0, 'parent', [{ layer: 'dataLayer', a: 1, length: 2, posted: 2 }]);
+  expect(resolveOwners([parent, tally(1, 'child', [owned])])[1]?.arrays).toEqual([]);
+  expect(resolveOwners([tally(1, 'child', [owned])])[1 - 1]?.arrays).toEqual([{ layer: 'dataLayer', a: null, length: 2, posted: 0 }]);
+  expect(resolveOwners([parent, tally(1, 'child', [{ ...owned, length: 5 }])])[1]?.arrays).toHaveLength(1);
 });

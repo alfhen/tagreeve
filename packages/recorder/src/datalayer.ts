@@ -6,6 +6,7 @@ export const DATALAYER_BINDING = '__tagreeveDataLayer';
 export const DEFAULT_DATALAYER = 'dataLayer';
 
 export const DATALAYER_TALLY = '__tagreeveTally';
+export const DATALAYER_UNTRAPPED = '__tagreeveUntrapped';
 
 export function hookedLayerNames(names: readonly string[] = []): string[] {
   return [...new Set([DEFAULT_DATALAYER, ...names.filter((name) => name !== DEFAULT_DATALAYER && isDataLayerName(name))])];
@@ -30,6 +31,7 @@ export function dataLayerInitScript(names: readonly string[] = []): string {
     }
   })();
   const seq = {};
+  const arrayProto = Array.prototype;
   const clock = () => performance.timeOrigin + performance.now();
   const plain = (k, v) => (typeof v === 'function' || v instanceof Node ? undefined : v);
   // Keeps the top levels, so the event name and ids survive a large push. Deeper values become a marker.
@@ -95,7 +97,7 @@ export function dataLayerInitScript(names: readonly string[] = []): string {
     // Another frame's hook owns this array; a second one would replace the page's push and record twice.
     if (Object.prototype.hasOwnProperty.call(layer, '__tagreeveHooked')) return;
     try {
-      Object.defineProperty(layer, '__tagreeveHooked', { value: true });
+      Object.defineProperty(layer, '__tagreeveHooked', { value: token });
     } catch {}
     const info = { a: (seq[layerName] = (seq[layerName] || 0) + 1), posted: 0 };
     let known = 0;
@@ -262,12 +264,12 @@ export function dataLayerInitScript(names: readonly string[] = []): string {
       },
     });
   }
-  // Text, so page code cannot change the answer by replacing an Array method.
-  const untrappedText = JSON.stringify(untrapped);
+  // A frozen string on window, so the answer needs no page-reachable code to read.
+  Object.defineProperty(window, ${JSON.stringify(DATALAYER_UNTRAPPED)}, { value: JSON.stringify(untrapped) });
   Object.defineProperty(window, ${JSON.stringify(DATALAYER_TALLY)}, {
     value: () => {
       const arrays = [];
-      // Page code can break Set or the array iterator; the untrapped list must still come back.
+      // Page code can break Set or the array iterator; the arrays tally is then lost, never the token.
       try {
         const seen = new Set();
         for (const name of names) {
@@ -282,14 +284,18 @@ export function dataLayerInitScript(names: readonly string[] = []): string {
             if (!Array.isArray(layer) || seen.has(layer)) continue;
             seen.add(layer);
             const state = hooks.get(layer);
-            // Another frame's hook owns it and that frame counts it.
-            if (!state && Object.prototype.hasOwnProperty.call(layer, '__tagreeveHooked')) continue;
             if (state) state.sync();
-            arrays.push({ layer: state ? state.name : name, a: state ? state.info.a : null, length: layer.length, posted: state ? state.info.posted : 0 });
+            const entry = { layer: state ? state.name : name, a: state ? state.info.a : null, length: layer.length, posted: state ? state.info.posted : 0 };
+            // A marked array of another realm is counted by the frame that owns it. The owner's token is the marker value.
+            if (!state && Object.getPrototypeOf(layer) !== arrayProto) {
+              const marker = Object.getOwnPropertyDescriptor(layer, '__tagreeveHooked');
+              if (marker && typeof marker.value === 'string') entry.owner = marker.value;
+            }
+            arrays.push(entry);
           } catch {}
         }
       } catch {}
-      return { d: token, arrays, untrapped: untrappedText };
+      return { d: token, arrays };
     },
   });
 })();`;
