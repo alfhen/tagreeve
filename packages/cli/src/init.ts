@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { appendFile, lstat, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { Io } from './run.ts';
 import { gitIgnoreStatus } from './git-ignore.ts';
@@ -66,6 +66,29 @@ async function ensureConfig(cwd: string): Promise<Item> {
   return { path: DEFAULT_CONFIG, action: 'created', text: `Created ${DEFAULT_CONFIG}` };
 }
 
+type Probe = Awaited<ReturnType<typeof stat>> | 'absent' | 'unresolvable';
+
+// A link that stat cannot follow (dangling or looping) is in the way, not absent: writes through it fail or land outside cwd.
+async function probe(path: string): Promise<Probe> {
+  try {
+    return await stat(path);
+  } catch {
+    return (await lstat(path).then(() => true, () => false)) ? 'unresolvable' : 'absent';
+  }
+}
+
+async function checkTargets(cwd: string): Promise<[string, Error] | undefined> {
+  for (const folder of FOLDERS) {
+    const found = await probe(join(cwd, folder));
+    if (found === 'unresolvable' || (found !== 'absent' && !found.isDirectory())) return [`${folder}/`, new NotAFolder()];
+  }
+  const config = await probe(join(cwd, DEFAULT_CONFIG));
+  if (config === 'unresolvable' || (config !== 'absent' && !config.isFile())) return [DEFAULT_CONFIG, new NotAFile()];
+  const ignore = await probe(join(cwd, '.gitignore'));
+  if (ignore === 'unresolvable' || (ignore !== 'absent' && !ignore.isFile())) return ['.gitignore', Object.assign(new Error('in the way'), { code: 'EISDIR' })];
+  return undefined;
+}
+
 function failureText(path: string, error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;
   if (error instanceof NotAFolder) return `${path.replace(/\/$/, '')} is not a folder\n`;
@@ -81,6 +104,12 @@ export async function initCommand(io: Io, json = false, cwd: string = process.cw
     ['.gitignore', () => ensureIgnoreLine(cwd)],
   ];
   const items: Item[] = [];
+  const blocked = await checkTargets(cwd);
+  if (blocked) {
+    if (json) io.stdout(`${JSON.stringify({ items })}\n`);
+    io.stderr(failureText(blocked[0], blocked[1]));
+    return 2;
+  }
   for (const [path, step] of steps) {
     try {
       const item = await step();

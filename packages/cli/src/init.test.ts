@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -84,42 +84,46 @@ test('--json prints only the items', async () => {
   expect(second.items.map((i) => i.action)).toEqual(['skipped', 'skipped', 'skipped', 'skipped']);
 });
 
-test('a failed write names the relative path, keeps earlier lines and exits 2', async () => {
+async function listing(): Promise<string[]> {
+  return (await readdir(dir, { recursive: true })).sort();
+}
+
+test('a folder at .gitignore names the relative path, creates nothing and exits 2', async () => {
   await mkdir(join(dir, '.gitignore'));
+  const before = await listing();
   let out = '';
   let err = '';
   const code = await initCommand({ stdout: (t) => (out += t), stderr: (t) => (err += t) }, false, dir);
   expect(code).toBe(2);
-  expect(out).toContain('Created tagreeve/config.yml');
-  expect(err).toMatch(/^Could not write \.gitignore: /);
-  expect(err).not.toContain(dir);
+  expect(out).toBe('');
+  expect(err).toBe('Could not write .gitignore: a file or folder is in the way\n');
+  expect(await listing()).toEqual(before);
 });
 
 test.each(['tagreeve/scenarios', 'tagreeve/baselines'])('a file at %s exits 2 and says it is not a folder', async (path) => {
   await mkdir(join(dir, 'tagreeve'), { recursive: true });
   await writeFile(join(dir, path), 'x');
+  const before = await listing();
   let out = '';
   let err = '';
   const code = await initCommand({ stdout: (t) => (out += t), stderr: (t) => (err += t) }, false, dir);
   expect(code).toBe(2);
   expect(err).toBe(`${path} is not a folder\n`);
-  expect(out).not.toContain('Skipped');
+  expect(out).toBe('');
+  expect(await listing()).toEqual(before);
 });
 
-test('--json with a failed step prints the items done so far', async () => {
+test('--json with a folder at .gitignore prints no items and creates nothing', async () => {
   await mkdir(join(dir, '.gitignore'));
+  const before = await listing();
   let out = '';
   let err = '';
   const code = await initCommand({ stdout: (t) => (out += t), stderr: (t) => (err += t) }, true, dir);
   expect(code).toBe(2);
-  expect(JSON.parse(out)).toEqual({
-    items: [
-      { path: 'tagreeve/scenarios/', action: 'created' },
-      { path: 'tagreeve/baselines/', action: 'created' },
-      { path: 'tagreeve/config.yml', action: 'created' },
-    ],
-  });
+  expect(JSON.parse(out)).toEqual({ items: [] });
   expect(err).toMatch(/^Could not write \.gitignore: /);
+  expect(await listing()).toEqual(before);
+  await expect(stat(join(dir, 'tagreeve'))).rejects.toThrow();
 });
 
 test('a .gitignore with only *.jsonl still gets the runs line', async () => {
@@ -129,13 +133,32 @@ test('a .gitignore with only *.jsonl still gets the runs line', async () => {
   expect(await read('.gitignore')).toBe('*.jsonl\n/tagreeve/runs/\n');
 });
 
-test('a folder at tagreeve/config.yml exits 2, says it is not a file and lists no skipped config', async () => {
+test('a folder at tagreeve/config.yml exits 2, says it is not a file and creates nothing', async () => {
   await mkdir(join(dir, 'tagreeve/config.yml'), { recursive: true });
+  const before = await listing();
   let out = '';
   let err = '';
   const code = await initCommand({ stdout: (t) => (out += t), stderr: (t) => (err += t) }, true, dir);
   expect(code).toBe(2);
   expect(err).toBe('tagreeve/config.yml is not a file\n');
-  const items = (JSON.parse(out) as { items: Array<{ path: string; action: string }> }).items;
-  expect(items.map((i) => i.path)).toEqual(['tagreeve/scenarios/', 'tagreeve/baselines/']);
+  expect(JSON.parse(out)).toEqual({ items: [] });
+  expect(await listing()).toEqual(before);
+});
+
+test.each([
+  ['tagreeve/config.yml', 'tagreeve/config.yml is not a file\n'],
+  ['tagreeve/baselines', 'tagreeve/baselines is not a folder\n'],
+  ['tagreeve/scenarios', 'tagreeve/scenarios is not a folder\n'],
+  ['.gitignore', 'Could not write .gitignore: a file or folder is in the way\n'],
+])('a dangling symlink at %s exits 2 and creates nothing', async (target, message) => {
+  await mkdir(join(dir, 'tagreeve'));
+  await symlink(join(dir, 'missing-target'), join(dir, target));
+  const before = await listing();
+  let out = '';
+  let err = '';
+  expect(await initCommand({ stdout: (t) => (out += t), stderr: (t) => (err += t) }, true, dir)).toBe(2);
+  expect(err).toBe(message);
+  expect(JSON.parse(out)).toEqual({ items: [] });
+  expect(await listing()).toEqual(before);
+  await expect(stat(join(dir, 'missing-target'))).rejects.toThrow();
 });
