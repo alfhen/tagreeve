@@ -367,22 +367,41 @@ async function evaluateGuarded(page: Page, script: string): Promise<void> {
 /** The form of the submit control the last `click` step clicked, for the controls a `wait` timeout lists. */
 const clickedForms = new WeakMap<Recorder, JSHandle<HTMLFormElement>>();
 
+const REMEMBER_FORM_MS = 1000;
+
+/** Playwright's `evaluateHandle` timeout bounds only the wait for the element, so a page that stopped responding is raced against a timer here. */
 async function rememberClickedForm(recorder: Recorder, target: PlaywrightLocator): Promise<void> {
   clickedForms.get(recorder)?.dispose().catch(() => undefined);
   clickedForms.delete(recorder);
+  let timer: NodeJS.Timeout | undefined;
+  let expired = false;
   try {
-    const handle = await target.evaluateHandle(
+    const work = target.evaluateHandle(
       (el) => {
         const control = el as HTMLButtonElement | HTMLInputElement;
         const submits = (control instanceof HTMLButtonElement && control.type === 'submit') || (control instanceof HTMLInputElement && (control.type === 'submit' || control.type === 'image'));
         return submits ? control.form : null;
       },
       undefined,
-      { timeout: 1000 },
+      { timeout: REMEMBER_FORM_MS },
     );
-    if (await handle.evaluate((form) => form !== null)) clickedForms.set(recorder, handle as JSHandle<HTMLFormElement>);
+    work.then(
+      (late) => {
+        if (expired) late.dispose().catch(() => undefined);
+      },
+      () => undefined,
+    );
+    const limit = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('form lookup timed out')), REMEMBER_FORM_MS + 500);
+    });
+    const handle = await Promise.race([work, limit]);
+    if (handle.asElement() !== null) clickedForms.set(recorder, handle as JSHandle<HTMLFormElement>);
     else await handle.dispose();
-  } catch {}
+  } catch {
+    expired = true;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function waitForUrl(recorder: Recorder, url: UrlMatcher, timeout: number): Promise<void> {

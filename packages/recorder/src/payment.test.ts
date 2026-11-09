@@ -61,6 +61,10 @@ interface Setup {
   hangCountFrom?: number;
   /** Each call to contentFrame() from this one on (0-based) never settles; evaluateAll never settles too. */
   hangContentFrameFrom?: number;
+  /** evaluateAll never settles; contentFrame and count stay responsive. */
+  hangEvaluateAll?: boolean;
+  /** contentFrame never settles once the input handle is resolved. */
+  hangContentFrameAfterResolve?: boolean;
   failFill?: boolean;
   failFillAt?: number;
   fillMessage?: (value: string) => string;
@@ -77,6 +81,7 @@ function fake(setup: Setup = {}) {
   let fills = 0;
   let countCalls = 0;
   let contentFrameCalls = 0;
+  let resolved = false;
   const never = <T,>(): Promise<T> => new Promise(() => {});
   let slowTries = 0;
   const container = {
@@ -118,7 +123,7 @@ function fake(setup: Setup = {}) {
     isVisible: async () => frame.visible,
     evaluateHandle: async () => container,
     contentFrame: async () =>
-      setup.hangContentFrameFrom !== undefined && contentFrameCalls++ >= setup.hangContentFrameFrom
+      (setup.hangContentFrameFrom !== undefined && contentFrameCalls++ >= setup.hangContentFrameFrom) || (setup.hangContentFrameAfterResolve && resolved)
         ? never()
         : frame.url === null
         ? null
@@ -133,11 +138,12 @@ function fake(setup: Setup = {}) {
                   return count;
                 },
                 evaluateAll: async () => {
-                  if (setup.hangContentFrameFrom !== undefined) return never<FakeInput[]>();
+                  if (setup.hangContentFrameFrom !== undefined || setup.hangEvaluateAll) return never<FakeInput[]>();
                   if (setup.navigateDuringRead) navigate(frame, setup.navigateDuringRead);
                   return setup.inputs ?? [];
                 },
                 elementHandle: async () => {
+                  resolved = true;
                   if (setup.navigateDuringResolve) navigate(frame, setup.navigateDuringResolve);
                   const bound = frame.generation;
                   return {
@@ -613,8 +619,14 @@ describe('a frame that stops responding', () => {
   });
 
   test('a frame that never answers at the deadline ends with an unreadable reason', async () => {
-    const { error, elapsed } = await timed({ counts: [2], inputs: [{ name: 'a', autocomplete: 'cc-number', type: 'text' }], hangContentFrameFrom: 3 });
-    expect(error?.message).toMatch(/^card field number could not be filled: (the card frame could not be read|2 visible inputs match in \/card-frame: inputs not readable)$/);
+    const { error, elapsed } = await timed({ counts: [2], hangEvaluateAll: true });
+    expect(error?.message).toBe('card field number could not be filled: 2 visible inputs match in /card-frame: inputs not readable');
+    expect(elapsed).toBeLessThan(LIMIT);
+  });
+
+  test('a frame that stops answering after the input is resolved ends with an unreadable reason', async () => {
+    const { error, elapsed } = await timed({ hangContentFrameAfterResolve: true });
+    expect(error?.message).toBe('card field number could not be filled: the card frame could not be read');
     expect(elapsed).toBeLessThan(LIMIT);
   });
 

@@ -251,7 +251,7 @@ async function fillVerified(element: ElementHandle, field: CardField, cardHost: 
       let handle: ElementHandle | undefined;
       try {
         handle = await inputs.elementHandle({ timeout: tryMs() });
-        if ((await frameStillServed(element, cardHost, field)).url() !== checkedUrl) throw new OwnReason(GONE_FRAME);
+        if ((await readable(frameStillServed(element, cardHost, field))).url() !== checkedUrl) throw new OwnReason(GONE_FRAME);
         await handle.fill(value, { timeout: tryMs() });
         return;
       } catch (error) {
