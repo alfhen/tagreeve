@@ -4,19 +4,21 @@
 
 Not released yet. The newest release is 0.6.0, below.
 
-<!-- L09 -->
+- A `dataLayer` push that holds an email, phone or hash that is not from the run identity now gets a `possibleRealDataPush` flag. It is a warning: the `possibleRealData` check does not count it and the exit code does not change. The flag detail names the push and the key paths, never the value. A tag name with a hex token after a character such as `!`, `$`, `^` or `~` reads `(other)` (#937, #1322).
 
 <!-- E09 -->
 
-<!-- G09 -->
+- `consentModeSetup` names a hit with no tag ID by its vendor, lists letter sets with an `l` first and counts the tag IDs it leaves out. A page parameter can no longer set the Google Ads conversion ID.
 
-<!-- B09 -->
+- A baseline whose `dataLayer` push groups are partly kinded is refused as an invalid `dataLayer` section (#1374). The warning for a baseline with no `dataLayer` section says `saved before 0.6.0-rc.2`.
+- `tagreeve init` exits 2 with `tagreeve/config.yml is not a file` when a folder is at that path, instead of skipping it (#1329).
 
 - A `wait` timeout after a click on a form's submit control lists only the blocking controls of that form (#990).
 - A test payment fill cannot hang past its deadline when a card frame stops responding (#1339).
 - The handoff label wraps to at most four lines, and the full text is in its `title` (#1384).
 
-<!-- W09 -->
+- Fix: `scripts/wordmark.ts` takes the font path as an argument and no longer reads `node_modules` (#727).
+- Fix: in the site intro, focus moves to the new Skip button when the menubar one is hidden (#867).
 
 <!-- D09 -->
 

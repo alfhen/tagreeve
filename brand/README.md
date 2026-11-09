@@ -31,4 +31,4 @@ The Tagreeve mark is one tracking pixel inside four corner brackets. The pixel s
 
 ## Wordmark
 
-The wordmark is "tagreeve" in Jost Medium, converted to outlines. The tagline in the social preview is Jost Regular. Jost is by Owen Earl (indestructible type\*) under the SIL Open Font License 1.1. The repo holds only the outlines, not the font. `node scripts/wordmark.ts` redraws them from the Jost file in `@fontsource/jost`, and the social preview PNG is rendered from its SVG.
+The wordmark is "tagreeve" in Jost Medium, converted to outlines. The tagline in the social preview is Jost Regular. Jost is by Owen Earl (indestructible type\*) under the SIL Open Font License 1.1. The repo holds only the outlines, not the font. `node scripts/wordmark.ts` redraws them from a Jost Medium `.woff` file. Get it from the `@fontsource/jost` package (`files/jost-latin-500-normal.woff`) and pass its path as the argument. The script reads WOFF only, not the TTF files from Google Fonts. The social preview PNG is rendered from its SVG.

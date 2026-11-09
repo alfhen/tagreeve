@@ -1148,6 +1148,7 @@ export class Recorder {
       requests,
       hits,
       identity: this.run.identity,
+      dataLayerEvents: this.dataLayerEvents,
       routedRequestIds: this.routed,
       responses: this.responses,
       handedToChromium: this.handedToChromium,

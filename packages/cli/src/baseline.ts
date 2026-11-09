@@ -18,7 +18,7 @@ export interface BaselineFile {
   site: string;
   byPage: boolean;
   keys: ShapeKey[];
-  /** Masked push shapes: key paths and types, no value. Absent in a file saved by 0.6.0-rc.1. */
+  /** Masked push shapes: key paths and types, no value. Absent in a file saved before 0.6.0-rc.2. */
   dataLayer?: PushGroup[];
 }
 
@@ -83,6 +83,11 @@ function validPushGroup(g: unknown): g is PushGroup {
   );
 }
 
+/** A file saved by 0.6.0-rc.2 has no kind on any group. Only a hand edit mixes the two. */
+function uniformKinds(groups: PushGroup[]): boolean {
+  return groups.every((g) => (g.kind === undefined) === (groups[0]!.kind === undefined));
+}
+
 /** The messages never quote the file, which a user may have edited by hand. */
 export function parseBaseline(text: string, label: string): BaselineFile {
   let json: unknown;
@@ -99,7 +104,7 @@ export function parseBaseline(text: string, label: string): BaselineFile {
   if (typeof json.scenario !== 'string' || typeof json.site !== 'string' || typeof json.byPage !== 'boolean' || !Array.isArray(json.keys) || !json.keys.every(validKey)) {
     throw new BaselineError(`${label} is not a valid baseline file`, 'invalid');
   }
-  if (json.dataLayer !== undefined && !(Array.isArray(json.dataLayer) && json.dataLayer.every(validPushGroup))) {
+  if (json.dataLayer !== undefined && !(Array.isArray(json.dataLayer) && json.dataLayer.every(validPushGroup) && uniformKinds(json.dataLayer))) {
     throw new BaselineError(`${label} has an invalid dataLayer section`, 'invalid');
   }
   return json as unknown as BaselineFile;
@@ -182,7 +187,7 @@ export function compareBaseline(baseline: BaselineFile, records: RunRecords): Ba
   const diff = diffShapes(baseline.keys, hitShape(records, { byPage: baseline.byPage }), { epochOrder });
   warnings.push(...diff.moved.map(describeMove));
   if (baseline.dataLayer === undefined) {
-    warnings.push('dataLayer pushes not compared: the baseline has no push shapes (saved by 0.6.0-rc.1). Save it again to compare them.');
+    warnings.push('dataLayer pushes not compared: the baseline has no push shapes (saved before 0.6.0-rc.2). Save it again to compare them.');
   } else {
     const pushes = diffPushes(baseline.dataLayer, pushGroups(records), { epochOrder });
     warnings.push(...describePushDiff(pushes).map((line) => `dataLayer ${line}`));

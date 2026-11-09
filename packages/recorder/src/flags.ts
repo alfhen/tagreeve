@@ -67,6 +67,8 @@ export interface FlagInput {
   hits: readonly Hit[];
   /** When given, requests and hits are scanned for data that is not the identity's. */
   identity?: Identity | null;
+  /** When given with `identity`, pushes are scanned too. A finding is a `possibleRealDataPush` flag. */
+  dataLayerEvents?: readonly DataLayerEvent[];
   /** Ids of requests that Playwright routed. A collection request that was seen but not routed escaped stub mode. */
   routedRequestIds: ReadonlySet<string>;
   /** Responses recorded for the requests. With `handedToChromium`, enables the `possibleRedirectHop` flag. */
@@ -77,7 +79,7 @@ export interface FlagInput {
   redirectHeaderWithoutRedirect?: ReadonlySet<string>;
 }
 
-export function buildFlags({ runId, networkMode, siteUrl, firstPartyHosts, trackers = trackerList, platformHosts = true, requests, hits, identity, routedRequestIds, responses = [], handedToChromium = new Set(), redirectHeaderWithoutRedirect = new Set() }: FlagInput): Flag[] {
+export function buildFlags({ runId, networkMode, siteUrl, firstPartyHosts, trackers = trackerList, platformHosts = true, requests, hits, identity, dataLayerEvents = [], routedRequestIds, responses = [], handedToChromium = new Set(), redirectHeaderWithoutRedirect = new Set() }: FlagInput): Flag[] {
   const answered = new Set(responses.map((r) => r.requestId));
   const scope = { siteHost: parse(siteUrl)?.hostname ?? '', firstPartyHosts };
   const flags: Flag[] = [];
@@ -112,7 +114,9 @@ export function buildFlags({ runId, networkMode, siteUrl, firstPartyHosts, track
     }
   }
   if (identity) {
-    for (const leak of findForeignData(requests, hits, identity)) flags.push(flag(runId, 'possibleRealData', leak.evidence, leak.detail));
+    for (const leak of findForeignData(requests, hits, identity, dataLayerEvents)) {
+      flags.push(flag(runId, leak.source === 'push' ? 'possibleRealDataPush' : 'possibleRealData', leak.evidence, leak.detail));
+    }
   }
   return flags;
 }

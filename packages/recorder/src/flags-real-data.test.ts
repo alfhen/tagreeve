@@ -1,4 +1,4 @@
-import { createIdentity, hashEmail, newId, type Request } from '@tagreeve/core';
+import { createIdentity, hashEmail, newId, type DataLayerEvent, type Request } from '@tagreeve/core';
 import { expect, test } from 'vitest';
 import { buildFlags } from './flags.ts';
 import { REDACTED, Scrubber } from './gtm-scrub.ts';
@@ -39,4 +39,31 @@ test('no identity means no possibleRealData flags, and the identity own values a
   const foreign = req(`https://tracker.example.net/c?em=${hashEmail('other@example.com').hex}`);
   const without = buildFlags({ runId: newId('run'), networkMode: 'stub', siteUrl: 'http://localhost:3000', requests: [foreign], hits: [], routedRequestIds: new Set() });
   expect(without.filter((f) => f.kind === 'possibleRealData')).toEqual([]);
+});
+
+test('a push with a foreign email gives one possibleRealDataPush flag and no possibleRealData flag', () => {
+  const foreign = 'fake.person@example.test';
+  const event: DataLayerEvent = {
+    type: 'dataLayerEvent', id: 'dle_P1' as DataLayerEvent['id'], runId: newId('run'), stepId: 'stp_S1' as DataLayerEvent['stepId'], t: 1, event: 'purchase', gtmUniqueEventId: null,
+    args: [{ event: 'purchase', contact: foreign }], isConsentCommand: false,
+  };
+  expect(JSON.stringify(event.args)).toContain(foreign);
+  const flags = buildFlags({ runId: newId('run'), networkMode: 'stub', siteUrl: 'http://localhost:3000', requests: [], hits: [], identity, dataLayerEvents: [event], routedRequestIds: new Set() });
+  expect(flags.map((f) => f.kind)).toEqual(['possibleRealDataPush']);
+  expect(flags[0]!.recordIds).toEqual([event.id, event.stepId]);
+  expect(JSON.stringify(flags)).not.toContain(foreign);
+});
+
+test('a push does not change the possibleRealData request flags', () => {
+  const hash = 'ab12cd34'.repeat(8);
+  const requests = ['req_A', 'req_B'].map((id) => req(`https://tracker.example.net/c?uid=${hash}`, { id: id as Request['id'] }));
+  const event: DataLayerEvent = {
+    type: 'dataLayerEvent', id: 'dle_P1' as DataLayerEvent['id'], runId: newId('run'), stepId: 'stp_S1' as DataLayerEvent['stepId'], t: 1, event: null, gtmUniqueEventId: null,
+    args: [{ customer_hash: hash }], isConsentCommand: false,
+  };
+  const build = (dataLayerEvents: DataLayerEvent[]) =>
+    buildFlags({ runId: newId('run'), networkMode: 'stub', siteUrl: 'http://localhost:3000', requests, hits: [], identity, dataLayerEvents, routedRequestIds: new Set() });
+  const requestKinds = (flags: ReturnType<typeof build>) => flags.filter((f) => f.kind === 'possibleRealData');
+  expect(requestKinds(build([]))).toEqual([]);
+  expect(requestKinds(build([event]))).toEqual([]);
 });
