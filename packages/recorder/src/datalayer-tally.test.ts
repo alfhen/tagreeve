@@ -1,5 +1,6 @@
 import { newId } from '@tagreeve/core';
 import { expect, test } from 'vitest';
+import { dataLayerEventFromPayload } from './datalayer.ts';
 import { buildTallyFlags, MAX_TALLY_KEYS, PayloadCounts, postedAhead, validateTally, type FrameTally } from './datalayer-tally.ts';
 
 const NAMES = ['dataLayer', 'myLayer'];
@@ -138,4 +139,14 @@ test('validateTally keeps an untrapped name only when it is a hooked name', () =
   expect(validateTally(0, { d: 'tok', arrays: [], untrapped: 'myLayer' }, NAMES)?.untrapped).toEqual([]);
   expect(validateTally(0, { d: 'tok', arrays: [], untrapped: ['myLayer'] }, NAMES)?.untrapped).toEqual([]);
   expect(validateTally(0, { d: 'tok', arrays: [] }, NAMES)?.untrapped).toEqual([]);
+});
+
+test('a push whose key is capped still becomes a DataLayerEvent', () => {
+  const all = new PayloadCounts();
+  for (let i = 0; i < MAX_TALLY_KEYS; i += 1) addTo(all, i, 'tok', undefined, 1, 1);
+  const payload = { t: 1000, args: '[{"event":"after_cap"}]', d: 'tok', a: 1 };
+  all.add(payload, 999, NAMES);
+  expect(all.received(999, 'tok', 'dataLayer', 1)).toBeUndefined();
+  const event = dataLayerEventFromPayload(payload, runId, 0, { main: true, n: 999 });
+  expect(event).toMatchObject({ event: 'after_cap' });
 });

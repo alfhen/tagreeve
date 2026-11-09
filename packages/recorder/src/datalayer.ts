@@ -1,4 +1,4 @@
-import { DATALAYER_NAME_PATTERN, NEVER_TRAPPED_NAMES } from '@tagreeve/expect';
+import { NEVER_TRAPPED_NAMES, isDataLayerName } from '@tagreeve/expect';
 import { newId, pageTimeToEpoch, type DataLayerEvent, type DataLayerFrame, type EpochMs, type Id } from '@tagreeve/core';
 
 export const DATALAYER_BINDING = '__tagreeveDataLayer';
@@ -305,10 +305,6 @@ export interface DataLayerPayload {
   uid?: number;
   /** The page replaced `window.dataLayer` with another array. */
   reassigned?: true;
-}
-
-export function isDataLayerName(name: unknown): name is string {
-  return typeof name === 'string' && DATALAYER_NAME_PATTERN.test(name) && !NEVER_TRAPPED_NAMES.includes(name);
 }
 
 function isConsentCommand(args: unknown[]): boolean {

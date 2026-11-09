@@ -276,10 +276,13 @@ export interface DataLayerFrame {
   n: number;
 }
 
+/** The status values GTM reports for a tag. */
+export const GTM_TAG_STATUSES: readonly string[] = ['success', 'failure', 'exception', 'timeout'];
+
 export interface TagStatus {
   id: string;
   name: string | null;
-  /** GTM's values are `success`, `failure`, `exception` and `timeout`. Any other string is kept as GTM sent it. */
+  /** One of `GTM_TAG_STATUSES`. Any other string is kept as GTM sent it. */
   status: string;
   executionTime: number | null;
 }

@@ -1,9 +1,22 @@
 import { isValueSegment, unwrapStapeLoader } from '@tagreeve/decoders';
 import { newId, type Flag, type Id, type Request } from '@tagreeve/core';
-import { DEFAULT_DATALAYER, isDataLayerName } from './datalayer.ts';
+import { isDataLayerName } from '@tagreeve/expect';
+import { DEFAULT_DATALAYER } from './datalayer.ts';
 import { GOOGLE_HOST } from './gtm-override.ts';
 
 const GOOGLE_TAG_ID = /^(GTM|G|GT|AW|DC)-[A-Z0-9]+$/;
+
+const LOADER_PATH = /\/(gtm\.js|gtag\/js)$/;
+
+/** A request to Google's own loader host for `gtm.js` or `gtag/js`. First-party and server container hosts are not matched. */
+export function isGoogleHostLoaderUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === 'www.googletagmanager.com' && LOADER_PATH.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
 
 function loaderName(url: string, googleOnly: boolean): string | undefined {
   let parsed: URL;
@@ -12,7 +25,7 @@ function loaderName(url: string, googleOnly: boolean): string | undefined {
   } catch {
     return undefined;
   }
-  if (!/\/(gtm\.js|gtag\/js)$/.test(parsed.pathname)) return undefined;
+  if (!LOADER_PATH.test(parsed.pathname)) return undefined;
   // A first-party or server container host serves the loader too; only a Google tag ID tells it from other gtm.js files.
   if (googleOnly && !GOOGLE_HOST.test(parsed.hostname) && !GOOGLE_TAG_ID.test(parsed.searchParams.get('id') ?? '')) return undefined;
   const name = parsed.searchParams.get('l');
@@ -53,4 +66,23 @@ export function buildDataLayerNotHookedFlag(input: { runId: Id<'run'>; loaders: 
       ? `Google loaders name the data layers ${shown}, which are not hooked, so pushes to them are not recorded. ${advice}`
       : `A Google loader names the data layer ${shown}, which is not hooked, so pushes to it are not recorded. ${advice.replace('them', 'it')}`,
   };
+}
+
+/** One flag per frame that replaced `window.dataLayer` after a Google loader request in the same document. */
+export function buildDataLayerReassignedFlags(input: {
+  runId: Id<'run'>;
+  reassigns: readonly { n: number; t: number; doc: string }[];
+  loaders: readonly { t: number; doc: string | undefined }[];
+}): Flag[] {
+  const frames = new Set(input.reassigns.filter((r) => input.loaders.some((l) => l.doc === r.doc && l.t <= r.t)).map((r) => r.n));
+  return [...frames]
+    .sort((a, b) => a - b)
+    .map((n) => ({
+      type: 'flag' as const,
+      id: newId('flag'),
+      runId: input.runId,
+      kind: 'dataLayerReassigned',
+      recordIds: [],
+      detail: `Frame ${n} replaced window.dataLayer with a new array after a Google loader request. Pushes to the new array are still recorded.`,
+    }));
 }

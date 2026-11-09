@@ -51,7 +51,7 @@ import { routeCollector, type CollectorHandler, type ParsedReport } from './coll
 import { COLLECTOR_ORIGIN, SELFTEST_ORIGIN } from './origins.ts';
 import { DATALAYER_BINDING, DATALAYER_TALLY, dataLayerEventFromPayload, dataLayerInitScript, hookedLayerNames, type DataLayerPayload } from './datalayer.ts';
 import { buildTallyFlags, PayloadCounts, postedAhead, validateTally, type FrameTally } from './datalayer-tally.ts';
-import { buildDataLayerNotHookedFlag, loaderLayerName } from './datalayer-names.ts';
+import { buildDataLayerNotHookedFlag, buildDataLayerReassignedFlags, isGoogleHostLoaderUrl, loaderLayerName } from './datalayer-names.ts';
 import { parseTagReport, TAG_REPORT_BINDING } from './tag-report.ts';
 import { buildFlags, buildUnloadGapFlags, type FrameRef } from './flags.ts';
 import { mergeNetLog, NavigationWindows, parseNetLog, watchNetLogDir, type NetLogRequest } from './netlog.ts';
@@ -1078,21 +1078,8 @@ export class Recorder {
   }
 
   private dataLayerReassignedFlags(requests: Request[]): Flag[] {
-    const loaders = requests.filter((r) => isGoogleLoaderUrl(r.url));
-    if (loaders.length === 0) return [];
-    const frames = new Set(
-      this.dataLayerReassigns.filter((r) => loaders.some((l) => this.requestFrameIds.get(l.id) === r.doc && l.t <= r.t)).map((r) => r.n),
-    );
-    return [...frames]
-      .sort((a, b) => a - b)
-      .map((n) => ({
-        type: 'flag' as const,
-        id: newId('flag'),
-        runId: this.runId,
-        kind: 'dataLayerReassigned',
-        recordIds: [],
-        detail: `Frame ${n} replaced window.dataLayer with a new array after a Google loader request. Pushes to the new array are still recorded.`,
-      }));
+    const loaders = requests.filter((r) => isGoogleHostLoaderUrl(r.url)).map((r) => ({ t: r.t, doc: this.requestFrameIds.get(r.id) }));
+    return buildDataLayerReassignedFlags({ runId: this.runId, reassigns: this.dataLayerReassigns, loaders });
   }
 
   private noteContainerExit(): void {
@@ -1246,15 +1233,6 @@ function abortCode(error: unknown): string {
 
 // Fetch spec and Chromium: a redirect that changes the method to GET drops the body, its headers and Origin.
 const BODY_HEADERS = new Set(['content-type', 'content-length', 'content-encoding', 'content-language', 'content-location', 'origin']);
-
-function isGoogleLoaderUrl(url: string): boolean {
-  try {
-    const u = new URL(url);
-    return u.hostname === 'www.googletagmanager.com' && (u.pathname === '/gtm.js' || u.pathname === '/gtag/js');
-  } catch {
-    return false;
-  }
-}
 
 function withoutMethodChangeHeaders(headers: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.entries(headers).filter(([name]) => !BODY_HEADERS.has(name.toLowerCase())));

@@ -1,6 +1,6 @@
 import { newId, type Request } from '@tagreeve/core';
 import { expect, test } from 'vitest';
-import { buildDataLayerNotHookedFlag, loaderLayerName } from './datalayer-names.ts';
+import { buildDataLayerNotHookedFlag, buildDataLayerReassignedFlags, isGoogleHostLoaderUrl, loaderLayerName } from './datalayer-names.ts';
 
 const runId = newId('run');
 const req = (url: string): Request => ({ id: newId('request'), url }) as unknown as Request;
@@ -80,4 +80,47 @@ test('a configured name that the page made untrappable gives the flag', () => {
   expect(flag?.detail).toContain('"status"');
   expect(flag?.detail).not.toContain('Add it to options.dataLayerNames');
   expect(buildDataLayerNotHookedFlag({ runId, loaders: loaders([r]), hooked: ['status'], untrapped: [] })).toBeUndefined();
+});
+
+test('a masked name in the middle of the list is masked and the others are named', () => {
+  const email = 'pw.test@example.test';
+  const at = (l: string) => req(`https://www.googletagmanager.com/gtm.js?id=GTM-PWTEST1&l=${encodeURIComponent(l)}`);
+  const rs = [at('a'), at(email), at('b')];
+  expect(loaderLayerName(rs[1]!)).toBe(email);
+  const flag = buildDataLayerNotHookedFlag({ runId, loaders: loaders(rs), hooked: [] });
+  expect(flag?.detail).toContain('"a", (other), "b"');
+  expect(flag?.detail).not.toContain(email);
+});
+
+test.each([
+  ['https://www.googletagmanager.com/gtm.js?id=GTM-PWTEST1', true],
+  ['https://www.googletagmanager.com/gtag/js?id=G-PWTEST0001', true],
+  ['https://www.googletagmanager.com/gtm.js', true],
+  ['https://sgtm.shop.example/gtm.js?id=GTM-PWTEST1', false],
+  ['https://www.googletagmanager.com/other.js', false],
+  ['https://www.googletagmanager.com/gtm.jsx', false],
+  ['https://googletagmanager.com.evil.example/gtm.js', false],
+  ['not a url', false],
+])('isGoogleHostLoaderUrl(%s) is %s', (url, expected) => {
+  expect(isGoogleHostLoaderUrl(url)).toBe(expected);
+});
+
+test('a reassign flags its frame only after a loader in the same document, once per frame', () => {
+  const flags = buildDataLayerReassignedFlags({
+    runId,
+    loaders: [{ t: 100, doc: 'd1' }, { t: 100, doc: undefined }],
+    reassigns: [
+      { n: 2, doc: 'd1', t: 150 },
+      { n: 2, doc: 'd1', t: 160 },
+      { n: 1, doc: 'd1', t: 100 },
+      { n: 3, doc: 'd1', t: 99 },
+      { n: 4, doc: 'd2', t: 500 },
+    ],
+  });
+  expect(flags.map((f) => f.detail)).toEqual([
+    'Frame 1 replaced window.dataLayer with a new array after a Google loader request. Pushes to the new array are still recorded.',
+    'Frame 2 replaced window.dataLayer with a new array after a Google loader request. Pushes to the new array are still recorded.',
+  ]);
+  expect(flags[0]).toMatchObject({ kind: 'dataLayerReassigned', recordIds: [], runId });
+  expect(buildDataLayerReassignedFlags({ runId, loaders: [], reassigns: [{ n: 1, doc: 'd1', t: 1 }] })).toEqual([]);
 });

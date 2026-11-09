@@ -12,7 +12,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 <!-- F10 -->
 
-<!-- D10 -->
+- Internal: one rule for what a Google loader URL is, for a valid layer name, for the GTM tag statuses and for a duration. Every duration key in a scenario now fails with the same message: "must be a duration such as 4s, 500ms or 2m".
 
 <!-- Z10 -->
 

@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { README_QUICKSTART_SCENARIO, README_SCENARIO } from './readme-scenario.ts';
-import { parseScenario, ScenarioError } from './scenario.ts';
+import { GTM_TAG_STATUSES } from '@tagreeve/core';
+import { DATALAYER_NAME_PATTERN, isDataLayerName, NEVER_TRAPPED_NAMES, parseScenario, ScenarioError, type ScenarioOptions } from './scenario.ts';
 
 test('parses host lists in options and rejects bad entries', () => {
   const s = parseScenario("start: /\noptions: { firstPartyHosts: ['i.guim.co.uk', '*.shopifycdn.com'], allowUnknownDestination: ['cdn.example.net'] }");
@@ -303,7 +304,56 @@ test('wait with a url takes a timeout', () => {
     { url: { glob: '/y' }, timeout: 120_000 },
   ]);
   expect(errorOf('start: /\nsteps:\n  - wait: { url: "/x", timeout: soon }\n')).toContain('wait.timeout: must be a duration');
-  expect(errorOf('start: /\nsteps:\n  - wait: { selector: "#a", timeout: 2s }\n')).toBeTruthy();
+  const locator = errorOf('start: /\nsteps:\n  - wait: { role: link, timeout: 2s }\n');
+  expect(locator).toContain('wait.timeout');
+  expect(locator).toContain('unknown key');
+});
+
+const DURATION_MESSAGE = 'must be a duration such as 4s, 500ms or 2m';
+
+test.each([
+  ['options.consentTimeout', 'options:\n  consentTimeout: BAD\nsteps:\n  - visit: /\n'],
+  ['options.graceWindow', 'options:\n  graceWindow: BAD\nsteps:\n  - visit: /\n'],
+  ['options.optionalTimeout', 'options:\n  optionalTimeout: BAD\nsteps:\n  - visit: /\n'],
+  ['steps[0].handoff.settle', 'steps:\n  - handoff: { text: Pay, until: { url: "/ty" }, settle: BAD }\n'],
+  ['steps[0].handoff.timeout', 'steps:\n  - handoff: { text: Pay, timeout: BAD }\n'],
+  ['steps[0].wait.timeout', 'steps:\n  - wait: { url: "/x", timeout: BAD }\n'],
+])('%s fails a bad duration with the one message', (key, body) => {
+  const text = `start: /\n${body}`;
+  const good = text.replace('BAD', '4s');
+  expect(() => parseScenario(good)).not.toThrow();
+  const message = errorOf(text);
+  expect(message).toContain(DURATION_MESSAGE);
+  expect(message).toContain(key.replace('steps[0].', '').replace(/^options\./, 'options.'));
+});
+
+test('optionalTimeout keeps its range check', () => {
+  expect(errorOf('start: /\noptions:\n  optionalTimeout: 50ms\nsteps:\n  - visit: /\n')).toContain('must be from 100ms to 30s');
+});
+
+test('isDataLayerName agrees with the constants for every case', () => {
+  for (const name of ['dataLayer', 'myLayer', '_a', '$a', 'a'.repeat(64)]) expect(isDataLayerName(name)).toBe(true);
+  for (const name of ['', '1a', 'a b', 'a-b', 'a'.repeat(65), ...NEVER_TRAPPED_NAMES, 3, null, undefined, {}]) expect(isDataLayerName(name)).toBe(false);
+  for (const name of NEVER_TRAPPED_NAMES) expect(DATALAYER_NAME_PATTERN.test(name) || name === '__proto__').toBe(true);
+});
+
+test('options.dataLayerNames accepts exactly the names isDataLayerName accepts', () => {
+  for (const name of ['myLayer', 'location', 'a b', '1a', '__proto__', 'Shopify']) {
+    const text = `start: /\noptions:\n  dataLayerNames: ["${name}"]\nsteps:\n  - visit: /\n`;
+    if (isDataLayerName(name)) expect(parseScenario(text).options.dataLayerNames).toEqual([name]);
+    else expect(errorOf(text)).toContain('options.dataLayerNames');
+  }
+});
+
+test('the tag status filter accepts exactly the GTM statuses', () => {
+  for (const status of GTM_TAG_STATUSES) expect(() => parseScenario(`start: /\nexpect:\n  must:\n    - tag: { name: x, status: [${status}] }\n`)).not.toThrow();
+  expect(errorOf('start: /\nexpect:\n  must:\n    - tag: { name: x, status: [nope] }\n')).toContain(`must be one of ${GTM_TAG_STATUSES.join(', ')}`);
+});
+
+test('options.network cannot be live in the type', () => {
+  // @ts-expect-error live is not a scenario network
+  const o: ScenarioOptions = { network: 'live' };
+  expect(o.network).toBe('live');
 });
 
 test('a real German mobile number in identity.phone is warned about with a reason and the DE range', () => {

@@ -1,4 +1,4 @@
-import { FICTIONAL_PHONE_HINT } from '@tagreeve/core';
+import { FICTIONAL_PHONE_HINT, GTM_TAG_STATUSES } from '@tagreeve/core';
 import type { ConsentValue, NetworkMode, RequestOutcome, Severity } from '@tagreeve/core';
 import { trackerVendorKeys, vendorKeys } from '@tagreeve/decoders';
 import { LineCounter, parseDocument } from 'yaml';
@@ -172,7 +172,6 @@ const VENDOR_KEYS = new Set(['vendor', 'event', 'page', 'transport', 'host', 'ou
 const GROUP_KEYS = ['consent', 'ids', 'params', 'identity', 'body'] as const;
 const COOKIE_RULE_KEYS = ['cookie', 'before', 'in', 'after', 'from'];
 const TAG_RULE_KEYS = ['tag', 'count', 'after', 'from'];
-const TAG_STATUSES = ['success', 'failure', 'exception', 'timeout'];
 const TAG_SELECTOR_KEYS = ['id', 'name', 'container', 'event', 'status', 'side'];
 const MAX_TAG_TEXT = 200;
 const BODY_KEYS = ['has', 'only', 'ignore'] as const;
@@ -187,6 +186,10 @@ const OPTION_KEYS = ['network', 'seed', 'consentTimeout', 'graceWindow', 'option
 export const MAX_DATALAYER_NAMES = 8;
 export const DATALAYER_NAME_PATTERN = /^[A-Za-z_$][\w$]{0,63}$/;
 export const NEVER_TRAPPED_NAMES: readonly string[] = ['location', 'Shopify', '__proto__', 'constructor', 'prototype'];
+
+export function isDataLayerName(name: unknown): name is string {
+  return typeof name === 'string' && DATALAYER_NAME_PATTERN.test(name) && !NEVER_TRAPPED_NAMES.includes(name);
+}
 
 const HOST_HINT = ', each a host such as cdn.example.com or a wildcard such as *.example.com';
 
@@ -217,6 +220,13 @@ export function parseDuration(value: unknown): number | undefined {
   if (!m) return undefined;
   const unit = m[2] ?? 'ms';
   return Number(m[1]) * (unit === 'm' ? 60_000 : unit === 's' ? 1000 : 1);
+}
+
+/** The one duration check. Every duration key fails with the same message. */
+function durationAt(value: unknown, path: Path, fail: (path: Path, message: string) => void): number | undefined {
+  const ms = parseDuration(value);
+  if (ms === undefined) fail(path, 'must be a duration such as 4s, 500ms or 2m');
+  return ms;
 }
 
 export function parseCount(value: unknown): Count | undefined {
@@ -282,7 +292,7 @@ export function parseOptions(raw: unknown, path: Path, fail: (path: Path, messag
       } else if (k === 'dataLayerNames') {
         const names: unknown[] = Array.isArray(v) ? v : [];
         if (!Array.isArray(v) || v.length === 0 || v.length > MAX_DATALAYER_NAMES) fail(p, `must be a list of 1 to ${MAX_DATALAYER_NAMES} global names such as myLayer`);
-        else if (!names.every((x) => typeof x === 'string' && DATALAYER_NAME_PATTERN.test(x) && !NEVER_TRAPPED_NAMES.includes(x))) {
+        else if (!names.every(isDataLayerName)) {
           fail(p, `each name must be a plain identifier of at most 64 characters (letters, digits, _ and $), and not ${NEVER_TRAPPED_NAMES.join(', ')}`);
         } else options.dataLayerNames = [...new Set(v as string[])];
       } else if (k === 'serverHosts') {
@@ -316,9 +326,9 @@ export function parseOptions(raw: unknown, path: Path, fail: (path: Path, messag
         if (isHostList(v)) options.firstPartyHosts = v;
         else fail(p, `must be a list of hosts${HOST_HINT}`);
       } else {
-        const ms = parseDuration(v);
-        if (ms === undefined) fail(p, 'must be a duration such as 4s or 500ms');
-        else if (k === 'consentTimeout') options.consentTimeout = ms;
+        const ms = durationAt(v, p, fail);
+        if (ms === undefined) continue;
+        if (k === 'consentTimeout') options.consentTimeout = ms;
         else if (k === 'optionalTimeout') {
           if (ms < 100 || ms > 30000) fail(p, 'must be from 100ms to 30s');
           else options.optionalTimeout = ms;
@@ -531,9 +541,7 @@ export function parseScenario(text: string, extraVendorKeys: readonly string[] =
         const until = value.until === undefined ? undefined : condition(value.until, [...at, 'until']);
         const duration = (key: 'settle' | 'timeout') => {
           if (value[key] === undefined) return undefined;
-          const ms = parseDuration(value[key]);
-          if (ms === undefined) fail([...at, key], 'must be a duration such as 4s, 500ms or 10m');
-          return ms;
+          return durationAt(value[key], [...at, key], fail);
         };
         const settle = duration('settle');
         const timeout = duration('timeout');
@@ -628,8 +636,7 @@ export function parseScenario(text: string, extraVendorKeys: readonly string[] =
             const url = urlMatcher(value.url, [...path, kind, 'url']);
             let timeout: number | undefined;
             if ('timeout' in value) {
-              timeout = parseDuration(value.timeout);
-              if (timeout === undefined) fail([...path, kind, 'timeout'], 'must be a duration such as 90s or 2m');
+              timeout = durationAt(value.timeout, [...path, kind, 'timeout'], fail);
             }
             if (url && (!('timeout' in value) || timeout !== undefined)) add({ kind, value: timeout === undefined ? { url } : { url, timeout } });
           }
@@ -687,7 +694,7 @@ export function parseScenario(text: string, extraVendorKeys: readonly string[] =
       } else if (key === 'status') {
         const items = Array.isArray(raw) ? raw : [raw];
         if (items.length === 0 || !items.every((x) => typeof x === 'string' && x && x.length <= MAX_FIELD_NAME)) fail(p, 'must be a status or a list of statuses');
-        else if (!items.every((x) => TAG_STATUSES.includes(x as string))) fail(p, `must be one of ${TAG_STATUSES.join(', ')}`);
+        else if (!items.every((x) => GTM_TAG_STATUSES.includes(x as string))) fail(p, `must be one of ${GTM_TAG_STATUSES.join(', ')}`);
         else tag.status = items as string[];
       } else if (key === 'side') {
         if (raw === 'web' || raw === 'server') tag.side = raw;
