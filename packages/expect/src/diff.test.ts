@@ -936,6 +936,8 @@ describe('renamed pairs in diffPushes', () => {
               const from = (m.kind === 'epoch' ? m.from : m.epoch) ?? '';
               expect(inA(from, m.renamedFrom ?? m.event)).toBe(true);
               expect(m.renamedFrom !== undefined).toBe(!inA(from, m.event));
+              expect(bNames.has(m.event)).toBe(true);
+              if (m.kind === 'epoch') expect(b.some((x) => x.epoch === m.to && x.event === m.event)).toBe(true);
             }
             seen.pathsAdded += d.pathsAdded.length ? 1 : 0;
             seen.pathsRemoved += d.pathsRemoved.length ? 1 : 0;
