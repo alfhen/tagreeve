@@ -235,7 +235,7 @@ interface PushNode {
   renamedFrom?: string;
 }
 
-type NamedGroup = PushGroup & { renamedFrom?: string };
+export type NamedGroup = PushGroup & { renamedFrom?: string };
 
 function pushNodes(groups: NamedGroup[], acrossFrames: boolean, mergeKinds: boolean): Map<string, PushNode> {
   const nodes = new Map<string, PushNode>();
@@ -261,24 +261,29 @@ const nodeRef = (n: PushNode, renamedFrom: string | undefined = n.renamedFrom): 
 
 const epochEventId = (g: PushGroup): string => JSON.stringify([g.epoch, g.event]);
 
-/** Names each first-side group as the run recorded it. A name that only one side has in an epoch joins a one-side name of the other run, in the same epoch first, when the table or the user map says they are one event. The second side's name wins. */
-function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap): NamedGroup[] {
+const byEventThenEpoch = (x: PushGroup, y: PushGroup): number => (x.event < y.event ? -1 : x.event > y.event ? 1 : x.epoch < y.epoch ? -1 : x.epoch > y.epoch ? 1 : 0);
+
+/** Names each first-side group as the run recorded it. A name that only one side has in an epoch joins a one-side name of the other run, in the same epoch first, when the table or the user map says they are one event. The second side's name wins. One (epoch, name) of the first side joins at most one of the second, and no join gives a first-side group an (epoch, name) that another first-side group has or was given. */
+export function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap): NamedGroup[] {
   const inA = new Set(a.map(epochEventId));
   const inB = new Set(b.map(epochEventId));
-  const onlyA = [...new Map(a.filter((g) => !inB.has(epochEventId(g))).map((g) => [epochEventId(g), g])).values()];
-  const onlyB = [...new Map(b.filter((g) => !inA.has(epochEventId(g))).map((g) => [epochEventId(g), g])).values()];
+  const unique = (groups: PushGroup[]): PushGroup[] => [...new Map(groups.map((g) => [epochEventId(g), g])).values()];
+  const onlyA = unique(a.filter((g) => !inB.has(epochEventId(g)))).sort(byEventThenEpoch);
+  const onlyB = unique(b.filter((g) => !inA.has(epochEventId(g)))).sort(byEventThenEpoch);
   const movedNames = new Set(onlyA.map((g) => g.event).filter((n) => onlyB.some((g) => g.event === n)));
+  const taken = new Set(inA);
   const claimed = new Set<string>();
   const joined = new Map<string, string>();
   const pair = (sameEpoch: boolean): void => {
-    for (const from of onlyA.filter((g) => !joined.has(epochEventId(g)) && (sameEpoch || !movedNames.has(g.event))).sort((x, y) => (x.event < y.event ? -1 : x.event > y.event ? 1 : 0))) {
+    for (const from of onlyA) {
+      if (joined.has(epochEventId(from)) || (!sameEpoch && movedNames.has(from.event))) continue;
       const want = mappedEventName(from.event, userMap);
-      const to = onlyB
-        .filter((g) => !claimed.has(epochEventId(g)) && (sameEpoch ? g.epoch === from.epoch : !movedNames.has(g.event) && !inA.has(JSON.stringify([from.epoch, g.event]))))
-        .sort((x, y) => (x.event < y.event ? -1 : x.event > y.event ? 1 : 0))
-        .find((g) => builtInEventName(g.event) === want);
+      const to = onlyB.find(
+        (g) => !claimed.has(epochEventId(g)) && builtInEventName(g.event) === want && !taken.has(JSON.stringify([from.epoch, g.event])) && (sameEpoch ? g.epoch === from.epoch : !movedNames.has(g.event)),
+      );
       if (to === undefined) continue;
       claimed.add(epochEventId(to));
+      taken.add(JSON.stringify([from.epoch, to.event]));
       joined.set(epochEventId(from), to.event);
     }
   };
@@ -288,7 +293,7 @@ function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap): NamedGro
   const kept = mapPushGroups(a, (e) => e, userMap?.paths, (r) => [r, builtInEventName(r)].filter((k, i) => i === 0 || !targets.has(k)));
   return normalizePushGroups(a, userMap).map((g, i) => {
     const recorded = a[i]!;
-    const to = inB.has(epochEventId(recorded)) ? undefined : joined.get(epochEventId(recorded));
+    const to = joined.get(epochEventId(recorded));
     return to === undefined ? kept[i]! : { ...g, event: to, renamedFrom: recorded.event };
   });
 }
