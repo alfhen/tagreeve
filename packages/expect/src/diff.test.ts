@@ -653,6 +653,28 @@ describe('diffPushes', () => {
     expect(diffPushes(a, b, { eventMap }).changed).toBe(false);
     expect(diffPushes(a, b).changed).toBe(true);
   });
+
+  test('a pair matched by recorded name uses a paths entry keyed by its GA4 name', () => {
+    const eventMap = parseEventMap(JSON.stringify({ paths: { purchase: { total: 'value' } } }), 'm.json');
+    const a = [group({ event: 'checkout_completed', paths: [{ path: 'total', types: ['number'] }] })];
+    const b = [group({ event: 'checkout_completed', paths: [{ path: 'value', types: ['number'] }] })];
+    expect(diffPushes(a, b, { eventMap }).changed).toBe(false);
+  });
+
+  test('a pair matched by recorded name does not take the paths entry of an event renamed to its GA4 name', () => {
+    const eventMap = parseEventMap(JSON.stringify({ events: { custom_a: 'purchase' }, paths: { purchase: { total: 'value' } } }), 'm.json');
+    const a = [group({ event: 'checkout_completed', paths: [{ path: 'total', types: ['number'] }] })];
+    const b = [group({ event: 'checkout_completed', paths: [{ path: 'total', types: ['number'] }] })];
+    expect(diffPushes(a, b, { eventMap }).changed).toBe(false);
+  });
+
+  test('a removed event keeps its side a name when its pair joins across epochs that are not next to each other', () => {
+    const a = [group({ epoch: 'undecided', event: 'checkout_completed' })];
+    const b = [group({ epoch: 'denied', event: 'purchase' })];
+    const d = diffPushes(a, b, { epochOrder: ['undecided', 'granted', 'denied'] });
+    expect(d.eventsRemoved).toEqual([{ epoch: 'undecided', event: 'checkout_completed', kind: 'object', frame: 'main' }]);
+    expect(d.eventsAdded).toEqual([{ epoch: 'denied', event: 'purchase', kind: 'object', frame: 'main' }]);
+  });
 });
 
 describe('push kind in diffRuns', () => {

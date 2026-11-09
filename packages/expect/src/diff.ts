@@ -251,7 +251,7 @@ function pushNodes(groups: NamedGroup[], acrossFrames: boolean, mergeKinds: bool
   return nodes;
 }
 
-const nodeRef = (n: PushNode, renamedFrom = n.renamedFrom): PushRef => ({
+const nodeRef = (n: PushNode, renamedFrom: string | undefined = n.renamedFrom): PushRef => ({
   epoch: n.epoch,
   event: n.event,
   ...(n.kind === undefined ? {} : { kind: n.kind }),
@@ -275,7 +275,8 @@ function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap): NamedGro
     claimed.add(to);
     joined.set(from, to);
   }
-  const kept = mapPushGroups(a, (e) => e, userMap?.paths, (r) => [r]);
+  const targets = new Set(Object.values(userMap?.events ?? {}));
+  const kept = mapPushGroups(a, (e) => e, userMap?.paths, (r) => [r, builtInEventName(r)].filter((k, i) => i === 0 || !targets.has(k)));
   return normalizePushGroups(a, userMap).map((g, i) => {
     const recorded = a[i]!;
     const to = inB.has(epochEventId(recorded)) ? undefined : joined.get(recorded.event);
@@ -332,7 +333,7 @@ export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOpti
       return i >= 0 && j >= 0 && Math.abs(i - j) === 1 && order.filter((l) => l === g.epoch || l === f.epoch).length === 2;
     });
     if (!match) {
-      result.eventsRemoved.push({ ...nodeRef(g, undefined), event: g.renamedFrom ?? g.event });
+      result.eventsRemoved.push({ ...nodeRef({ ...g, renamedFrom: undefined }), event: g.renamedFrom ?? g.event });
       continue;
     }
     taken.add(match);

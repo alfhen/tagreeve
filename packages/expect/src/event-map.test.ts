@@ -204,3 +204,11 @@ describe('push kind', () => {
     expect(e.eventsAdded).toEqual([{ epoch: 'undecided', event: 'purchase', kind: 'gtag', frame: 'main' }]);
   });
 });
+
+describe('null sections', () => {
+  test.each(['{"events":null,"paths":null}', '{"events":{"a":"b"},"events":null}'])('%s parses to empty maps', (json) => {
+    const map = parseEventMap(json, 'm.json');
+    expect(map.events).toEqual({});
+    expect(map.paths).toEqual({});
+  });
+});
