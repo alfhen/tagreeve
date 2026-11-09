@@ -305,21 +305,45 @@ export function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap, co
   const taken = new Set(inA);
   const claimed = new Set<string>();
   const joined = new Map<string, PushGroup>();
-  const pair = (sameEpoch: boolean): void => {
-    for (const from of onlyA) {
-      if (joined.has(epochEventId(from)) || (!sameEpoch && movedNames.has(from.event))) continue;
-      const want = mappedEventName(from.event, userMap);
-      const to = onlyB.find(
-        (g) => !claimed.has(epochEventId(g)) && builtInEventName(g.event) === want && !taken.has(JSON.stringify([from.epoch, g.event])) && (sameEpoch ? g.epoch === from.epoch : !movedNames.has(g.event) && canMove(from, g)),
-      );
-      if (to === undefined) continue;
-      claimed.add(epochEventId(to));
-      taken.add(JSON.stringify([from.epoch, to.event]));
-      joined.set(epochEventId(from), to);
-    }
+  const candidates = (from: PushGroup, sameEpoch: boolean): PushGroup[] => {
+    const want = mappedEventName(from.event, userMap);
+    return onlyB.filter(
+      (g) => !claimed.has(epochEventId(g)) && builtInEventName(g.event) === want && !taken.has(JSON.stringify([from.epoch, g.event])) && (sameEpoch ? g.epoch === from.epoch : !movedNames.has(g.event) && canMove(from, g)),
+    );
   };
-  pair(true);
-  pair(false);
+  for (const from of onlyA) {
+    const to = candidates(from, true)[0];
+    if (to === undefined) continue;
+    claimed.add(epochEventId(to));
+    taken.add(JSON.stringify([from.epoch, to.event]));
+    joined.set(epochEventId(from), to);
+  }
+  // A maximum matching: a first-fit pick can take the target a later first-side group needs, and that group then does not join at all.
+  const owner = new Map<string, PushGroup>();
+  const augment = (from: PushGroup, seen: Set<string>): boolean => {
+    if (movedNames.has(from.event)) return false;
+    for (const to of candidates(from, false)) {
+      const id = epochEventId(to);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const holder = owner.get(id);
+      if (holder === undefined || augment(holder, seen)) {
+        owner.set(id, from);
+        return true;
+      }
+    }
+    return false;
+  };
+  for (const from of onlyA) if (!joined.has(epochEventId(from))) augment(from, new Set());
+  // Two first-side groups of one epoch cannot both take one name: the first in onlyA order keeps it.
+  for (const from of onlyA) {
+    const entry = [...owner].find(([, f]) => f === from);
+    if (entry === undefined) continue;
+    const to = onlyB.find((g) => epochEventId(g) === entry[0])!;
+    if (taken.has(JSON.stringify([from.epoch, to.event]))) continue;
+    taken.add(JSON.stringify([from.epoch, to.event]));
+    joined.set(epochEventId(from), to);
+  }
   const kept = keepPushGroups(a, userMap);
   return normalized.map((g, i) => {
     const recorded = a[i]!;

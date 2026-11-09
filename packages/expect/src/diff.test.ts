@@ -887,6 +887,18 @@ describe('renamed pairs in diffPushes', () => {
       ]);
     });
 
+    test('a first join does not take the target a later join needs', () => {
+      const a = [g('granted', 'checkout_completed'), g('withdrawn', 'order_done')];
+      const b = [g('undecided', 'purchase'), g('denied', 'purchase')];
+      const d = diffPushes(a, b, { epochOrder: ORDER5, eventMap: map });
+      expect(d.eventsRemoved).toEqual([]);
+      expect(d.eventsAdded).toEqual([]);
+      expect(d.moved.map((m) => [m.renamedFrom, m.from, m.kind === 'epoch' ? m.to : null]).sort()).toEqual([
+        ['checkout_completed', 'granted', 'undecided'],
+        ['order_done', 'withdrawn', 'denied'],
+      ]);
+    });
+
     test('exhaustive', () => {
       let joins = 0;
       for (const sa of sides5) {
