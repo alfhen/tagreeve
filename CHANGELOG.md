@@ -12,7 +12,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 - Internal: the folder names under `tagreeve/` and the `Defaults:` line code live in one place. `run` and `suite` read the out folder and the old-runs notice from one call. No change in output (#972, #1041, #1049, #1061, #1330, #1137, #1132).
 
-<!-- D10 -->
+- Internal: one rule for what a Google loader URL is, for a valid layer name, for the GTM tag statuses and for a duration. Every duration key in a scenario now fails with the same message: "must be a duration such as 4s, 500ms or 2m" (#1327). Internal cleanups: #1236, #1357, #1238, #1318.
 
 <!-- Z10 -->
 
