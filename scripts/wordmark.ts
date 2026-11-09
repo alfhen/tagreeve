@@ -1,5 +1,5 @@
-// Draws the "tagreeve" wordmark as outlines from the Jost Medium file that the docs theme self-hosts,
-// and writes it into the brand SVGs. Run: node scripts/wordmark.ts
+// Draws the "tagreeve" wordmark as outlines from a Jost Medium .woff file
+// and writes it into the brand SVGs. Run: node scripts/wordmark.ts <path to jost-latin-500-normal.woff>
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { inflateSync } from 'node:zlib';
@@ -11,7 +11,16 @@ const LEFT = 83;
 const RIGHT_MARGIN = 10.6;
 
 const path = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url));
-const woff = readFileSync(path('node_modules/@fontsource/jost/files/jost-latin-500-normal.woff'));
+
+function readFont(): Buffer {
+  const file = process.argv[2];
+  try {
+    if (file) return readFileSync(file);
+  } catch {}
+  console.error('Usage: node scripts/wordmark.ts <path to the Jost Medium .woff file>');
+  process.exit(2);
+}
+const woff = readFont();
 
 const tables = new Map<string, Buffer>();
 for (let i = 0; i < woff.readUInt16BE(12); i++) {
