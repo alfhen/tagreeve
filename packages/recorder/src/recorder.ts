@@ -1044,17 +1044,18 @@ export class Recorder {
   private async collectTallies(): Promise<FrameTally[]> {
     const names = hookedLayerNames(this.options.dataLayerNames);
     const tallies: FrameTally[] = [];
-    let frames: Frame[] = [];
+    let frames: { frame: Frame; top: boolean }[] = [];
     try {
-      frames = this.context.pages().flatMap((page) => page.frames());
+      // page.frames() lists the main frame first.
+      frames = this.context.pages().flatMap((page) => page.frames().map((frame, i) => ({ frame, top: i === 0 })));
     } catch {
       return tallies;
     }
     const script = `window.${DATALAYER_TALLY}?.()`;
-    const asking = frames.map(async (frame) => {
+    const asking = frames.map(async ({ frame, top }) => {
       try {
         const tally = validateTally(this.frameNumber(frame), await frame.evaluate(script), names);
-        if (tally) tallies.push(frame.parentFrame() === null ? tally : { ...tally, untrapped: [] });
+        if (tally) tallies.push(top ? tally : { ...tally, untrapped: [] });
       } catch {
         // a frame that fails or detaches gets no flag
       }
