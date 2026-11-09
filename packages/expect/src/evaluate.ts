@@ -1550,7 +1550,8 @@ function percentLayers(text: string): string[] {
 // merges. A different value in the URL, or a longer value elsewhere, keeps its own finding.
 // Rule: the short value merges into the long one when the long value occurs in some reading, and no reading holds the short
 // value outside it. A text form (the body, its percent layers, their JSON-unescaped forms) that lacks the long value says nothing.
-// A base64-decoded reading holds a value the text forms do not show, so it counts whether or not it holds the long value.
+// A base64-decoded reading holds a value the text forms do not show, so it must cover the short value, but only a text form can
+// show the long value as an edge-shifted twin.
 function isEdgeShift(a: string, b: string, bodies: string[]): boolean {
   const [short, long] = a.length <= b.length ? [a, b] : [b, a];
   if (!long.includes(short)) return false;
@@ -1560,8 +1561,9 @@ function isEdgeShift(a: string, b: string, bodies: string[]): boolean {
     const textForms = new Set(percentLayers(stripped).flatMap((layer) => [layer, jsonUnescaped(layer)]));
     const decoded = [...textForms].flatMap((form) => readings(form)).filter((form) => !textForms.has(form));
     return [...textForms, ...decoded].every((text) => {
-      if (text.includes(long)) sawLong = true;
-      else if (textForms.has(text)) return true;
+      if (text.includes(long)) {
+        if (textForms.has(text)) sawLong = true;
+      } else if (textForms.has(text)) return true;
       const covered: [number, number][] = [];
       for (let i = text.indexOf(long); i >= 0; i = text.indexOf(long, i + 1)) covered.push([i, i + long.length]);
       for (let i = text.indexOf(short); i >= 0; i = text.indexOf(short, i + 1)) {

@@ -484,6 +484,15 @@ test('possibleRealData still counts two different emails in the body and a field
   expect(leak!.detail).toContain('carries 2 email value(s)');
 });
 
+test('possibleRealData counts a longer value held only by a base64 token apart from a shorter field value', () => {
+  const token = Buffer.from('xx visitor@other-person.example.com xx').toString('base64').replace(/=+$/, '');
+  const body = `e=visitor@other-person.example&${token}`;
+  expect(token).not.toContain('=');
+  expect(scan(body, identity).map((v) => v.value).sort()).toEqual(['visitor@other-person.example', 'visitor@other-person.example.com']);
+  const [leak] = findForeignData([rawRequest(REPLAY, body)], [], identity);
+  expect(leak!.detail).toContain('carries 2 email value(s)');
+});
+
 test.each(['xxxxxxxxxxxx[]555-123-4567', '555-123-4567[]xxxxxxxxxxxx'])('possibleRealData does not print the name %s', (name) => {
   for (const body of [`${name}=visitor@other-person.example`, JSON.stringify({ [name]: 'visitor@other-person.example' })]) {
     const details = findForeignData([rawRequest(REPLAY, body)], [], identity).map((l) => l.detail).join('\n');
