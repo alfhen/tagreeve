@@ -64,6 +64,15 @@ test('a reminder prints every 60 seconds until the wait ends', async () => {
   expect(printed).toHaveLength(3);
 });
 
+test('the label wraps and keeps its full text in the title', () => {
+  const script = handoffOverlayScript('nonce-1');
+  const style = script.match(/apply\(label, \{[^}]*\}\)/)?.[0] ?? '';
+  expect(style).not.toContain('nowrap');
+  expect(style).not.toContain('ellipsis');
+  expect(style).toContain("'-webkit-line-clamp': '4'");
+  expect(script).toContain('setTitle(label, text)');
+});
+
 test('the overlay script runs only in the top frame and makes no request', () => {
   const script = handoffOverlayScript('nonce-1');
   expect(script).toContain('window.top !== window');

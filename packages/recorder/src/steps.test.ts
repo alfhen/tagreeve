@@ -358,6 +358,21 @@ describe('select and locator steps on a fake page', () => {
     expect(records.map((r) => r.locator)).toEqual([undefined, 1, undefined]);
   });
 
+  test('a form lookup that never settles does not hold the click', async () => {
+    let clicked = false;
+    const page = {
+      goto: () => Promise.resolve(),
+      locator: () => ({
+        count: () => Promise.resolve(1),
+        first: () => ({ evaluateHandle: () => new Promise(() => {}), click: () => ((clicked = true), Promise.resolve()) }),
+      }),
+    };
+    const started = Date.now();
+    await play(page, 'start: /\nsteps:\n  - click: "#go"\n', {}, { actionTimeoutMs: 5000 });
+    expect(clicked).toBe(true);
+    expect(Date.now() - started).toBeLessThan(3000);
+  });
+
   test('an any locator and the click after it share one step timeout', async () => {
     const started = Date.now();
     let clickTimeout = 0;

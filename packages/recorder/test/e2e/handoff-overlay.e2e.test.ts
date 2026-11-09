@@ -186,3 +186,20 @@ test('a page script that patches DOM prototypes cannot end the wait', async () =
   await run.played;
   await run.recorder.close();
 }, 60_000);
+
+test('a long handoff text wraps in the label', async () => {
+  const text = `Pay the test order ${'and then check the summary '.repeat(5)}`.trim().slice(0, 140);
+  const recorder = await launchRecorder({ networkMode: 'stub', outDir, site: site.url, headed: false, handoffOverlay: true });
+  const scenario = parseScenario(`start: /handoff\nsteps:\n  - handoff: ${JSON.stringify(text)}\n`);
+  const played = playScenario(recorder, scenario, { handoffResolver: terminal, print: () => {} });
+  played.catch(() => undefined);
+  await expect.poll(() => recorder.context.pages().length, { timeout: 20_000 }).toBe(1);
+  const page = recorder.context.pages()[0]!;
+  await page.waitForLoadState('load');
+  const box = await pillBox(page);
+  expect(box.height).toBeGreaterThan(60);
+  expect(box.width).toBeLessThanOrEqual(420);
+  await page.mouse.click(box.x + box.width - 26, box.y + 18);
+  await played;
+  await recorder.close();
+}, 60_000);

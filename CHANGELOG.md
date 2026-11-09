@@ -15,7 +15,9 @@ Not released yet. The newest release is 0.6.0, below.
 - A baseline whose `dataLayer` push groups are partly kinded is refused as an invalid `dataLayer` section (#1374). The warning for a baseline with no `dataLayer` section says `saved before 0.6.0-rc.2`.
 - `tagreeve init` exits 2 with `tagreeve/config.yml is not a file` when a folder is at that path, instead of skipping it (#1329).
 
-<!-- U09 -->
+- A `wait` timeout after a click on a form's submit control lists only the blocking controls of that form (#990).
+- A test payment fill cannot hang past its deadline when a card frame stops responding (#1339).
+- The handoff label wraps to at most four lines, and the full text is in its `title` (#1384).
 
 - Fix: `scripts/wordmark.ts` takes the font path as an argument and no longer reads `node_modules` (#727).
 - Fix: in the site intro, focus moves to the new Skip button when the menubar one is hidden (#867).

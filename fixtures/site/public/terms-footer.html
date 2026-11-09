@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Terms and a footer form</title>
+</head>
+<body>
+<h1>Pay</h1>
+<form id="pay-form" action="/thank-you" method="get">
+  <label>Email <input id="email" name="email" type="email" value="pw-fixture@example.com"></label><br>
+  <label><input id="terms" name="terms" type="checkbox" required> I agree to the terms and conditions</label><br>
+  <button id="pay" type="submit">Pay now</button>
+</form>
+<footer>
+  <form id="newsletter-form" action="/thank-you" method="get">
+    <label>Newsletter <input id="newsletter-email" name="newsletter-email" type="email" required></label>
+    <button id="subscribe" type="submit">Subscribe</button>
+  </form>
+</footer>
+</body>
+</html>
