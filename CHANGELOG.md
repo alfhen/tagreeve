@@ -8,7 +8,9 @@ Not released yet. The newest release is 0.6.1, below.
 
 - `diff`: a move or a kind change of a joined pair now names the recorded event with `renamedFrom`, and moves have an optional `pushKind` in `--json`. A cross-epoch join forms only when it can become a move. The `push kind changed` warning says `(renamed from <name>)` for a joined pair.
 
-<!-- V10 -->
+- An exact count with `body` or `identity.hashesMatch` now tries every placement of the unlinked and probable server hits in scope, up to 10 hits. A probable hit is placed by its link, by its own time or left out. It warns when a placement could change the verdict, and always above 10 hits. At-least and at-most counts try the same placements. Some rules that failed in 0.6.1 now warn, so a run can exit 0 where it exited 1.
+- An unload send no longer breaks a client ID link between a server hit and its browser hit.
+- A dataLayer push finding with no field path reads `in the push`, not `in the body`.
 
 - Internal: the folder names under `tagreeve/` and the `Defaults:` line code live in one place. `run` and `suite` read the out folder and the old-runs notice from one call. No change in output (#972, #1041, #1049, #1061, #1330, #1137, #1132).
 

@@ -589,6 +589,16 @@ test('a push with a foreign email in a key and a leaf is one push finding that n
   expect(JSON.stringify(found)).not.toContain('example.test');
 });
 
+test('a push with the email as a key reads in the push and not in the body', () => {
+  const foreign = 'fake.person@example.test';
+  const args = [{ event: 'purchase', [foreign]: 1 }];
+  expect(JSON.stringify(args)).toContain(foreign);
+  const found = findForeignData([], [], identity, [push(args)]);
+  expect(found).toHaveLength(1);
+  expect(found[0]!.detail).toMatch(/in the push$/);
+  expect(found[0]!.detail).not.toContain('the body');
+});
+
 test('the run identity own email in a push is not a finding, and no events means no push findings', () => {
   expect(JSON.stringify([{ em: identity.email }])).toContain(identity.email);
   expect(findForeignData([], [], identity, [push([{ em: identity.email }])])).toEqual([]);

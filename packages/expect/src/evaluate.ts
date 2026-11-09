@@ -115,8 +115,13 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
       const { pass, evidence, message } = outcome;
       const passes = (c: Context) => evaluateRuleHits(rule, c).pass;
       const scoped = !rule.tag && isScoped(rule);
-      const note = outcome.note ?? (pass && scoped && passRestsOnProbableLink(ctx, passes) ? 'serverSendProbableLink' : undefined);
-      add(`${kind}: ${rule.description}`, pass, evidence, message, undefined, note, scoped && (pass || failureRestsOnProbableLink(ctx, passes)));
+      const failureRests = scoped && !pass && failureRestsOnProbableLink(ctx, passes, rule);
+      // A nested-name note is only a hint, so it must not hide that a placement of the probable hits would flip the verdict.
+      const ownNote = outcome.note === 'nestedNameOnly' ? undefined : outcome.note;
+      const note = ownNote ?? (pass && scoped && passRestsOnProbableLink(ctx, passes, rule) ? 'serverSendProbableLink' : outcome.note);
+      // A count rule's evidence can hold exact browser hits next to the probable ones, so the leak gate in settleServerSends must not turn it into a hard FAIL.
+      const countRests = kind === 'must' && failureRests && !ownNote;
+      add(`${kind}: ${rule.description}`, pass, evidence, message, countRests ? 'warn' : undefined, countRests ? 'serverSendProbableLink' : note, scoped && (pass || failureRests));
     }
 
   builtInChecks(records, scenario, ctx, add);
@@ -139,6 +144,51 @@ function ruleWindowStart(rule: Rule, ctx: Context): { at: number; text: string }
   return rule.from ? { at: step.startedAt, text: `from ${label}` } : { at: step.endedAt ?? step.startedAt, text: `after ${label}` };
 }
 
+/** Most hits whose placement is tried one by one for a rule: 2 ** MAX_SEARCHED_HITS placements. With more, a subset search (a rule with `body` or `hashesMatch`) warns without a search. A plain exact count is searched by number and never capped. */
+const MAX_SEARCHED_HITS = 10;
+
+/** A count of matching hits alone is decided by how many hits are placed. With an exact count, `body` or `hashesMatch`, which ones matter too. */
+const dependsOnWhichHits = (rule: Rule) => rule.count?.op === '=' || Boolean(rule.body || rule.hashesMatch);
+
+const isPlainExactCount = (rule: Rule) => rule.count?.op === '=' && !rule.body && !rule.hashesMatch;
+
+/**
+ * True when some placement of `unlinked` (placed anywhere or not) and `probable` (selected or left out) gives a pass other than `base`, or when there
+ * are too many hits to try every placement. A probable hit counts when selected, by its link or by its own time, whichever puts it in scope, and only
+ * those that either puts in scope are tried. A count alone is monotone in the hits selected, so the two extremes decide it. An exact count alone
+ * depends only on how many unlinked hits are placed.
+ */
+function placementsChange(ctx: Context, rule: Rule, unlinked: readonly Hit[], probable: readonly Hit[], base: boolean): boolean {
+  const byLink = scopedIds(rule, ctx);
+  const byOwnTime = new Set(probable.filter((h) => scopedIds(rule, asBrowserHits(ctx, [h])).has(h.id)).map((h) => h.id));
+  const reach = probable.filter((h) => byLink.has(h.id) || byOwnTime.has(h.id));
+  if (unlinked.length + reach.length === 0) return false;
+  const reachIds = new Set(reach.map((h) => h.id));
+  const run = (placed: readonly Hit[], selected: readonly Hit[]) => {
+    const chosen = new Set(selected.map((h) => h.id));
+    const moved = asBrowserHits(ctx, selected.filter((h) => !byLink.has(h.id)));
+    const placedCtx = { ...moved, hits: moved.hits.filter((h) => chosen.has(h.id) || !reachIds.has(h.id)), anywhere: new Set(placed.map((h) => h.id)) };
+    return evaluateRuleHits(rule, placedCtx).pass !== base;
+  };
+  if (!dependsOnWhichHits(rule)) return run(unlinked, reach) || run([], []);
+  const prefixes = isPlainExactCount(rule);
+  // A plain exact count is searched by number with no cap, so the cap applies only to a subset search.
+  if (!prefixes && unlinked.length + reach.length > MAX_SEARCHED_HITS) return true;
+  if (prefixes) {
+    // Every placed unlinked hit and every selected probable hit is in scope, so only their total counts: n + r + 1 runs.
+    for (let k = 0; k <= unlinked.length + reach.length; k++) {
+      const u = Math.min(k, unlinked.length);
+      if (run(unlinked.slice(0, u), reach.slice(0, k - u))) return true;
+    }
+    return false;
+  }
+  for (let u = 0; u < 2 ** unlinked.length; u++) {
+    const placed = unlinked.filter((_, i) => u & (2 ** i));
+    for (let code = 0; code < 2 ** reach.length; code++) if (run(placed, reach.filter((_, i) => code & (2 ** i)))) return true;
+  }
+  return false;
+}
+
 function evaluateRule(rule: Rule, ctx: Context): RuleOutcome {
   const outcome = evaluateRuleHits(rule, ctx);
   if (rule.cookie || rule.tag || !isScoped(rule)) return outcome;
@@ -147,11 +197,13 @@ function evaluateRule(rule: Rule, ctx: Context): RuleOutcome {
   if (rule.kind === 'mustNot') {
     if (!outcome.pass) return outcome;
   } else {
-    // At least and at most counts are monotone, so all or none of the hits is enough. An exact count can be met by a subset.
-    const exact = rule.count?.op === '=';
-    const sizes = exact ? Array.from({ length: unjudged.length }, (_, i) => i + 1) : [unjudged.length];
-    const changes = sizes.some((k) => evaluateRuleHits(rule, { ...ctx, anywhere: new Set(unjudged.slice(0, k).map((h) => h.id)) }).pass !== outcome.pass);
-    // In the most favourable place the unlinked hits change nothing, so they do not matter.
+    // A hard verdict needs every placement of the unlinked and probable hits to give it.
+    let changes = placementsChange(ctx, rule, unjudged, [], outcome.pass);
+    if (!changes) {
+      const probable = probableHits(ctx, rule);
+      // Probable hits alone are noted by the caller. Only a placement of both kinds together is settled here.
+      changes = probable.length > 0 && !placementsChange(ctx, rule, [], probable, outcome.pass) && placementsChange(ctx, rule, unjudged, probable, outcome.pass);
+    }
     if (!changes) return outcome;
   }
   return {
@@ -175,27 +227,34 @@ function asBrowserHits(ctx: Context, hits: readonly Hit[]): Context {
   return { ...ctx, requests, index: judgeIndex(ctx.hits, requests) };
 }
 
-/** True when the verdict `passes` gives would change if the probable-linked server hits were placed by their own time. */
-function passRestsOnProbableLink(ctx: Context, passes: (ctx: Context) => boolean): boolean {
+/** The probable-linked hits, and for a rule that depends on which hits count, only those in its scope. */
+function probableHits(ctx: Context, rule: Rule | undefined): Hit[] {
   const probable = ctx.hits.filter((h) => h.via?.confidence === 'probable' && viaHitOf(h, ctx.index) !== undefined);
-  return probable.length > 0 && !passes(asBrowserHits(ctx, probable));
+  return rule ? probable.filter((h) => matchesFilter(h, { ...rule.filter, consent: {} }, ctx)) : probable;
 }
 
-/** True when the failing verdict `passes` gives would change if the probable-linked server hits were placed by their own time or left out. */
-function failureRestsOnProbableLink(ctx: Context, passes: (ctx: Context) => boolean): boolean {
-  const probable = ctx.hits.filter((h) => h.via?.confidence === 'probable' && viaHitOf(h, ctx.index) !== undefined);
+/**
+ * True when the verdict `passes` gives would change if the probable-linked server hits were placed by their own time. With a `rule`
+ * every choice of selected or left out is tried, and a rule with `body` or `hashesMatch` rests when more than MAX_SEARCHED_HITS hits are in scope. A plain exact count has no cap.
+ */
+function passRestsOnProbableLink(ctx: Context, passes: (ctx: Context) => boolean, rule?: Rule): boolean {
+  const probable = probableHits(ctx, rule);
+  if (probable.length === 0) return false;
+  if (!rule) return !passes(asBrowserHits(ctx, probable));
+  return placementsChange(ctx, rule, [], probable, true);
+}
+
+/** True when the failing verdict `passes` gives would change if the probable-linked server hits were placed by their own time or left out. Searches as `passRestsOnProbableLink` does. */
+function failureRestsOnProbableLink(ctx: Context, passes: (ctx: Context) => boolean, rule?: Rule): boolean {
+  const probable = probableHits(ctx, rule);
   if (probable.length === 0) return false;
   const ids = new Set(probable.map((h) => h.id));
-  return passes(asBrowserHits(ctx, probable)) || passes({ ...ctx, hits: ctx.hits.filter((h) => !ids.has(h.id)) });
+  const leftOut = () => passes({ ...ctx, hits: ctx.hits.filter((h) => !ids.has(h.id)) });
+  if (!rule) return passes(asBrowserHits(ctx, probable)) || leftOut();
+  return placementsChange(ctx, rule, [], probable, false);
 }
 
-function evaluateRuleHits(rule: Rule, ctx: Context): RuleOutcome {
-  if (rule.tag) {
-    const window = ruleWindowStart(rule, ctx);
-    if (window && 'message' in window) return window;
-    return evaluateTagRule(rule, { reports: ctx.tagReports, expected: ctx.expectedTags, window });
-  }
-  if (rule.cookie) return evaluateCookieRule(rule, rule.cookie, ctx);
+function scopedHits(rule: Rule, ctx: Context): { hits: Hit[]; total: number; narrowed: string[] } | RuleOutcome {
   const anywhere = (h: Hit) => ctx.anywhere?.has(h.id) ?? false;
   let hits = ctx.hits.filter((h) => matchesFilter(h, anywhere(h) ? { ...rule.filter, consent: {} } : rule.filter, ctx));
   const total = hits.length;
@@ -222,6 +281,24 @@ function evaluateRuleHits(rule: Rule, ctx: Context): RuleOutcome {
     narrowed.push(text);
   }
 
+  return { hits, total, narrowed };
+}
+
+const scopedIds = (rule: Rule, ctx: Context): Set<string> => {
+  const scope = scopedHits(rule, ctx);
+  return new Set('hits' in scope ? scope.hits.map((h) => h.id) : []);
+};
+
+function evaluateRuleHits(rule: Rule, ctx: Context): RuleOutcome {
+  if (rule.tag) {
+    const window = ruleWindowStart(rule, ctx);
+    if (window && 'message' in window) return window;
+    return evaluateTagRule(rule, { reports: ctx.tagReports, expected: ctx.expectedTags, window });
+  }
+  if (rule.cookie) return evaluateCookieRule(rule, rule.cookie, ctx);
+  const scope = scopedHits(rule, ctx);
+  if ('message' in scope) return scope;
+  const { hits, total, narrowed } = scope;
   const where = narrowed.length ? ` ${narrowed.join(', ')}` : '';
   const vacuous = rule.before ? vacuousBeforeConsent(rule, ctx) : undefined;
   if (rule.body) return evaluateBodyRule(rule, rule.body, hits, where, total, vacuous);
@@ -1582,7 +1659,7 @@ export function findForeignData(requests: Iterable<Request>, hits: readonly Hit[
       const best = Math.min(...where.values());
       for (const [w, tier] of where) if (tier === best) places.add(w);
     }
-    const shown = [...places].sort();
+    const shown = [...places].map((w) => (entry.push && w === 'the body' ? 'the push' : w)).sort();
     const in_ = shown.length > 5 ? `${shown.slice(0, 5).join(', ')} and ${shown.length - 5} more` : shown.join(', ');
     const step = entry.stepId ? ` in step ${entry.stepId}` : '';
     out.push({
