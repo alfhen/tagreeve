@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { readRun } from '../packages/core/src/index.ts';
 import { docsUrl, newDocsContext, root } from './docs-test-helpers.ts';
 
 let browser: Browser | undefined;
@@ -128,5 +129,30 @@ describe('the commands section', () => {
     expect(await visible.getAttribute('data-command-panel')).toBe('run');
     expect(await visible.textContent()).toContain(panels.run);
     await context.close();
+  });
+});
+
+describe('the finished hit list', () => {
+  test('keeps every recorded hit, can be scrolled and focused, and ends with the first hit in view', async () => {
+    const page = await openHome({ reducedMotion: 'reduce' });
+    await page.locator('[data-demo="ask"]').click();
+    const recorded = (await readRun(join(root, 'site/demo/reject.jsonl'))).hits.length;
+    expect(recorded).toBeGreaterThan(6);
+    const list = page.locator('[data-demo="hit-list"]');
+    expect(await list.locator('[data-demo="hit"]').count()).toBe(recorded);
+    expect(await list.getAttribute('tabindex')).toBe('0');
+    expect(await list.getAttribute('role')).toBe('region');
+    const scroll = await list.evaluate((el) => ({ overflowY: getComputedStyle(el).overflowY, scrolls: el.scrollHeight > el.clientHeight }));
+    expect(scroll).toEqual({ overflowY: 'auto', scrolls: true });
+    await list.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+    const last = list.locator('[data-demo="hit"]').last();
+    expect(await last.textContent()).toContain('undecided');
+    const inView = await last.evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      const parent = el.parentElement!.getBoundingClientRect();
+      return box.top >= parent.top - 1 && box.bottom <= parent.bottom + 1;
+    });
+    expect(inView).toBe(true);
+    await page.context().close();
   });
 });

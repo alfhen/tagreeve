@@ -61,6 +61,11 @@ test('each exit code is the one the recorded "Result:" line reports', async () =
   expect(() => recordedExitCode('Run failed: boom\n', 'x.txt')).toThrow(/x\.txt/);
 });
 
+const parseAndCheck = (text: string, run: Awaited<ReturnType<typeof readRun>>) => {
+  const reply = parseReply(text, 'reject.reply.md');
+  checkReply([reply.plan, reply.verdict.title, reply.verdict.body, ...reply.reply].join('\n'), run, 1, 'reject.reply.md');
+};
+
 describe('checkReply', () => {
   test('throws on an evidence ID that is not in the record, and names it', async () => {
     const reject = await records('reject');
@@ -83,6 +88,14 @@ describe('checkReply', () => {
   test('throws on a number that is not in the record, and names it', async () => {
     const reject = await records('reject');
     expect(() => checkReply('Meta fires before the answer (9999 hits).', reject, 1, 'reject.reply.md')).toThrow(/number 9999/);
+  });
+
+  test('throws when the reject reply changes the matching-hit count (2 hits) to 6 hits', async () => {
+    const reject = await records('reject');
+    const text = readFileSync(join(dir, 'reject.reply.md'), 'utf8');
+    expect(text).toContain('(2 hits)');
+    expect(() => parseAndCheck(text, reject)).not.toThrow();
+    expect(() => parseAndCheck(text.replace('(2 hits)', '(6 hits)'), reject)).toThrow(/number 6 /);
   });
 
   test('accepts the IDs and numbers of the record, list markers and words with digits', async () => {

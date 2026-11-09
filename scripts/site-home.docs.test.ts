@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { chromium, type Browser } from 'playwright';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import { decodedVendors, stubbedVendors } from '../site/src/lib/vendors.ts';
-import { docsUrl, newDocsContext } from './docs-test-helpers.ts';
+import { docsUrl, newDocsContext, root } from './docs-test-helpers.ts';
 
 const safeHeading = 'Known vendor hits stay local.';
 
@@ -63,5 +65,49 @@ test('the sign-off banner fits a 390 px screen: the font shrinks and nothing scr
   expect(fit.scroll).toBe(true);
   expect(fit.fontSize).toBeLessThan(15);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await context.close();
+});
+
+const demoFile = (name: string) => readFileSync(join(root, 'site/demo', name), 'utf8');
+
+test('the --json panel keeps its recorded indent in the text, and a flag never breaks across lines', async () => {
+  const context = await newDocsContext(browser!, { viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  await page.goto(`${docsUrl}/`);
+  const recorded = demoFile('reject.json').replace(/\n$/, '').split('\n');
+  expect(recorded.some((line) => line.startsWith('  "'))).toBe(true);
+  await page.locator('button[data-command="json"]').click();
+  const lines = await page.locator('[data-command-panel="json"] [data-command-line]').allTextContents();
+  expect(lines.slice(1)).toEqual(recorded);
+
+  await page.locator('button[data-command="run"]').click();
+  const flag = page.locator('[data-command-panel="run"] [data-command-line]').first().locator('span', { hasText: '--site' });
+  expect(await flag.count()).toBe(1);
+  expect(await flag.evaluate((el) => el.getClientRects().length)).toBe(1);
+  await context.close();
+});
+
+test('the run panel shows its Result line at 1440 x 900 without scrolling the panel', async () => {
+  const context = await newDocsContext(browser!, { viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  await page.goto(`${docsUrl}/`);
+  const panel = page.locator('[data-command-panel="run"]');
+  expect(await panel.locator('[data-command-line]', { hasText: /^Result: / }).count()).toBe(1);
+  const fit = await panel.evaluate((el) => {
+    const line = [...el.querySelectorAll('[data-command-line]')].find((l) => l.textContent?.startsWith('Result: '))!;
+    return { clipped: el.scrollHeight > el.clientHeight, inside: line.getBoundingClientRect().bottom <= el.getBoundingClientRect().bottom };
+  });
+  expect(fit).toEqual({ clipped: false, inside: true });
+  await context.close();
+});
+
+test('the agent demo island gets only the story host, the prompt and the scenarios', async () => {
+  const context = await newDocsContext(browser!);
+  const page = await context.newPage();
+  await page.goto(`${docsUrl}/`);
+  const props = await page.locator('astro-island[component-url*="AgentDemo"]').getAttribute('props');
+  expect(props).not.toBeNull();
+  expect(Object.keys(JSON.parse(props!) as object).sort()).toEqual(['scenarios', 'storyHost', 'userPrompt']);
+  for (const output of ['Manifest: ', 'Diff ', '"expectation"']) expect(props, output).not.toContain(output);
   await context.close();
 });

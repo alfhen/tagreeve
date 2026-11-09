@@ -6,16 +6,14 @@ const MINT = 'var(--term-mint)';
 const FAIL = 'var(--term-fail)';
 const TERM_TONE: Record<Tone, string> = { fg: 'var(--code-ink)', dim: 'var(--term-muted)', faint: '#5B6865', mint: MINT, fail: FAIL, warn: 'var(--term-warn)' };
 
-interface Props {
-  data: DemoData;
-}
+type Props = Pick<DemoData, 'storyHost' | 'userPrompt' | 'scenarios'>;
 
 function reducedMotion(): boolean {
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-export default function AgentDemo({ data }: Props) {
-  const total = totalOf(data.scenarios);
+export default function AgentDemo({ storyHost, userPrompt, scenarios }: Props) {
+  const total = totalOf(scenarios);
   const [key, setKey] = useState<ScenarioKey>('reject');
   const [armed, setArmed] = useState(false);
   const [T, setT] = useState(0);
@@ -47,8 +45,8 @@ export default function AgentDemo({ data }: Props) {
     if (armed) start();
   };
 
-  const sc = data.scenarios.find((s) => s.key === key)!;
-  const f = frameAt(sc, T, armed, data.userPrompt);
+  const sc = scenarios.find((s) => s.key === key)!;
+  const f = frameAt(sc, T, armed, userPrompt);
   const epochColor = f.epoch === 'denied' ? 'var(--fail)' : f.epoch === 'granted' ? 'var(--mint)' : 'var(--warn)';
 
   return (
@@ -56,7 +54,7 @@ export default function AgentDemo({ data }: Props) {
       <div class="ad-toolbar">
         <span>agent tests a visitor who</span>
         <div class="ad-picker" role="group" aria-label="Visitor">
-          {data.scenarios.map((s) => (
+          {scenarios.map((s) => (
             <button type="button" key={s.key} aria-pressed={s.key === key} data-demo-pick={s.key} onClick={() => pick(s.key)}>
               {s.label}
             </button>
@@ -90,7 +88,7 @@ export default function AgentDemo({ data }: Props) {
               <span style={{ fontSize: '11px', color: 'var(--term-muted)' }}>~/northwind — your coding agent</span>
               <div style={{ display: 'flex', gap: '10px', fontSize: '14px', lineHeight: 1.55 }}>
                 <span style={{ color: 'var(--term-dim)' }}>&gt;</span>
-                <span style={{ flex: 1 }}>{data.userPrompt}</span>
+                <span style={{ flex: 1 }}>{userPrompt}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '11.5px', color: 'var(--term-muted)' }}>Mads's question. The agent will run Tagreeve to answer it.</span>
@@ -119,7 +117,7 @@ export default function AgentDemo({ data }: Props) {
               {f.showUserMsg && (
                 <div class="ad-in" style={{ display: 'flex', gap: '8px', color: 'var(--term-dim)' }}>
                   <span>&gt;</span>
-                  <span style={{ whiteSpace: 'pre-wrap' }}>{data.userPrompt}</span>
+                  <span style={{ whiteSpace: 'pre-wrap' }}>{userPrompt}</span>
                 </div>
               )}
               {f.showPlan && (
@@ -206,7 +204,7 @@ export default function AgentDemo({ data }: Props) {
           <div class="ad-small">
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--line)' }} />
             <span class="ad-url">
-              {data.storyHost}
+              {storyHost}
               {f.path}
             </span>
           </div>
@@ -263,7 +261,7 @@ export default function AgentDemo({ data }: Props) {
               <span>Hits will land here as the visitor browses.</span>
             </div>
           )}
-          <div class="ad-hit-list">
+          <div class="ad-hit-list" tabIndex={0} role="region" aria-label="Captured hits" data-demo="hit-list">
             {f.hits.map((h) => (
               <div key={h.id} class="ad-hit" data-demo="hit" data-fail={h.fail || undefined}>
                 <span style={{ color: 'var(--muted)' }}>{(h.at / 1000).toFixed(1)}s</span>
