@@ -66,6 +66,18 @@ async function ensureConfig(cwd: string): Promise<Item> {
   return { path: DEFAULT_CONFIG, action: 'created', text: `Created ${DEFAULT_CONFIG}` };
 }
 
+async function checkTargets(cwd: string): Promise<[string, Error] | undefined> {
+  for (const folder of FOLDERS) {
+    const found = await stat(join(cwd, folder)).catch(() => undefined);
+    if (found && !found.isDirectory()) return [`${folder}/`, new NotAFolder()];
+  }
+  const config = await stat(join(cwd, DEFAULT_CONFIG)).catch(() => undefined);
+  if (config && !config.isFile()) return [DEFAULT_CONFIG, new NotAFile()];
+  const ignore = await stat(join(cwd, '.gitignore')).catch(() => undefined);
+  if (ignore && !ignore.isFile()) return ['.gitignore', Object.assign(new Error('in the way'), { code: 'EISDIR' })];
+  return undefined;
+}
+
 function failureText(path: string, error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;
   if (error instanceof NotAFolder) return `${path.replace(/\/$/, '')} is not a folder\n`;
@@ -81,6 +93,12 @@ export async function initCommand(io: Io, json = false, cwd: string = process.cw
     ['.gitignore', () => ensureIgnoreLine(cwd)],
   ];
   const items: Item[] = [];
+  const blocked = await checkTargets(cwd);
+  if (blocked) {
+    if (json) io.stdout(`${JSON.stringify({ items })}\n`);
+    io.stderr(failureText(blocked[0], blocked[1]));
+    return 2;
+  }
   for (const [path, step] of steps) {
     try {
       const item = await step();
