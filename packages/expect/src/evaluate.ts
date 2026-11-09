@@ -13,9 +13,9 @@ import {
   type Checkpoint,
   type Flag,
   type HashForms,
-  type DataLayerEvent,
   type TagReport,
   type Hit,
+  type DataLayerEvent,
   type Identity,
   type TagreeveRecord,
   type Run,
@@ -1512,6 +1512,9 @@ function mergeEdgeReadings(found: Map<string, { kind: string; where: Map<string,
 }
 
 export interface ForeignData {
+  /** `push` findings come from a `dataLayer` push, `request` findings from a request and its hits. */
+  source: 'request' | 'push';
+  /** The request ID, or the push ID for a `push` finding. */
   requestId: string;
   detail: string;
   /** The request, its hits and its step. */
@@ -1519,13 +1522,19 @@ export interface ForeignData {
 }
 
 /** Finds email, phone and hash values in requests and hits that are not the identity's own. Takes raw records. */
-export function findForeignData(requests: Iterable<Request>, hits: readonly Hit[], identity: Identity): ForeignData[] {
-  const byRequest = new Map<string, { texts: ScanText[]; hitIds: string[]; stepId: string | null }>();
+export function findForeignData(requests: Iterable<Request>, hits: readonly Hit[], identity: Identity, dataLayerEvents: readonly DataLayerEvent[] = []): ForeignData[] {
+  const byRequest = new Map<string, { texts: ScanText[]; hitIds: string[]; stepId: string | null; push?: true }>();
   const slot = (key: string, stepId: string | null) => {
     let entry = byRequest.get(key);
     if (!entry) byRequest.set(key, (entry = { texts: [], hitIds: [], stepId }));
     return entry;
   };
+  for (const event of dataLayerEvents) {
+    const entry = slot(event.id, event.stepId);
+    entry.push = true;
+    const body = JSON.stringify(event.args);
+    entry.texts.push({ text: body, where: 'the body' }, ...leafTexts(body));
+  }
   const hitRequests = new Set(hits.map((h) => h.requestId));
   for (const request of requests) {
     if (request.resourceType === 'script' && isLibraryLoadPath(pathOf(request.url))) continue;
@@ -1540,15 +1549,17 @@ export function findForeignData(requests: Iterable<Request>, hits: readonly Hit[
     entry.hitIds.push(hit.id);
     for (const [key, value] of Object.entries(hit.params)) entry.texts.push({ text: `${key}=${value}`, where: guardFieldName(key) });
   }
-  const stableHashes = findStableHashes(
-    [...byRequest].flatMap(([requestId, entry]) => entry.texts.map(({ text }) => ({ requestId, text }))),
-  );
+  const stableFrom = (entries: Iterable<[string, { texts: ScanText[] }]>) =>
+    findStableHashes([...entries].flatMap(([requestId, entry]) => entry.texts.map(({ text }) => ({ requestId, text }))));
+  // Request findings must not depend on pushes, so a push never changes the possibleRealData check or the exit code.
+  const requestStable = stableFrom([...byRequest].filter(([, entry]) => !entry.push));
+  const pushStable = stableFrom(byRequest);
   const out: ForeignData[] = [];
   for (const [requestId, entry] of byRequest) {
     const found = new Map<string, { kind: string; where: Map<string, number> }>();
     for (const { text, where, leaf, name } of entry.texts) {
       const tier = where === 'the URL' || where === 'the body' ? 2 : leaf ? 1 : 0;
-      for (const m of scan(text, identity, { stableHashes })) {
+      for (const m of scan(text, identity, { stableHashes: entry.push ? pushStable : requestStable })) {
         if (name && m.kind === 'phone') continue;
         const key = `${m.kind}:${m.value}`;
         const seen = found.get(key) ?? { kind: m.kind, where: new Map<string, number>() };
@@ -1571,8 +1582,9 @@ export function findForeignData(requests: Iterable<Request>, hits: readonly Hit[
     const in_ = shown.length > 5 ? `${shown.slice(0, 5).join(', ')} and ${shown.length - 5} more` : shown.join(', ');
     const step = entry.stepId ? ` in step ${entry.stepId}` : '';
     out.push({
+      source: entry.push ? 'push' : 'request',
       requestId,
-      detail: `request ${requestId}${step} carries ${found.size} ${kinds} value(s) that are not from the run identity, in ${in_}`,
+      detail: `${entry.push ? 'dataLayer push' : 'request'} ${requestId}${step} carries ${found.size} ${kinds} value(s) that are not from the run identity, in ${in_}`,
       evidence: [requestId, ...entry.hitIds, ...(entry.stepId ? [entry.stepId] : [])],
     });
   }

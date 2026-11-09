@@ -29,12 +29,13 @@ export interface TagRuleInput {
 
 const COARSE_SEPARATORS = /[\s/=:?&#|,;]+/;
 const NAME_SEPARATORS = /[\s/=:?&#|,;._+()[\]{}<>'"`]+/;
+const ALNUM_RUNS = /[^A-Za-z0-9]+/;
 
 /** A tag name may hold spaces and path or query text, so it is checked part by part. A name that holds an email, a phone or a value-like part reads `(other)`. */
 export function maskTagName(name: string): string {
   const kinds = valueKinds(name);
   if (kinds.has('email') || kinds.has('phone')) return OTHER_NAME;
-  return [...name.split(COARSE_SEPARATORS), ...name.split(NAME_SEPARATORS)].some((part) => isValueSegment(part)) ? OTHER_NAME : name;
+  return [...name.split(COARSE_SEPARATORS), ...name.split(NAME_SEPARATORS), ...name.split(ALNUM_RUNS)].some((part) => isValueSegment(part)) ? OTHER_NAME : name;
 }
 
 export function maskTagId(id: string): string {

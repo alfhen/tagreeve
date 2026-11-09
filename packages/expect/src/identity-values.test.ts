@@ -1,4 +1,4 @@
-import { createIdentity, fieldHashes, hashEmail, hashPhone, newId, scan, sha256, type Hit, type Request } from '@tagreeve/core';
+import { createIdentity, fieldHashes, hashEmail, hashPhone, newId, scan, sha256, type DataLayerEvent, type Hit, type Request } from '@tagreeve/core';
 import { deflateRawSync, gzipSync } from 'node:zlib';
 import { expect, test, vi } from 'vitest';
 import { decodeRequest } from '@tagreeve/decoders';
@@ -571,4 +571,45 @@ test('hashesMatch does not count Meta custom data as unchecked identity fields',
   const r = evaluate([hit, req], metaRule, { identity })[0]!;
   expect(r.pass).toBe(false);
   expect(r.message).not.toContain('that Tagreeve does not check');
+});
+
+function push(args: unknown[], id = 'dle_P1'): DataLayerEvent {
+  return { type: 'dataLayerEvent', id: id as DataLayerEvent['id'], runId, stepId: 'stp_S1' as DataLayerEvent['stepId'], t: 1, event: null, gtmUniqueEventId: null, args, isConsentCommand: false };
+}
+
+test('a push with a foreign email in a key and a leaf is one push finding that never holds the email', () => {
+  const foreign = 'fake.person@example.test';
+  const args = [{ event: 'purchase', user: { [foreign]: 'x', contact: foreign } }];
+  expect(JSON.stringify(args)).toContain(foreign);
+  const found = findForeignData([], [], identity, [push(args)]);
+  expect(found).toHaveLength(1);
+  expect(found[0]).toMatchObject({ source: 'push', requestId: 'dle_P1' });
+  expect(found[0]!.detail).toMatch(/^dataLayer push dle_P1 in step stp_S1 carries \d+ email value\(s\) that are not from the run identity, in /);
+  expect(JSON.stringify(found)).not.toContain(foreign);
+  expect(JSON.stringify(found)).not.toContain('example.test');
+});
+
+test('the run identity own email in a push is not a finding, and no events means no push findings', () => {
+  expect(JSON.stringify([{ em: identity.email }])).toContain(identity.email);
+  expect(findForeignData([], [], identity, [push([{ em: identity.email }])])).toEqual([]);
+  expect(findForeignData([], [], identity)).toEqual([]);
+});
+
+const stableHash = 'ab12cd34'.repeat(8);
+const uidRequest = (id: string): Request => ({ ...rawRequest(`https://tracker.example.net/c?uid=${stableHash}`), id: id as Request['id'] });
+const requestFindings = (requests: Request[], events: DataLayerEvent[]) => findForeignData(requests, [], identity, events).filter((f) => f.source === 'request');
+
+test('a push never changes the request findings, whatever key holds the shared hash', () => {
+  const twoRequests = [uidRequest('req_A'), uidRequest('req_B')];
+  expect(requestFindings(twoRequests, [])).toEqual([]);
+  expect(requestFindings(twoRequests, [push([{ customer_hash: stableHash }])])).toEqual([]);
+  const oneRequest = [uidRequest('req_A')];
+  const before = requestFindings(oneRequest, []);
+  expect(before).toHaveLength(1);
+  expect(requestFindings(oneRequest, [push([{ user_id: stableHash }])])).toEqual(before);
+});
+
+test('a hash under user_id in two requests and unkeyed in a push is only a push finding', () => {
+  const found = findForeignData([uidRequest('req_A'), uidRequest('req_B')], [], identity, [push([stableHash])]);
+  expect(found.map((f) => f.source)).toEqual(['push']);
 });
