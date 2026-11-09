@@ -322,6 +322,21 @@ describe('rules on a server hit', () => {
       expect(result.note).toBeUndefined();
       expect(performance.now() - started).toBeLessThan(3000);
     });
+
+    test('a plain exact count that no number of probable hits can meet stays a hard FAIL with more than 10 probable hits', () => {
+      const vias = Array.from({ length: 11 }, (_, i) => browser(500 + i));
+      const probable = vias.map((via, i) => capi(1500 + i, link(via, 'probable')));
+      const cases: [string, number][] = [['0', 1], ['2', 4]];
+      for (const [count, exact] of cases) {
+        const yaml = `  must:\n    - { vendor: meta-capi, in: epoch(denied), count: ${count} }`;
+        const direct = Array.from({ length: exact }, (_, i) => browser(100 + i, { vendor: 'meta-capi' }));
+        expect(rule(yaml, direct).pass).toBe(false);
+        const result = rule(yaml, [...direct, ...vias, ...probable]);
+        expect(result.pass, `count ${count}`).toBe(false);
+        expect(result.note, `count ${count}`).toBeUndefined();
+        expect(result.severity, `count ${count}`).toBeUndefined();
+      }
+    });
   });
 
   describe('an exact count tries every placement of the probable links', () => {
