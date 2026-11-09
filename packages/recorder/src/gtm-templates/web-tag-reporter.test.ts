@@ -15,19 +15,22 @@ const host = {
 
 describe('web tag reporter template', () => {
   it('has the exact permissions', () => {
-    expect(template.permissions).toEqual([
-      { id: 'read_event_metadata', keys: [] },
-      { id: 'access_globals', keys: ['tagreeveTagReport'] },
-      { id: 'read_data_layer', keys: ['event', 'gtm.uniqueEventId'] },
-      { id: 'read_container_data', keys: [] },
+    expect(template.permissions.map((p) => [p.id, p.keys])).toEqual([
+      ['read_event_metadata', []],
+      ['access_globals', ['tagreeveTagReport']],
+      ['read_data_layer', ['event', 'gtm.uniqueEventId']],
+      ['read_container_data', []],
     ]);
-    const layer = JSON.parse(template.sections['WEB_PERMISSIONS']!)[2].instance.param;
-    expect(layer.map((p: { key: string }) => p.key)).toEqual(['allowedKeys', 'keyPatterns']);
-    expect(layer[0].value.string).toBe('specific');
-    const entry = JSON.parse(template.sections['WEB_PERMISSIONS']!)[1].instance.param[0].value
-      .listItem[0];
-    const flags = entry.mapValue.map((v: { boolean?: boolean }) => v.boolean);
-    expect(flags.slice(1)).toEqual([false, false, true]);
+    const globals = template.permissions.find((p) => p.id === 'access_globals')!;
+    expect(globals.entries).toEqual([
+      { key: 'tagreeveTagReport', read: false, write: false, execute: true },
+    ]);
+    const raw = JSON.parse(template.sections['WEB_PERMISSIONS']!) as {
+      instance: { key: { publicId: string }; param: { key: string; value: { string?: string } }[] };
+    }[];
+    const layer = raw.find((p) => p.instance.key.publicId === 'read_data_layer')!.instance.param;
+    expect(layer.map((p) => p.key)).toEqual(['allowedKeys', 'keyPatterns']);
+    expect(layer[0]!.value.string).toBe('specific');
   });
 
   it('is a web tag template', () => {
@@ -58,6 +61,33 @@ describe('web tag reporter template', () => {
     expect(() => runSandbox(`require('sendPixel');`, template.permissions, host)).toThrow(
       /not granted/,
     );
+  });
+
+  it('throws not granted when one permission is missing', () => {
+    for (const { id } of template.permissions) {
+      const without = template.permissions.filter((p) => p.id !== id);
+      expect(template.permissions).toHaveLength(without.length + 1);
+      expect(() => runSandbox(template.sandboxedJs, without, host)).toThrow(/not granted/);
+    }
+  });
+
+  it('refuses callInWindow for a key outside access_globals', () => {
+    const js = `require('callInWindow')('otherFn', 1);`;
+    expect(template.permissions.some((p) => p.keys.includes('otherFn'))).toBe(false);
+    expect(() => runSandbox(js, template.permissions, host)).toThrow(/no execute permission/);
+    const ok = `require('callInWindow')('tagreeveTagReport', 1);`;
+    expect(runSandbox(ok, template.permissions, host).windowCalls).toHaveLength(1);
+  });
+
+  it('refuses callInWindow for a key granted without execute', () => {
+    const noExecute = template.permissions.map((p) =>
+      p.id === 'access_globals'
+        ? { ...p, entries: p.entries.map((e) => ({ ...e, execute: false })) }
+        : p,
+    );
+    expect(() =>
+      runSandbox(`require('callInWindow')('tagreeveTagReport', 1);`, noExecute, host),
+    ).toThrow(/no execute permission/);
   });
 
   it('sends one call with the planned keys and no extra metadata', () => {

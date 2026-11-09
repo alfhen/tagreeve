@@ -27,7 +27,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 <!-- J10 -->
 
-<!-- G10 -->
+- `template web` reads the template only from the recorder package. When the bundled file is missing, it exits 2 with an error and prints nothing else. Tests and cleanup: the template permission parser reads each entry's flags by key name, and the build test builds into a temp folder, so `pnpm test` no longer deletes `dist/` (#1116, #1117, #1118, #1180, #1178, #1332, #1181, #1186).
 
 <!-- W10 -->
 

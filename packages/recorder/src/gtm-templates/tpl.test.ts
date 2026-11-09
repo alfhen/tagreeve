@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { readTemplateSections } from './tpl.ts';
+import { readTemplateSections, readWebTagReporterTemplate } from './tpl.ts';
 
 describe('readTemplateSections', () => {
   const text = [
@@ -65,11 +65,49 @@ describe('readTemplateSections', () => {
 
   it('parses the permissions and their keys', () => {
     const t = readTemplateSections(text);
-    expect(t.permissions).toEqual([
-      { id: 'read_event_metadata', keys: [] },
-      { id: 'read_data_layer', keys: ['event'] },
-      { id: 'access_globals', keys: ['someFn'] },
+    expect(t.permissions.map((p) => [p.id, p.keys])).toEqual([
+      ['read_event_metadata', []],
+      ['read_data_layer', ['event']],
+      ['access_globals', ['someFn']],
     ]);
+    expect(t.permissions[2]!.entries).toEqual([{ key: 'someFn', read: false, write: false, execute: false }]);
+  });
+
+  it('reads the key and the flags by name when mapKey is in another order', () => {
+    const mapKey = ['execute', 'write', 'key', 'read'].map((string) => ({ type: 1, string }));
+    const mapValue = [
+      { type: 8, boolean: true },
+      { type: 8, boolean: false },
+      { type: 1, string: 'otherFn' },
+      { type: 8, boolean: true },
+    ];
+    const reordered = [
+      '___WEB_PERMISSIONS___',
+      JSON.stringify([
+        {
+          instance: {
+            key: { publicId: 'access_globals' },
+            param: [{ key: 'keys', value: { type: 2, listItem: [{ type: 3, mapKey, mapValue }] } }],
+          },
+        },
+      ]),
+    ].join('\n');
+    const [permission] = readTemplateSections(reordered).permissions;
+    expect(permission!.entries).toEqual([{ key: 'otherFn', read: true, write: false, execute: true }]);
+    expect(permission!.keys).toEqual(['otherFn']);
+  });
+
+  it('skips a map entry with no key and ignores the server sections', () => {
+    const server = [
+      '___SANDBOXED_JS_FOR_SERVER___',
+      'server();',
+      '___SERVER_PERMISSIONS___',
+      JSON.stringify([{ instance: { key: { publicId: 'send_http' } } }]),
+    ].join('\n');
+    const t = readTemplateSections(server);
+    expect(t.sandboxedJs).toBe('');
+    expect(t.permissions).toEqual([]);
+    expect(t.sections['SANDBOXED_JS_FOR_SERVER']).toBe('server();');
   });
 
   it('reads the shipped template', () => {
@@ -84,5 +122,13 @@ describe('readTemplateSections', () => {
       'TESTS',
       'NOTES',
     ]);
+  });
+});
+
+describe('readWebTagReporterTemplate', () => {
+  it('reads the template next to the sources', () => {
+    const file = readFileSync(new URL('./web-tag-reporter.tpl', import.meta.url), 'utf8');
+    expect(file).toContain('___WEB_PERMISSIONS___');
+    expect(readWebTagReporterTemplate()).toBe(file);
   });
 });

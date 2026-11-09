@@ -1,6 +1,23 @@
 import { readFileSync } from 'node:fs';
-import { expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { main } from './main.ts';
+
+const bundle = vi.hoisted(() => ({ missing: false }));
+
+vi.mock('@tagreeve/recorder', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@tagreeve/recorder')>();
+  return {
+    ...original,
+    readWebTagReporterTemplate: () => {
+      if (bundle.missing) throw new Error('The web tag reporter template is missing from this install.');
+      return original.readWebTagReporterTemplate();
+    },
+  };
+});
+
+afterEach(() => {
+  bundle.missing = false;
+});
 
 const file = readFileSync(new URL('../../recorder/src/gtm-templates/web-tag-reporter.tpl', import.meta.url), 'utf8');
 
@@ -33,7 +50,9 @@ test('template web --json holds the template and the setup', async () => {
     tagMetadata: { includeTagName: true, key: 'name' },
     publish: false,
   });
-  expect(json.steps.length).toBeGreaterThan(3);
+  expect(json.steps).toHaveLength(7);
+  const fixedOrder = ['import the text', 'custom event trigger', 'Include tag name', 'Never publish', 'gtmAuth', 'Run Tagreeve', 'tags[<container>].reports'];
+  fixedOrder.forEach((text, index) => expect(json.steps[index]).toContain(text));
   const last = json.steps.at(-1)!;
   expect(last).toContain('tags[<container>].reports');
   expect(last).toContain('greater than 0');
@@ -62,7 +81,9 @@ test('template web --json holds no GTM ID, auth value or record ID outside the t
   expect(text).not.toMatch(/GTM-/);
   expect(text).not.toMatch(/gtm_auth=|gtmAuth["']?\s*:/);
   expect(text).not.toMatch(/\b(run|rec|tag|hit|step)_[0-9a-z]+/);
-  expect([...file.matchAll(/GTM-[A-Z0-9]+/g)].every((m) => m[0] === 'GTM-PWTEST1')).toBe(true);
+  const ids = [...file.matchAll(/GTM-[A-Z0-9]+/g)];
+  expect(ids.length).toBeGreaterThan(0);
+  expect(ids.every((m) => m[0] === 'GTM-PWTEST1')).toBe(true);
 });
 
 test('template with an unknown name does not echo it', async () => {
@@ -70,4 +91,12 @@ test('template with an unknown name does not echo it', async () => {
   expect(code).toBe(2);
   expect(err).toContain('web is the only name');
   expect(err).not.toContain('FAKE-NAME');
+});
+
+test.each([[['template', 'web']], [['template', 'web', '--json']]])('%j with the bundled template missing exits 2 and prints no template', async (argv) => {
+  bundle.missing = true;
+  const { code, out, err } = await run(argv);
+  expect(code).toBe(2);
+  expect(out).toBe('');
+  expect(err).toContain('missing from this install');
 });
