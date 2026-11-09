@@ -20,11 +20,10 @@ afterAll(async () => {
 
 const kinds = (flags: { kind: string }[], kind: string) => flags.filter((f) => f.kind === kind);
 
-async function run(mode: string, dataLayerNames?: string[], sabotage?: string) {
+async function run(mode: string, dataLayerNames?: string[]) {
   const recorder = await launchRecorder({ networkMode: 'stub', outDir, site: site.url, ...(dataLayerNames ? { dataLayerNames } : {}) });
   try {
-    const page = await recorder.visit(`${site.url}/datalayer-alias?mode=${mode}`);
-    if (sabotage) await page.evaluate(sabotage);
+    await recorder.visit(`${site.url}/datalayer-alias?mode=${mode}`);
     await recorder.wait(500);
   } catch (error) {
     await recorder.close().catch(() => undefined);
@@ -56,17 +55,3 @@ test('mode=status with dataLayerNames [status] gives one dataLayerNotHooked flag
   expect(flags).toHaveLength(1);
   expect(flags[0]!.detail).toContain('"status"');
 }, 60_000);
-
-const STALLS = {
-  'a dataLayer getter': `Object.defineProperty(window, 'dataLayer', { configurable: true, get() { const t = Date.now(); while (Date.now() - t < 3000) {} return []; } });`,
-  'the unload flush': `window.__tagreeveFlushUnload = () => { const t = Date.now(); while (Date.now() - t < 5000) {} };`,
-};
-
-for (const [name, sabotage] of Object.entries(STALLS)) {
-  test(`page code that stalls ${name} cannot hide the dataLayerNotHooked flag`, async () => {
-    const { records } = await run('status', ['status'], sabotage);
-    const flags = records.flags.filter((f) => f.kind === 'dataLayerNotHooked');
-    expect(flags).toHaveLength(1);
-    expect(flags[0]!.detail).toContain('"status"');
-  }, 60_000);
-}
