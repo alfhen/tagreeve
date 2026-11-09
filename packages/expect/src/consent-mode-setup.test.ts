@@ -83,7 +83,7 @@ test('hits are grouped per Google tag ID and an odd tid is not quoted', () => {
   expect(r.evidence).toEqual([a.id, b.id, c.id]);
   expect(r.message).toContain('Google tag G-PWTEST0001 never set ad_storage');
   expect(r.message).toContain('Google tag G-PWTEST0002 never set ad_user_data');
-  expect(r.message).toContain('Google tag (no tag ID) never set ad_personalization');
+  expect(r.message).toContain('Google tag GA4 (no tag ID) never set ad_personalization');
   expect(r.message).not.toContain('example.com');
 });
 
@@ -134,7 +134,7 @@ test('a page parameter tid does not name a Google Ads hit, and a non-digit conve
   const ads = hit('13l3r3r3r5', { vendor: 'google-ads', params: { tid: 'G-PWTEST0009', conversionId: '000000001' } });
   expect(consentModeSetup([ads], []).message).toContain('Google tag AW-000000001 never set');
   const odd = hit('13l3r3r3r5', { vendor: 'google-ads', params: { conversionId: 'AB1234' } });
-  expect(consentModeSetup([odd], []).message).toContain('Google tag (no tag ID) never set');
+  expect(consentModeSetup([odd], []).message).toContain('Google tag Google Ads (no tag ID) never set');
   const two = consentModeSetup([ads, hit('13l3r3r3r5', { vendor: 'google-ads', params: { conversionId: '000000002' } })], []);
   expect(two.message).toContain('AW-000000001');
   expect(two.message).toContain('AW-000000002');
@@ -154,4 +154,23 @@ test('hits without gcd are counted, and none at all says the setup could not be 
   const failing = consentModeSetup([hit('13l3r3r3r5'), hit(undefined), hit(undefined)], []);
   expect(failing.pass).toBe(false);
   expect(failing.message).toContain('2 Google hits carried no gcd');
+});
+
+test('letter sets with an l come first, before the cap of three', () => {
+  const gcds = ['13r3r3r3r5', '13r3r3r3p5', '13r3r3r3t5', '13r3r3r3q5', '13r3r3r3l5'].map((g) => hit(g));
+  const m = consentModeSetup(gcds, []).message;
+  expect(m).toContain('(gcd letters: rrrl, rrrr, rrrp)');
+});
+
+test('more than five tag IDs in the pass message add and N more', () => {
+  const tags = Array.from({ length: 7 }, (_, i) => hit('13r3r3r3r5', { params: { tid: `G-PWTEST000${i}` } }));
+  const m = consentModeSetup(tags, []).message;
+  expect(m).toContain('; and 2 more');
+  expect(m).not.toContain('G-PWTEST0006');
+});
+
+test('hits with no tag ID are grouped by vendor', () => {
+  const m = consentModeSetup([hit('13l3r3r3r5', { params: {} }), hit('13l3r3r3r5', { vendor: 'google-ads', params: {} })], []).message;
+  expect(m).toContain('Google tag GA4 (no tag ID) never set');
+  expect(m).toContain('Google tag Google Ads (no tag ID) never set');
 });

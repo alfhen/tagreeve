@@ -8,7 +8,7 @@ Not released yet. The newest release is 0.6.0, below.
 
 <!-- E09 -->
 
-<!-- G09 -->
+- `consentModeSetup` names a hit with no tag ID by its vendor, lists letter sets with an `l` first and counts the tag IDs it leaves out. A page parameter can no longer set the Google Ads conversion ID.
 
 <!-- B09 -->
 

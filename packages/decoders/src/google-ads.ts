@@ -76,8 +76,8 @@ export const googleAds: Decoder = {
     const oid = p.get('oid');
     if (oid) params.transaction_id = oid;
     for (const [k, v] of p) {
-      if (k.startsWith('ep.')) params[k.slice(3)] = v;
-      else if (k.startsWith('epn.')) params[k.slice(4)] = v;
+      const name = k.startsWith('ep.') ? k.slice(3) : k.startsWith('epn.') ? k.slice(4) : undefined;
+      if (name && name !== 'conversionId') params[name] = v;
     }
     return [
       withFields({
