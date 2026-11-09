@@ -180,13 +180,13 @@ describe('dataLayer lines', () => {
     );
   });
 
-  test('a kind change of one event prints the warning line and no missing path event line', () => {
+  test('a kind change of one event prints no path lines', () => {
     const group = (kind: 'object' | 'gtag', paths: string[]): PushGroup => ({ epoch: 'undecided', event: 'x', kind, frame: 'main', paths: paths.map((path) => ({ path, types: ['number'] })) });
     const a = [group('object', ['event', 'a'])];
     expect(a[0]!.paths.map((p) => p.path)).toContain('event');
     const d = diffPushes(a, [group('gtag', ['a'])]);
     expect(d.kindChanged).toHaveLength(1);
-    expect(describePushDiff(d).join('\n')).not.toContain('missing path event');
+    expect(describePushDiff(d)).toEqual([]);
   });
 
   test('a pair the table joined reads renamed from in a path line', () => {
