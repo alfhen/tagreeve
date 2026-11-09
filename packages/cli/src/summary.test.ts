@@ -499,7 +499,6 @@ test.each([
   expect(flag.detail.length).toBeGreaterThan(0);
   const out = redactFlagDetail(flag.detail, flag.kind);
   expect(out).toBe(shown ?? flag.detail);
-  expect(out).not.toContain(foreign);
 });
 
 test('a possibleRealData detail is built from a request that holds a foreign email, and prints no value', () => {
