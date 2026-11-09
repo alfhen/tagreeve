@@ -43,6 +43,7 @@ Issues still open that you can meet:
 - Records keep the full flag detail, including query values. Do not share a record from a page that sends an identifier in a query.
 - `--server-container` needs Docker. The container downloads its configuration from Google at every start, so a run needs the network for three Google paths, and Google sees the container's request with your `gtm_auth`.
 - The local container is Google's image. Stape-only features are missing, and with the live config it serves the published version. To test an unpublished server workspace, use a config from its preview environment.
+- On a multi-page run a server container call rarely links `exact` by client ID, because later calls see several hits with the same client ID. The stricter tie in 0.6.1 makes `exact` rarer still. `serverContainer.notExact` counts these calls.
 - Sends from `pagehide` or `visibilitychange` are answered in the page, also to your `serverHosts`, so the container never gets them.
 - The Meta Conversions API, Pinterest and Criteo template tags are not yet proven to reach the recording proxy.
 - The `payment` step is not confirmed on a real Shopify checkout. The test-mode marker on the page, the expiry format and the card frame paths are inferred. If one does not match, the step fails closed and the error names the frame path and the inputs' attributes. It checks the card host before each short fill try, which narrows the window in which typing could go to another host but cannot close it.
@@ -51,7 +52,7 @@ Issues still open that you can meet:
 - With `--net-log`, requests seen only in the net log are labelled by timing, and an early `srcdoc` iframe request can still read `unload`.
 - `--viewport` takes `<W>x<H>` only. A `mobile` preset is not built.
 - `identity.country` has local formats for US, SE, GB and DE. Other countries keep US-shaped data and the run warns.
-- A test identity pushed to the `dataLayer` before consent is a warning only. A failing check is planned (#1392).
+- A test identity pushed to the `dataLayer` before consent is not reported yet. A check is planned for 0.7.0 (#1392).
 - The handoff label is capped at 300 px, so on a very narrow viewport it can be wider than the page (#1428).
 - Page code that sabotages itself on purpose can still hide the untrapped list of the `dataLayer` count check (#1442).
 - The reporter's own entry is in `tags[]` once for each event. The timeout status and the version string of a published container are field checks.
