@@ -27,12 +27,13 @@ export function unsafeFileTargets(markdown: string): string[] {
   for (const snippet of snippets) {
     const text = snippet
       .replace(/\\\n/g, ' ')
+      .replace(/<[A-Za-z][^<>\n]*[^\s<>]>(?=&)/g, ' ')
       .replace(/\d*>&\s*(?:\d+|-)(?=[\s;|&)]|$)/g, ' ')
       .replace(/(?<!<)<(?!<)\s*[^\s;|&)<>]+/g, ' ');
     for (const m of text.matchAll(/(?:^|[^<>])>[>|]?\s*([^\s;|&)<>]+)/g)) targets.push(m[1]!);
-    for (const m of text.matchAll(/(?:^|[\s;|(])>&\s*([^\s;|&)<>]+)/g)) targets.push(m[1]!);
+    for (const m of text.matchAll(/(?:^|[^<>])>&\s*([^\s;|&)<>]+)/g)) targets.push(m[1]!);
     for (const m of text.matchAll(/\btee\s+([^;|&)<>\n]+)/g)) {
-      targets.push(...m[1]!.trim().split(/\s+/).filter((w) => !/^-/.test(w)));
+      targets.push(...m[1]!.trim().split(/\s+/).filter((w) => w && !/^-/.test(w)));
     }
     for (const m of text.matchAll(/\bchmod\s+([^;|&)\n]+)/g)) {
       const words = m[1]!.trim().split(/\s+/);
@@ -100,6 +101,9 @@ test.each([
   ['a redirect with >&', '```bash\ncat >&sgtm-config.txt\n```', ['sgtm-config.txt']],
   ['a chmod after a continuation', '```bash\nchmod \\\n  600 sgtm-config.txt\n```', ['sgtm-config.txt']],
   ['a clobber redirect', '```bash\necho x >| out.txt\n```', ['out.txt']],
+  ['a >& redirect with no space before it', '```bash\ncat x>&out.txt\n```', ['out.txt']],
+  ['a placeholder before &', 'use `id=GTM-PWTEST1&env=<env id>&auth=<auth>` here', []],
+  ['a tee with only an input redirect', '```bash\ntee < ~/plain.txt\n```', []],
   ['a redirect with >& and a space', '```bash\ncat >& sgtm-config.txt\n```', ['sgtm-config.txt']],
   ['an absolute target outside home', '```bash\nbase64 > /tmp/sgtm-workspace-config.txt\n```', ['/tmp/sgtm-workspace-config.txt']],
   ['an absolute repo target', '```bash\ncat > /repo/checkout/sgtm-config.txt\n```', ['/repo/checkout/sgtm-config.txt']],
@@ -157,7 +161,6 @@ test('a continuation joins only after an odd number of backslashes', () => {
 });
 
 test('the guide does not claim Google Ads calls never carry an event ID', () => {
-  const guide = readFileSync(join(root, 'docs/guide/server-container.md'), 'utf8');
   expect(guide).not.toContain('never carry one');
   expect(guide).toContain('often carries no event ID');
 });

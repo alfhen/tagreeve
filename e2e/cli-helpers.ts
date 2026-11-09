@@ -35,9 +35,9 @@ export interface CliRun {
   failed: string[];
 }
 
-export function runCli(args: string[], env: Record<string, string> = {}): Promise<CliRun> {
+export function runCli(args: string[], env: Record<string, string> = {}, cwd: string = root): Promise<CliRun> {
   return new Promise((resolve) => {
-    execFile(process.execPath, [cli, ...args], { cwd: root, env: { ...process.env, ...env } }, async (error, stdout, stderr) => {
+    execFile(process.execPath, [cli, ...args], { cwd, env: { ...process.env, ...env } }, async (error, stdout, stderr) => {
       const code = error ? ((error as { code?: number }).code ?? 1) : 0;
       let records: RunRecords | undefined;
       let failed: string[] = [];

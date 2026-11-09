@@ -3,6 +3,10 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
+interface Action {
+  runs?: { steps?: { run?: string; uses?: string }[] };
+}
+
 interface Workflow {
   on: { push: { tags: string[] } };
   permissions?: Record<string, string> | string;
@@ -13,7 +17,7 @@ const path = new URL('../.github/workflows/release-tag.yml', import.meta.url);
 const text = readFileSync(path, 'utf8');
 const workflow = parse(text) as Workflow;
 
-const runLinesOf = (wf: Workflow): string[] =>
+const runLinesOf = (wf: Pick<Workflow, 'jobs'>): string[] =>
   Object.values(wf.jobs)
     .flatMap((job) => job.steps ?? [])
     .flatMap((step) => (step.run ?? '').replace(/\\\r?\n/g, '').split(/\n|&&|\|\||;|\|/));
@@ -36,8 +40,20 @@ const isReadOnly = (permissions: Record<string, string> | string | undefined): b
   permissions === 'read-all' ||
   (typeof permissions === 'object' && Object.values(permissions).every((level) => level !== 'write'));
 
+const localActionDir = /^\.\/(?:[\w.-]+\/)*[\w.-]*$/;
+
+function readLocalAction(uses: string, readLocal: (rel: string) => string | undefined): string | undefined {
+  if (!localActionDir.test(uses) || uses.split('/').includes('..')) return undefined;
+  const dir = uses.slice(2).replace(/\/$/, '');
+  const prefix = dir ? `${dir}/` : '';
+  return readLocal(`${prefix}action.yml`) ?? readLocal(`${prefix}action.yaml`);
+}
+
 export function workflowProblems(source: string, readLocal: (rel: string) => string | undefined = readRepoFile, depth = 0): string[] {
-  const wf = parse(source) as Workflow;
+  return problemsOf(parse(source) as Workflow, source, readLocal, depth);
+}
+
+function problemsOf(wf: Pick<Workflow, 'permissions' | 'jobs'>, source: string, readLocal: (rel: string) => string | undefined, depth: number): string[] {
   const problems: string[] = [];
   if (!isReadOnly(wf.permissions)) problems.push('top-level permissions are not read-only');
   for (const [name, job] of Object.entries(wf.jobs)) {
@@ -52,7 +68,20 @@ export function workflowProblems(source: string, readLocal: (rel: string) => str
       if (nested === undefined) problems.push(`cannot check local workflow ${job.uses}`);
       else problems.push(...workflowProblems(nested, readLocal, depth + 1).map((problem) => `${job.uses}: ${problem}`));
     }
+    for (const step of job.steps ?? []) {
+      if (!step.uses?.startsWith('./')) continue;
+      const text = depth < 5 ? readLocalAction(step.uses, readLocal) : undefined;
+      if (text === undefined) {
+        problems.push(`cannot check local action ${step.uses}`);
+        continue;
+      }
+      const steps = (parse(text) as Action | null)?.runs?.steps ?? [];
+      const nested = problemsOf({ jobs: { action: { steps } } }, text, readLocal, depth + 1);
+      problems.push(...nested.map((problem) => `${step.uses}: ${problem}`));
+    }
   }
+  if (/secrets\./i.test(source)) problems.push('secrets context');
+  if (/NODE_AUTH_TOKEN|NPM_TOKEN|GH_TOKEN|GITHUB_TOKEN/.test(source)) problems.push('token name');
   if (/github\.token/i.test(source)) problems.push('github.token');
   const lines = runLinesOf(wf);
   const publishes = lines.filter((line) => /\b(npm|pnpm|yarn)\b.*\bpublish\b/.test(line));
@@ -244,6 +273,29 @@ describe('workflow rules', () => {
 
   it('lets a plain docker build through', () => {
     expect(workflowProblems(base(`${good}      - run: docker build -t x .\n`))).toEqual([]);
+  });
+
+  it('opens a step-level local action and refuses a publish in it', () => {
+    const wf = base(`${good}      - uses: ./.github/actions/ship\n`);
+    const action = (steps: string) => `name: ship\nruns:\n  using: composite\n  steps:\n${steps}`;
+    const bad = action('    - run: npm publish --tag "$dist_tag"\n      shell: bash\n');
+    expect(workflowProblems(wf, (rel) => (rel === '.github/actions/ship/action.yml' ? bad : undefined))).toEqual([
+      './.github/actions/ship: publish without --dry-run: npm publish --tag "$dist_tag"',
+    ]);
+    const clean = action('    - run: echo hi\n      shell: bash\n');
+    expect(workflowProblems(wf, (rel) => (rel === '.github/actions/ship/action.yaml' ? clean : undefined))).toEqual([]);
+    expect(workflowProblems(wf, () => undefined)).toEqual(['cannot check local action ./.github/actions/ship']);
+    expect(workflowProblems(base(`${good}      - uses: ./../x\n`), () => clean)).toEqual(['cannot check local action ./../x']);
+  });
+
+  it('refuses a nested workflow or action that names a token or secret', () => {
+    const wf = `${base(good)}  b:\n    uses: ./.github/workflows/build.yml\n`;
+    const named = base(`${good}      - run: echo "$NPM_TOKEN"\n`);
+    expect(workflowProblems(wf, () => named)).toEqual(['./.github/workflows/build.yml: token name']);
+    const ctx = base(`${good}      - run: echo \${{ secrets.X }}\n`);
+    expect(workflowProblems(wf, () => ctx)).toEqual(['./.github/workflows/build.yml: secrets context']);
+    const step = base(`${good}      - uses: ./a\n`);
+    expect(workflowProblems(step, () => 'runs:\n  steps:\n    - run: echo $GH_TOKEN\n')).toEqual(['./a: token name']);
   });
 
   it('fails gh release in a nested workflow', () => {
