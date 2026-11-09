@@ -623,3 +623,19 @@ test('a hash under user_id in two requests and unkeyed in a push is only a push 
   const found = findForeignData([uidRequest('req_A'), uidRequest('req_B')], [], identity, [push([stableHash])]);
   expect(found.map((f) => f.source)).toEqual(['push']);
 });
+
+const SHORT_EMAIL = 'ann@shop.example';
+const binaryEdged = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(` ${SHORT_EMAIL}  `)]).toString('base64');
+const glued = `_${Buffer.from(`xx ${SHORT_EMAIL} x`).toString('base64')}`;
+
+test.each([
+  ['a binary-edged base64 token', binaryEdged],
+  ['a glued base64 token', glued],
+])('possibleRealData counts a value that only %s decodes to next to a value it ends: joann@shop.example', (_n, token) => {
+  const body = `note=joann%40shop.example&${token}`;
+  expect(scan(body, identity).map((m) => m.value)).toEqual(expect.arrayContaining(['joann@shop.example', SHORT_EMAIL]));
+  const [leak, ...rest] = findForeignData([rawRequest(REPLAY, body)], [], identity);
+  expect(rest).toHaveLength(0);
+  expect(leak!.detail).toContain('carries 2 email value(s)');
+  expect(leak!.detail).toMatch(/in note, the body$/);
+});

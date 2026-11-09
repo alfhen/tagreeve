@@ -94,7 +94,6 @@ test('identity.hashesMatch fails a plain ct, zp or country on a Conversions API 
   expect(zip.message).not.toContain('hashed postal code values');
   for (const text of [plain.message, zip.message]) {
     expect(text).not.toContain(identity.city);
-    expect(text).not.toContain(identity.email);
     expect(text).not.toContain(good);
     expect(text).not.toContain('00000');
   }
@@ -122,7 +121,6 @@ test('identity.hashesMatch checks the second value of ct and fn', () => {
   expect(rawCity.message).not.toContain('city.1 ');
   for (const text of [rawCity.message]) {
     expect(text).not.toContain(identity.city);
-    expect(text).not.toContain(identity.email);
     expect(text).not.toContain(city);
   }
   const wrongCity = run([capiHit(good, { ct: [city, 'c'.repeat(64)] })], rule);

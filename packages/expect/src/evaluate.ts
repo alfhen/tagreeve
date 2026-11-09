@@ -4,6 +4,7 @@ import {
   hashEmail,
   hashPhone,
   isLibraryLoadPath,
+  readings,
   scan,
   sha256,
   newId,
@@ -869,13 +870,14 @@ function joinLabels(labels: Set<string>): string {
 const PLAIN_ADDRESS_PARAMS = new Set(['user_data.city', 'user_data.postal_code', 'user_data.country']);
 // Only these vendors document plain city, postal code and country. The Conversions API requires them hashed.
 const PLAIN_ADDRESS_VENDORS = new Set(['sgtm']);
+export const HASH_REQUIRED_VENDORS = new Set(['meta-capi']);
 const DIGEST_SHAPE = /^(?:[0-9a-f]{64}|[A-Za-z0-9+/_-]{43}=?)$/i;
 
 function allForms(h: HashForms): string[] {
   return [h.hex, h.base64, h.base64url];
 }
 
-type HashVerdict = 'plain' | 'match' | 'unhashed' | 'wrong';
+type HashVerdict = 'plain' | 'plainRequired' | 'match' | 'unhashed' | 'wrong';
 
 /** The field a param belongs to. The Conversions API indexes further values (`user_data.city.1`); every check uses the base. */
 function identityParamName(vendor: string, name: string): string {
@@ -907,7 +909,7 @@ function hashJudge(identity: Identity): (vendor: string, name: string, value: st
     if (known.has(value)) return 'match';
     const typed = value.trim().toLowerCase();
     if (plain.has(typed) || accepted.some((v) => v.trim().toLowerCase() === typed)) return 'unhashed';
-    return PLAIN_ADDRESS_PARAMS.has(name) && vendor === 'meta-capi' && !DIGEST_SHAPE.test(value) ? 'plain' : 'wrong';
+    return PLAIN_ADDRESS_PARAMS.has(name) && HASH_REQUIRED_VENDORS.has(vendor) && !DIGEST_SHAPE.test(value) ? 'plainRequired' : 'wrong';
   };
 }
 
@@ -958,10 +960,12 @@ function checkHashes(hits: Hit[], ctx: Context): { pass: boolean; evidence: stri
       if (!verdict) continue;
       const label = fieldLabel(identityParamName(hit.vendor, name));
       if (verdict === 'plain') {
-        if (hit.vendor === 'meta-capi') {
-          plainCapiFields.add(label);
-          plainHit = true;
-        } else plainAddressFields.add(label);
+        plainAddressFields.add(label);
+        continue;
+      }
+      if (verdict === 'plainRequired') {
+        plainCapiFields.add(label);
+        plainHit = true;
         continue;
       }
       seen = true;
@@ -1528,9 +1532,8 @@ function isEdgeShift(a: string, b: string, bodies: string[]): boolean {
   if (!long.includes(short)) return false;
   let sawLong = false;
   const ok = bodies.every((raw) =>
-    readingForms(raw.replace(/\[\]|%5B%5D/gi, '')).every((text) => {
-      if (!text.includes(long)) return true;
-      sawLong = true;
+    readings(raw.replace(/\[\]|%5B%5D/gi, '')).every((text) => {
+      if (text.includes(long)) sawLong = true;
       const covered: [number, number][] = [];
       for (let i = text.indexOf(long); i >= 0; i = text.indexOf(long, i + 1)) covered.push([i, i + long.length]);
       for (let i = text.indexOf(short); i >= 0; i = text.indexOf(short, i + 1)) {
@@ -1540,42 +1543,6 @@ function isEdgeShift(a: string, b: string, bodies: string[]): boolean {
     }),
   );
   return ok && sawLong;
-}
-
-const JSON_ESCAPES: Record<string, string> = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', '"': '"', '\\': '\\', '/': '/' };
-
-function percentDecoded(text: string): string {
-  return text.replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
-    try {
-      return decodeURIComponent(run);
-    } catch {
-      return run;
-    }
-  });
-}
-
-function base64InPlace(text: string): string {
-  return text.replace(/[A-Za-z0-9+/_-]{12,}={0,2}/g, (token) => {
-    const decoded = Buffer.from(token, 'base64').toString('utf8');
-    return decoded.includes('\uFFFD') ? token : decoded;
-  });
-}
-
-// A form that does not hold the long value says nothing about the shift. The forms scan() reads: percent-decoded until
-// nothing changes, JSON-unescaped, and base64 tokens decoded in place, so two values in one body share one form.
-function readingForms(text: string): string[] {
-  const forms = new Set([text]);
-  let layer = text;
-  for (let i = 0; i < 4; i++) {
-    const next = percentDecoded(layer);
-    if (next === layer) break;
-    forms.add((layer = next));
-  }
-  for (const form of [...forms]) {
-    forms.add(form.replace(/\\(?:u([0-9a-f]{4})|(.))/gi, (m, hex?: string, ch?: string) => (hex ? String.fromCharCode(parseInt(hex, 16)) : (JSON_ESCAPES[ch!] ?? m))));
-  }
-  for (const form of [...forms]) forms.add(base64InPlace(form));
-  return [...forms];
 }
 
 function mergeEdgeReadings(found: Map<string, { kind: string; where: Map<string, number> }>, bodies: string[]): void {

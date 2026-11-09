@@ -21,7 +21,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 - Tests and cleanup: #1105, #1106, #1107, #1108, #1325, #1124, #1169, #1365, #954, #1380.
 
-<!-- I10 -->
+- Possible real data: a value that only a binary-edged or glued base64 token holds is now counted next to a longer value it ends, not merged into it. The merge check reads the body through the same decoder as the scan. A plain city, postal code or country is judged by one rule for vendors that require hashes (#1349, #1350, #1352, #1007, #1162).
 
 <!-- K10 -->
 
