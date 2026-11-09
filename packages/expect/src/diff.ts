@@ -2,7 +2,7 @@ import { maskValuePath, stripSandboxPrefix } from '@tagreeve/decoders';
 import type { ConsentEpoch, Hit, HitIds, RunRecords } from '@tagreeve/core';
 import { consentFields } from './scenario.ts';
 import { epochForHit, judgeIndex, judgedAt } from './evaluate.ts';
-import { builtInEventName, normalizePushGroups, type EventMap } from './event-map.ts';
+import { builtInEventName, mapPushGroups, mappedEventName, normalizePushGroups, type EventMap } from './event-map.ts';
 import { pushShapes, type PushFrameKind, type PushKind, type PushPath } from './push-shape.ts';
 
 export interface DiffOptions {
@@ -268,22 +268,18 @@ function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap): NamedGro
   const onlyA = new Set(a.filter((g) => !inB.has(epochEventId(g))).map((g) => g.event));
   const onlyB = new Set(b.filter((g) => !inA.has(epochEventId(g))).map((g) => g.event));
   const claimed = new Set([...onlyA].filter((n) => onlyB.has(n)));
-  const user = userMap?.events;
-  const finalName = (event: string): string => {
-    const named = builtInEventName(event);
-    return builtInEventName(user !== undefined && Object.hasOwn(user, event) ? user[event]! : user !== undefined && Object.hasOwn(user, named) ? user[named]! : named);
-  };
   const joined = new Map<string, string>();
   for (const from of [...onlyA].filter((n) => !claimed.has(n)).sort()) {
-    const to = [...onlyB].filter((m) => !claimed.has(m)).sort().find((m) => builtInEventName(m) === finalName(from));
+    const to = [...onlyB].filter((m) => !claimed.has(m)).sort().find((m) => builtInEventName(m) === mappedEventName(from, userMap));
     if (to === undefined) continue;
     claimed.add(to);
     joined.set(from, to);
   }
+  const kept = mapPushGroups(a, (e) => e, userMap?.paths, (r) => [r]);
   return normalizePushGroups(a, userMap).map((g, i) => {
     const recorded = a[i]!;
     const to = inB.has(epochEventId(recorded)) ? undefined : joined.get(recorded.event);
-    return to === undefined ? { ...g, event: recorded.event } : { ...g, event: to, renamedFrom: recorded.event };
+    return to === undefined ? kept[i]! : { ...g, event: to, renamedFrom: recorded.event };
   });
 }
 const typesId = (n: PushNode) => JSON.stringify([...n.types].sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)));
@@ -336,7 +332,7 @@ export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOpti
       return i >= 0 && j >= 0 && Math.abs(i - j) === 1 && order.filter((l) => l === g.epoch || l === f.epoch).length === 2;
     });
     if (!match) {
-      result.eventsRemoved.push(nodeRef(g));
+      result.eventsRemoved.push({ ...nodeRef(g, undefined), event: g.renamedFrom ?? g.event });
       continue;
     }
     taken.add(match);

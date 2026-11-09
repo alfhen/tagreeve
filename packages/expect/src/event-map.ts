@@ -30,7 +30,7 @@ function objectEntries(text: string, from: number): KeyEntry[] {
   };
   const readString = (): string => {
     const begin = i++;
-    while (text[i] !== '"') i += text[i] === '\\' ? 2 : 1;
+    while (i < text.length && text[i] !== '"') i += text[i] === '\\' ? 2 : 1;
     i++;
     return JSON.parse(text.slice(begin, i)) as string;
   };
@@ -95,7 +95,7 @@ export function parseEventMap(text: string, file: string): EventMap {
   const map: EventMap = { events: Object.create(null) as Record<string, string>, paths: Object.create(null) as Record<string, Record<string, string>> };
   const events = json.events ?? {};
   if (!isRecord(events)) throw new Error(`${file}: "events" must be an object.`);
-  const eventsEntry = top.findLast((e) => e.key === 'events');
+  const eventsEntry = !isRecord(json.events) ? undefined : top.findLast((e) => e.key === 'events');
   (eventsEntry === undefined ? [] : objectEntries(text, eventsEntry.start)).forEach((e, i) => {
     const to = valueOf(text, e);
     if (!EVENT_NAME.test(e.key)) throw new Error(`${file}: "events" key ${i + 1} is not an event name.`);
@@ -104,7 +104,7 @@ export function parseEventMap(text: string, file: string): EventMap {
   });
   const paths = json.paths ?? {};
   if (!isRecord(paths)) throw new Error(`${file}: "paths" must be an object.`);
-  const pathsEntry = top.findLast((e) => e.key === 'paths');
+  const pathsEntry = !isRecord(json.paths) ? undefined : top.findLast((e) => e.key === 'paths');
   (pathsEntry === undefined ? [] : objectEntries(text, pathsEntry.start)).forEach((e, i) => {
     const at = `"paths" key ${i + 1}`;
     const renames = valueOf(text, e);
@@ -173,16 +173,22 @@ export function mapPushGroups(
   });
 }
 
+/** The name an event has after the built-in table and a user map. */
+export function mappedEventName(event: string, userMap?: EventMap): string {
+  return builtInEventName(userEventName(event, userMap?.events));
+}
+
+function userEventName(event: string, user: Record<string, string> | undefined): string {
+  const named = builtInEventName(event);
+  return user !== undefined && Object.hasOwn(user, event) ? user[event]! : user !== undefined && Object.hasOwn(user, named) ? user[named]! : named;
+}
+
 /** Applies the built-in table, then a user map when there is one. The user map is for the older side of a diff. */
 export function normalizePushGroups(groups: PushGroup[], userMap?: EventMap): PushGroup[] {
   const user = userMap?.events;
-  const userName = (event: string): string => {
-    const named = builtInEventName(event);
-    return user !== undefined && Object.hasOwn(user, event) ? user[event]! : user !== undefined && Object.hasOwn(user, named) ? user[named]! : named;
-  };
-  const rename = (event: string): string => builtInEventName(userName(event));
+  const rename = (event: string): string => mappedEventName(event, userMap);
   // In a swap or a chain, a recorded or user-renamed name can also be the name another group ends up with. Its paths entry then belongs to that group.
   const targets = new Set(user === undefined ? [] : Object.values(user));
-  const pathKeys = (recorded: string, final: string): string[] => [final, recorded, userName(recorded)].filter((k, i) => i === 0 || !targets.has(k));
+  const pathKeys = (recorded: string, final: string): string[] => [final, recorded, userEventName(recorded, user)].filter((k, i) => i === 0 || !targets.has(k));
   return mapPushGroups(groups, rename, userMap?.paths, pathKeys);
 }
