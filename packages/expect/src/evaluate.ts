@@ -870,7 +870,7 @@ function joinLabels(labels: Set<string>): string {
 const PLAIN_ADDRESS_PARAMS = new Set(['user_data.city', 'user_data.postal_code', 'user_data.country']);
 // Only these vendors document plain city, postal code and country. The Conversions API requires them hashed.
 const PLAIN_ADDRESS_VENDORS = new Set(['sgtm']);
-export const HASH_REQUIRED_VENDORS = new Set(['meta-capi']);
+export const HASH_REQUIRED_VENDORS: ReadonlySet<string> = new Set(['meta-capi']);
 const DIGEST_SHAPE = /^(?:[0-9a-f]{64}|[A-Za-z0-9+/_-]{43}=?)$/i;
 
 function allForms(h: HashForms): string[] {
@@ -939,12 +939,12 @@ function checkHashes(hits: Hit[], ctx: Context): { pass: boolean; evidence: stri
   const withHash: string[] = [];
   const wrong: string[] = [];
   const unhashed: string[] = [];
-  const plainCapi: string[] = [];
+  const plainRequired: string[] = [];
   const wrongFields = new Set<string>();
   const wrongParams = new Set<string>();
   const matchedFields = new Set<string>();
   const unhashedFields = new Set<string>();
-  const plainCapiFields = new Set<string>();
+  const plainRequiredFields = new Set<string>();
   const plainAddressFields = new Set<string>();
   const uncheckedFields = new Set<string>();
   for (const hit of hits) {
@@ -964,7 +964,7 @@ function checkHashes(hits: Hit[], ctx: Context): { pass: boolean; evidence: stri
         continue;
       }
       if (verdict === 'plainRequired') {
-        plainCapiFields.add(label);
+        plainRequiredFields.add(label);
         plainHit = true;
         continue;
       }
@@ -985,7 +985,7 @@ function checkHashes(hits: Hit[], ctx: Context): { pass: boolean; evidence: stri
     if (seen) withHash.push(hit.id);
     if (bad) wrong.push(hit.id);
     if (raw) unhashed.push(hit.id);
-    if (plainHit) plainCapi.push(hit.id);
+    if (plainHit) plainRequired.push(hit.id);
   }
   const several = hits.length > 1;
   const they = several ? 'they' : 'it';
@@ -1001,12 +1001,12 @@ function checkHashes(hits: Hit[], ctx: Context): { pass: boolean; evidence: stri
       (matching.size ? ` Matching: ${joinLabels(matching)}.` : '');
     return { pass: false, evidence: wrong, headline: UNMATCHED_HEADLINE, message };
   }
-  if (plainCapi.length) {
+  if (plainRequired.length) {
     return {
       pass: false,
-      evidence: plainCapi,
+      evidence: plainRequired,
       headline: UNMATCHED_HEADLINE,
-      message: `${they} carried a plain ${joinLabels(plainCapiFields)}, not a hash${of(plainCapi.length)}. The Conversions API takes these hashed.`,
+      message: `${they} carried a plain ${joinLabels(plainRequiredFields)}, not a hash${of(plainRequired.length)}. This vendor takes these hashed.`,
     };
   }
   if (!withHash.length && uncheckedFields.size) {
@@ -1548,10 +1548,10 @@ function percentLayers(text: string): string[] {
 // The base reads raw characters and a leaf decoded ones, so a JSON escape or a joined name shifts a value's edge. Such a twin is
 // merged into the field's finding, never dropped, so nothing a whole-body scan finds is lost. Only a reading from the body itself
 // merges. A different value in the URL, or a longer value elsewhere, keeps its own finding.
-// Rule: the short value merges into the long one when the long value occurs in some reading, and no reading holds the short
-// value outside it. A text form (the body, its percent layers, their JSON-unescaped forms) that lacks the long value says nothing.
-// A base64-decoded reading holds a value the text forms do not show, so it must cover the short value, but only a text form can
-// show the long value as an edge-shifted twin.
+// Rule: the short value merges when some text form (the body, its percent layers, their JSON-unescaped forms) holds the long value,
+// every text form that holds the long value has the short value only inside it, and no base64-decoded reading holds the short
+// value outside the long one. A text form without the long value says nothing. At least one text form must hold the long value
+// (sawLong); a long value that only a base64-decoded reading holds is not an edge-shifted twin.
 function isEdgeShift(a: string, b: string, bodies: string[]): boolean {
   const [short, long] = a.length <= b.length ? [a, b] : [b, a];
   if (!long.includes(short)) return false;

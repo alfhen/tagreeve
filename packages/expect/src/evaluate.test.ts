@@ -278,13 +278,15 @@ test('a vendor added to the required-hash set fails a plain address field with n
     evaluate([city.hit, city.req], parseScenario('start: /\nexpect:\n  must:\n    - { vendor: ga4, identity.hashesMatch: true }'), { identity })[0]!;
   const before = ev();
   expect(before.message).not.toContain('plain city, not a hash');
-  HASH_REQUIRED_VENDORS.add('ga4');
+  const vendors = HASH_REQUIRED_VENDORS as Set<string>;
+  vendors.add('ga4');
   try {
     const after = ev();
     expect(after.pass).toBe(false);
     expect(after.message).toContain('a plain city, not a hash');
+    expect(after.message).not.toContain('Conversions API');
   } finally {
-    HASH_REQUIRED_VENDORS.delete('ga4');
+    vendors.delete('ga4');
   }
 });
 
