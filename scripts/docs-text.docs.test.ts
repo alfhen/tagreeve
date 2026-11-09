@@ -195,6 +195,41 @@ test('0.6.2 docs text: design.md, guides and records.ts', () => {
   expect(read('packages/core/src/records.ts')).toContain('the flag kind `possibleRealDataPush` and the `HitLinkMiss.clientId` value `concurrentRequest`');
 });
 
+test('#1477: the 0.6.2 changelog says a kind change does not report the event path', () => {
+  const released = section(read('CHANGELOG.md'), '## 0.6.2', '## 0.6.1\n');
+  expect(released).toContain('a kind change of a joined pair does not report the `event` key path');
+  const kind =
+    'A kind change compares the two groups without the `event` key path of the object form, because the gtag form holds the event name in its arguments, so it adds no `pathsAdded` or `pathsRemoved` entry for `event`. A gtag body with its own `event` key keeps the path on both sides.';
+  expect(line(read('docs/cli.md'), '`kindChanged` is a list of')).toContain(kind);
+  expect(line(read('docs/design.md'), '`tagreeve diff a b` groups hits')).toContain(kind);
+});
+
+test('#1478: the payment frame deadlines are named, not "the step deadline"', () => {
+  const frames = line(read('docs/cli.md'), 'At the step, the page is on the allowed host');
+  expect(frames).not.toContain('Every wait on a card frame ends by the step deadline');
+  expect(frames).toContain('end by the shorter of the step timeout and 5 s');
+  expect(frames).toContain('The fill of each card field has its own deadline of the step timeout');
+  expect(frames).toContain('at most 500 ms after its deadline');
+});
+
+test('#1479: the payment fill reason `inputs not readable` is documented', () => {
+  const fill = line(read('docs/cli.md'), 'The step types into the first matching card iframe');
+  expect(fill).toContain('`inputs not readable` in place of the list');
+  expect(fill).toContain('while Tagreeve reads the frame state during the fill');
+});
+
+test('#1480: design section 11 gives no push kind warning for a baseline without kinds', () => {
+  const design = read('docs/design.md');
+  expect(design).not.toContain('give path changes and a `push kind changed` warning, and `changed` is true');
+  expect(design).toContain('it gives no `push kind changed` warning. When a baseline and a run both carry kinds');
+  expect(design).toContain('a `push kind changed` warning and path changes other than `event`');
+});
+
+test('#1481: the server container guide names the unload send exception', () => {
+  const guide = read('docs/guide/server-container.md');
+  expect(line(guide, 'The client ID link is narrower.')).toContain('A send from `pagehide` or `visibilitychange` does not count as that other request');
+});
+
 test('0.6.1 changelog lines are corrected', () => {
   const released = section(read('CHANGELOG.md'), '## 0.6.1\n', '## 0.6.0\n');
   expect(released).not.toContain('get no push findings');
