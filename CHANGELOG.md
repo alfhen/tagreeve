@@ -13,6 +13,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 - An exact count with `body` or `identity.hashesMatch` now tries every placement of the unlinked and probable server hits in scope, up to 10 hits. A probable hit is placed by its link, by its own time or left out. It warns when a placement could change the verdict, and always above 10 hits. At-least and at-most counts try the same placements. Some rules that failed in 0.6.1 now warn, so a run can exit 0 where it exited 1.
 - An unload send no longer breaks a client ID link between a server hit and its browser hit.
+- `diff`: a kind change of a joined pair does not report the `event` key path, and the docs now say so. The payment, baseline and server container docs match the code on frame deadlines, `inputs not readable` and unload sends.
 - A dataLayer push finding with no field path reads `in the push`, not `in the body`.
 
 - Internal: the folder names under `tagreeve/` and the `Defaults:` line code live in one place. `run` and `suite` read the out folder and the old-runs notice from one call. No change in output (#972, #1041, #1049, #1061, #1330, #1137, #1132).

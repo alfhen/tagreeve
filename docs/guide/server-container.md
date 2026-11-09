@@ -119,7 +119,7 @@ With `--json`, the call counts are in the `serverContainer` field. If the contai
 
 Send a unique event ID with each event, for example the GA4 parameter `event_id`, and have the container's tags pass it on. A call whose event ID and event name match exactly one browser hit links by event ID, and that link is `exact`. This is the way to make a leak through the container fail a run. Whether the GA4 tag in sGTM passes `event_id` on is something to check in your own container, in a field test.
 
-The client ID link is narrower. It is `exact` only when exactly one browser hit with that client ID and event name was sent to the container before the call, and its request was still waiting for an answer, and no other browser request to the container shares one of the call's client IDs, or has no decoded hit, and was sent between that hit and the call. On a run with several pages, one client ID is on every hit of the same event name, so two or more hits usually match and the link stays `probable`. Do not count on it.
+The client ID link is narrower. It is `exact` only when exactly one browser hit with that client ID and event name was sent to the container before the call, and its request was still waiting for an answer, and no other browser request to the container shares one of the call's client IDs, or has no decoded hit, and was sent between that hit and the call. A send from `pagehide` or `visibilitychange` does not count as that other request. On a run with several pages, one client ID is on every hit of the same event name, so two or more hits usually match and the link stays `probable`. Do not count on it.
 
 ### Why a call is not exact
 

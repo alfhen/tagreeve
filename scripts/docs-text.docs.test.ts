@@ -195,6 +195,27 @@ test('0.6.2 docs text: design.md, guides and records.ts', () => {
   expect(read('packages/core/src/records.ts')).toContain('the flag kind `possibleRealDataPush` and the `HitLinkMiss.clientId` value `concurrentRequest`');
 });
 
+test('0.6.2 docs text: review fixes for payment, diff and the server container guide', () => {
+  const cli = read('docs/cli.md');
+  const frames = line(cli, 'At the step, the page is on the allowed host');
+  expect(frames).not.toContain('Every wait on a card frame ends by the step deadline');
+  expect(frames).toContain('end by the shorter of the step timeout and 5 s');
+  expect(frames).toContain('The fill of each card field has its own deadline of the step timeout');
+  expect(frames).toContain('at most 500 ms after its deadline');
+  const fill = line(cli, 'The step types into the first matching card iframe');
+  expect(fill).toContain('`inputs not readable` in place of the list');
+  expect(fill).toContain('while Tagreeve reads the frame state during the fill');
+  const design = read('docs/design.md');
+  expect(design).not.toContain('give path changes and a `push kind changed` warning, and `changed` is true');
+  expect(design).toContain('it gives no `push kind changed` warning. When a baseline and a run both carry kinds');
+  expect(design).toContain('a `push kind changed` warning and path changes other than `event`');
+  const diff = section(cli, '### `tagreeve diff', '### `tagreeve baseline save');
+  expect(diff).toContain('without the `event` key path of the object form');
+  expect(read('docs/design.md')).toContain('without the `event` key path of the object form');
+  const guide = read('docs/guide/server-container.md');
+  expect(line(guide, 'The client ID link is narrower.')).toContain('A send from `pagehide` or `visibilitychange` does not count as that other request');
+});
+
 test('0.6.1 changelog lines are corrected', () => {
   const released = section(read('CHANGELOG.md'), '## 0.6.1\n', '## 0.6.0\n');
   expect(released).not.toContain('get no push findings');
