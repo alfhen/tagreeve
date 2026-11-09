@@ -24,7 +24,8 @@ Not released yet. The newest release is 0.6.0, below.
 
 <!-- D09 -->
 
-<!-- V09 -->
+- Fix: a `must` rule with an exact count and unlinked server hits reads `serverSendUnlinked` when a subset of them could change the verdict (#1223).
+- Fix: a server container call no longer links `exact` by client ID when another container request that shares the client ID, or has no decoded hit, was sent in between. The miss reason is `concurrentRequest`, also a key of `serverContainer.notExact.clientId` (#1029).
 
 <!-- C09 -->
 

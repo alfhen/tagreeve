@@ -146,9 +146,13 @@ function evaluateRule(rule: Rule, ctx: Context): RuleOutcome {
   if (unjudged.length === 0) return outcome;
   if (rule.kind === 'mustNot') {
     if (!outcome.pass) return outcome;
-  } else if (evaluateRuleHits(rule, { ...ctx, anywhere: new Set(unjudged.map((h) => h.id)) }).pass === outcome.pass) {
+  } else {
+    // At least and at most counts are monotone, so all or none of the hits is enough. An exact count can be met by a subset.
+    const exact = rule.count?.op === '=';
+    const sizes = exact ? Array.from({ length: unjudged.length }, (_, i) => i + 1) : [unjudged.length];
+    const changes = sizes.some((k) => evaluateRuleHits(rule, { ...ctx, anywhere: new Set(unjudged.slice(0, k).map((h) => h.id)) }).pass !== outcome.pass);
     // In the most favourable place the unlinked hits change nothing, so they do not matter.
-    return outcome;
+    if (!changes) return outcome;
   }
   return {
     pass: false,

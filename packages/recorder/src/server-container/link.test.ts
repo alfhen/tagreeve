@@ -314,6 +314,36 @@ describe('linkMiss', () => {
     expect(call?.via).toMatchObject({ confidence: 'probable' });
   });
 
+  test('another container request with the same client ID and another name sent in flight is concurrentRequest, not exact', () => {
+    const a = browserCall('pw-client-0001', 100);
+    const other = request('https://sgtm.example.invalid/g/collect?cid=pw-client-0001&en=PageView', { t: 120 });
+    const c = serverCall('pw-client-0001', 150);
+    const out = linked([[a, hit(a, 'ga4', 'Purchase', 100)], [other, hit(other, 'ga4', 'PageView', 120)], [c, hit(c, 'ga4', 'Purchase', 150)]], [[a, { sentAt: 100, answeredAt: 200 }]])[2];
+    expect(out?.linkMiss).toEqual({ eventId: 'none', clientId: 'concurrentRequest' });
+    expect(out?.via).toMatchObject({ confidence: 'probable' });
+  });
+
+  test('a container request with no decoded hit sent in flight is concurrentRequest', () => {
+    const a = browserCall('pw-client-0001', 100);
+    const silent = request('https://sgtm.example.invalid/other', { t: 120 });
+    const c = serverCall('pw-client-0001', 150);
+    const out = linkServerHits({
+      hits: [hit(a, 'ga4', 'Purchase', 100), hit(c, 'ga4', 'Purchase', 150)],
+      requests: [a, silent, c],
+      serverHosts: hosts,
+      identity,
+      inFlight: new Map([[a.id, { sentAt: 100, answeredAt: 200 }]]),
+    });
+    expect(out[1]?.linkMiss).toEqual({ eventId: 'none', clientId: 'concurrentRequest' });
+  });
+
+  test('a container request with another client ID and another name does not break the exact link', () => {
+    const a = browserCall('pw-client-0001', 100);
+    const other = request('https://sgtm.example.invalid/g/collect?cid=pw-client-0002&en=PageView', { t: 120 });
+    const c = serverCall('pw-client-0001', 150);
+    expect(missOf([[a, hit(a, 'ga4', 'Purchase', 100)], [other, hit(other, 'ga4', 'PageView', 120)], [c, hit(c, 'ga4', 'Purchase', 150)]], [[a, { sentAt: 100, answeredAt: 200 }]])[2]).toBeUndefined();
+  });
+
   test('one same-key hit with no window is answeredBefore', () => {
     const b = browserCall('pw-client-0001', 100);
     const c = serverCall('pw-client-0001', 150);

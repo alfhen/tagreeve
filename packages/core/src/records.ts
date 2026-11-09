@@ -247,8 +247,10 @@ export interface HitLinkMiss {
    * Rule 2, the first reason that applies. `noClientId`: no event name, or no client ID of at least 8 characters.
    * `noSameKeyHit`: no browser hit shares the key. `severalSameKeyHits`: more than one does.
    * `answeredBefore`: one same-key hit, and the call came after its answer or it has no window.
+   * `concurrentRequest`: one same-key hit in flight, but another container-routed browser request that shares a client ID
+   * or has no decoded hit was sent between that hit and the call.
    */
-  clientId: 'noClientId' | 'noSameKeyHit' | 'severalSameKeyHits' | 'answeredBefore';
+  clientId: 'noClientId' | 'noSameKeyHit' | 'severalSameKeyHits' | 'answeredBefore' | 'concurrentRequest';
 }
 
 export interface DataLayerEvent {

@@ -94,7 +94,7 @@ function testPaymentOf(records: RunRecords): Summary['testPayment'] {
 function notExactCounts(hits: RunRecords['hits']): NotExactCounts {
   const out: NotExactCounts = {
     eventId: { none: 0, noMatch: 0, several: 0 },
-    clientId: { noClientId: 0, noSameKeyHit: 0, severalSameKeyHits: 0, answeredBefore: 0 },
+    clientId: { noClientId: 0, noSameKeyHit: 0, severalSameKeyHits: 0, answeredBefore: 0, concurrentRequest: 0 },
   };
   for (const { linkMiss } of hits) {
     if (!linkMiss) continue;

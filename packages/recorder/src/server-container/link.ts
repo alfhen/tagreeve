@@ -91,7 +91,8 @@ function sharedKind(server: Facts, browser: Facts): 'eventId' | 'clientId' | 'id
  * Adds `via` to each hit decoded from a server container call. The proxy cannot see which browser hit led to a call,
  * so the first rule that fits decides: (1) the event ID and event name match exactly one browser hit, `exact`;
  * (2) the client ID and event name match exactly one browser hit to a `serverHosts` host sent before the call, and its request to the
- * container was still in flight when the call arrived, `exact`; two or more such hits, in flight or answered, give no exact link;
+ * container was still in flight when the call arrived, `exact`; two or more such hits, in flight or answered, give no exact link, and neither does another
+ * container-routed request that shares a client ID or has no decoded hit and was sent in between (`concurrentRequest`);
  * (3) a shared value, `probable`: the latest earlier hit to a `serverHosts` host, else the latest earlier browser hit.
  * No match leaves the hit unlinked. Browser hits are returned as they are.
  */
@@ -109,6 +110,15 @@ export function linkServerHits({ hits, requests, serverHosts, identity, inFlight
       onServerHost,
     };
   });
+  const hitRequestIds = new Set(hits.map((h) => h.requestId));
+  const hasConcurrentRequest = (only: Facts, from: number, to: number, callClientIds: ReadonlySet<string>) =>
+    requests.some((r) => {
+      if (r.captured === 'serverContainer' || r.id === only.hit.requestId || !isServerHostUrl(r.url, serverHosts)) return false;
+      const sentAt = inFlight?.get(r.id)?.sentAt ?? r.t;
+      if (sentAt < from || sentAt > to) return false;
+      if (!hitRequestIds.has(r.id)) return true;
+      return [...clientIdsOf(r)].some((id) => callClientIds.has(id));
+    });
   const isServer = (f: Facts) => f.request?.captured === 'serverContainer';
   const browser = facts.filter((f) => !isServer(f));
   return facts.map((f): Hit => {
@@ -130,7 +140,9 @@ export function linkServerHits({ hits, requests, serverHosts, identity, inFlight
     // An earlier request with the same key, answered or not, could be the one this call belongs to.
     const only = sameKey.length === 1 ? sameKey[0]! : undefined;
     const window = only && inFlight?.get(only.hit.requestId);
-    if (only && window && callAt !== undefined && callAt < window.answeredAt) {
+    const inFlightNow = only !== undefined && window && callAt !== undefined && callAt < window.answeredAt;
+    const concurrent = inFlightNow && hasConcurrentRequest(only, window.sentAt, callAt, f.clientIds);
+    if (inFlightNow && !concurrent) {
       return { ...f.hit, via: { hitId: only.hit.id, by: 'clientId', confidence: 'exact' } };
     }
     const clientIdMiss: HitLinkMiss['clientId'] =
@@ -140,7 +152,9 @@ export function linkServerHits({ hits, requests, serverHosts, identity, inFlight
           ? 'noSameKeyHit'
           : sameKey.length > 1
             ? 'severalSameKeyHits'
-            : 'answeredBefore';
+            : concurrent
+              ? 'concurrentRequest'
+              : 'answeredBefore';
     const linkMiss: HitLinkMiss = { eventId: eventIdMiss, clientId: clientIdMiss };
     const earlier = browser.flatMap((b) => {
       const by = b.hit.t <= f.hit.t ? sharedKind(f, b) : undefined;

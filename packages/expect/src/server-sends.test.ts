@@ -262,6 +262,11 @@ describe('rules on a server hit', () => {
     expect(rule('  must:\n    - { vendor: meta-capi, in: epoch(granted), count: \'<= 1\' }', [via, sent])).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked' });
   });
 
+  test('an exact count that one of two unlinked hits would meet cannot be judged', () => {
+    const results = rule('  must:\n    - { vendor: meta-capi, in: epoch(denied), count: 1 }', [capi(500, undefined), capi(600, undefined)]);
+    expect(results).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked' });
+  });
+
   test('a rule without a consent scope counts an unlinked hit as it does any other', () => {
     const sent = capi(1500, undefined);
     expect(rule('  must:\n    - { vendor: meta-capi }', [sent])).toMatchObject({ pass: true });
