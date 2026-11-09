@@ -53,6 +53,16 @@ test('the built CLI fails and prints no template when the bundled template is mi
   expect(result.stdout + result.stderr).not.toContain('DECOY-SENTINEL');
 }, 60_000);
 
+test('the build refuses to empty a source folder or the repo root', () => {
+  for (const dir of ['packages/cli/src', '.', 'scripts']) {
+    expect(existsSync(join(root, dir))).toBe(true);
+    const result = spawnSync(process.execPath, ['--experimental-transform-types', fileURLToPath(new URL('./build.ts', import.meta.url)), '--outdir', join(root, dir)], { encoding: 'utf8' });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('--outdir must');
+    expect(existsSync(join(root, 'scripts/build.ts'))).toBe(true);
+  }
+}, 60_000);
+
 test('building into a temp folder leaves dist/cli.js as it was', () => {
   const after = existsSync(distCli) ? statSync(distCli).mtimeMs : null;
   expect(after).toBe(distMtime);

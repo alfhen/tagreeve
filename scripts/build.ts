@@ -10,7 +10,10 @@ const pkg = JSON.parse(readFileSync(path('package.json'), 'utf8')) as {
 const outdirFlag = process.argv.indexOf('--outdir');
 const outdir = outdirFlag < 0 ? path('dist') : resolve(process.argv[outdirFlag + 1] ?? '');
 if (outdirFlag >= 0 && !process.argv[outdirFlag + 1]) throw new Error('--outdir needs a folder.');
-// The build empties outdir, so it must not be the repo root or hold it.
+// The build empties outdir, so inside the repo it may only be dist or a folder in dist or node_modules/.cache.
+const inside = (dir: string) => !relative(path(dir), outdir).startsWith('..');
+const ownedByBuild = inside('dist') || inside('node_modules/.cache');
+if (inside('') && !ownedByBuild) throw new Error('--outdir must be outside the repo, or inside dist or node_modules/.cache.');
 if (!relative(outdir, path('')).startsWith('..')) throw new Error('--outdir must not be the repo root or a folder that holds it.');
 
 const { build } = await import('esbuild');
