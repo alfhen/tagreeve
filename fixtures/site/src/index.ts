@@ -40,6 +40,7 @@ const pages: Record<string, string> = {
   '/thank-you': 'thank-you.html',
   '/thank-you-late': 'thank-you-late.html',
   '/terms-required': 'terms-required.html',
+  '/terms-footer': 'terms-footer.html',
   '/terms-aria-invalid': 'terms-aria-invalid.html',
   '/terms-none': 'terms-none.html',
   '/terms-fields': 'terms-fields.html',

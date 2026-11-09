@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline/promises';
 import { createIdentity, hasCountryFormat, type Identity, type Request, type Step as StepRecord } from '@tagreeve/core';
 import { IDENTITY_FIELDS, SECRET_FIELD, type IdentityField, type Locator, type Scenario, type Step, type UrlMatcher } from '@tagreeve/expect';
-import type { Frame, Page } from 'playwright';
+import type { Frame, JSHandle, Locator as PlaywrightLocator, Page } from 'playwright';
 import { Scrubber } from './gtm-scrub.ts';
 import { HANDOFF_REQUIRED, SENSITIVE_WRITE_TRAP, isGuardExemptHost, isSensitiveField, type FieldAttributes } from './guard.ts';
 import { conditionHolds, describeCondition, formatDuration, watchCondition } from './conditions.ts';
@@ -364,13 +364,34 @@ async function evaluateGuarded(page: Page, script: string): Promise<void> {
   if (scriptError) throw scriptError;
 }
 
+/** The form of the submit control the last `click` step clicked, for the controls a `wait` timeout lists. */
+const clickedForms = new WeakMap<Recorder, JSHandle<HTMLFormElement>>();
+
+async function rememberClickedForm(recorder: Recorder, target: PlaywrightLocator): Promise<void> {
+  clickedForms.get(recorder)?.dispose().catch(() => undefined);
+  clickedForms.delete(recorder);
+  try {
+    const handle = await target.evaluateHandle(
+      (el) => {
+        const control = el as HTMLButtonElement | HTMLInputElement;
+        const submits = (control instanceof HTMLButtonElement && control.type === 'submit') || (control instanceof HTMLInputElement && (control.type === 'submit' || control.type === 'image'));
+        return submits ? control.form : null;
+      },
+      undefined,
+      { timeout: 1000 },
+    );
+    if (await handle.evaluate((form) => form !== null)) clickedForms.set(recorder, handle as JSHandle<HTMLFormElement>);
+    else await handle.dispose();
+  } catch {}
+}
+
 async function waitForUrl(recorder: Recorder, url: UrlMatcher, timeout: number): Promise<void> {
   const condition = { url };
   const deadline = Date.now() + timeout;
   while (!(await conditionHolds(recorder.context, condition))) {
     if (Date.now() >= deadline) {
       const message = `page did not reach ${describeCondition(condition)} within ${formatDuration(timeout)}`;
-      const blocking = await blockingControls(recorder.context);
+      const blocking = await blockingControls(recorder.context, clickedForms.get(recorder) ?? null);
       throw new Error(blocking.length === 0 ? message : `${message}. Blocking controls: ${blocking.join(', ')}.`);
     }
     await recorder.wait(100);
@@ -403,6 +424,7 @@ async function runStep(
     case 'click': {
       const deadline = Date.now() + timeout;
       const target = await locate(page, recorder, step.value, record, timeout);
+      await rememberClickedForm(recorder, target);
       await withControlList(page, recorder, step.value, () => target.click({ timeout: remaining(deadline) }));
       return;
     }

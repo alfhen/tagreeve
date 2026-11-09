@@ -239,7 +239,16 @@ describe('blockingControls', () => {
   test('asks the page for at most MAX_LISTED controls', async () => {
     const evaluate = vi.fn(() => Promise.resolve([]));
     await blockingControls({ pages: () => [{ evaluate }] } as never);
-    expect(evaluate).toHaveBeenCalledWith(expect.any(Function), 10);
+    expect(evaluate).toHaveBeenCalledWith(expect.any(Function), { max: 10, form: null });
+  });
+
+  test('passes the clicked form to the page, and none by default', async () => {
+    const evaluate = vi.fn(() => Promise.resolve([]));
+    const form = { fake: 'form' } as never;
+    await blockingControls({ pages: () => [{ evaluate }] } as never, form);
+    expect(evaluate).toHaveBeenLastCalledWith(expect.any(Function), { max: 10, form });
+    await blockingControls({ pages: () => [{ evaluate }] } as never);
+    expect(evaluate).toHaveBeenLastCalledWith(expect.any(Function), { max: 10, form: null });
   });
 
   test('leaves out the name when there is none', async () => {

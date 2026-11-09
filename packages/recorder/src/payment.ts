@@ -213,6 +213,20 @@ async function frameStillServed(element: ElementHandle, cardHost: string, field:
 }
 
 const FILL_TRY_MS = 500;
+const UNREADABLE_FRAME = 'the card frame could not be read';
+const DEADLINE_GRACE_MS = 500;
+
+class Unresponsive extends Error {}
+
+/** Playwright has no timeout on `Locator.count()`, `ElementHandle.evaluate` or `contentFrame()`, so a frame that stopped responding would hold the fill past its deadline. */
+function withinDeadline<T>(work: Promise<T>, deadline: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Unresponsive()), Math.max(1, deadline - Date.now()) + DEADLINE_GRACE_MS);
+  });
+  work.catch(() => undefined);
+  return Promise.race([work, late]).finally(() => clearTimeout(timer));
+}
 
 /**
  * Types into the one visible input of the frame that the frame check verified.
@@ -224,11 +238,15 @@ const FILL_TRY_MS = 500;
 async function fillVerified(element: ElementHandle, field: CardField, cardHost: string, value: string, timeout: number, typed: string[]): Promise<void> {
   const deadline = Date.now() + timeout;
   const tryMs = (): number => Math.max(1, Math.min(FILL_TRY_MS, deadline - Date.now()));
+  const readable = <T>(work: Promise<T>): Promise<T> =>
+    withinDeadline(work, deadline).catch((error: unknown) => {
+      throw error instanceof Unresponsive ? new OwnReason(UNREADABLE_FRAME) : error;
+    });
   for (;;) {
-    const frame = await frameStillServed(element, cardHost, field);
+    const frame = await readable(frameStillServed(element, cardHost, field));
     const checkedUrl = frame.url();
     const inputs = frame.locator(field.input).filter({ visible: true });
-    const count = await inputs.count();
+    const count = await readable(inputs.count());
     if (count === 1) {
       let handle: ElementHandle | undefined;
       try {
@@ -240,18 +258,30 @@ async function fillVerified(element: ElementHandle, field: CardField, cardHost: 
         const timedOut = error instanceof Error && error.name === 'TimeoutError';
         if (error instanceof OwnReason) throw error;
         if (timedOut && Date.now() < deadline) continue;
-        const moved = (await frameStillServed(element, cardHost, field)).url() !== checkedUrl;
-        const attached = handle ? await handle.evaluate((e) => e.isConnected).catch(() => false) : true;
-        if (moved || !attached) throw new OwnReason(GONE_FRAME);
+        try {
+          const moved = (await withinDeadline(frameStillServed(element, cardHost, field), deadline)).url() !== checkedUrl;
+          const attached = handle ? await withinDeadline(handle.evaluate((e) => e.isConnected), deadline).catch((e: unknown) => {
+            if (e instanceof Unresponsive) throw e;
+            return false;
+          }) : true;
+          if (moved || !attached) throw new OwnReason(GONE_FRAME);
+        } catch (check) {
+          if (check instanceof Unresponsive) throw error;
+          throw check;
+        }
         throw error;
       }
     }
     if (Date.now() >= deadline) {
-      const current = await frameStillServed(element, cardHost, field).catch(() => undefined);
-      if (!current || current.url() !== checkedUrl) throw new OwnReason(GONE_FRAME);
-      const reason = await countReason(current, pathOf(checkedUrl), count, typed);
-      if ((await frameStillServed(element, cardHost, field)).url() !== checkedUrl) throw new OwnReason(GONE_FRAME);
-      throw new OwnReason(reason);
+      const unreadable = new OwnReason(`${count} visible inputs match in ${pathOf(checkedUrl)}: inputs not readable`);
+      const settle = async (): Promise<never> => {
+        const current = await frameStillServed(element, cardHost, field).catch(() => undefined);
+        if (!current || current.url() !== checkedUrl) throw new OwnReason(GONE_FRAME);
+        const reason = await countReason(current, pathOf(checkedUrl), count, typed);
+        if ((await frameStillServed(element, cardHost, field)).url() !== checkedUrl) throw new OwnReason(GONE_FRAME);
+        throw new OwnReason(reason);
+      };
+      throw await withinDeadline(settle(), deadline).catch((error: unknown) => (error instanceof Unresponsive ? unreadable : error));
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }

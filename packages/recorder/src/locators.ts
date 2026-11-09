@@ -1,5 +1,5 @@
 import type { Locator as ScenarioLocator } from '@tagreeve/expect';
-import type { BrowserContext, Locator, Page } from 'playwright';
+import type { BrowserContext, JSHandle, Locator, Page } from 'playwright';
 
 const ROLE_FAMILIES = ['button', 'radio', 'checkbox', 'link', 'tab', 'option'];
 const MAX_LISTED = 10;
@@ -147,12 +147,13 @@ interface BlockingControl {
 }
 
 /** Runs in the page. Reads `validity` and attributes only, never a value, and never calls `checkValidity()` or `reportValidity()`. Clones nothing, so no page code runs and no image loads. Every control is named by `aria-label`, `name` or `id` and never by page text, so no error text can reach a name. */
-function readBlockingControls(max: number): BlockingControl[] {
+function readBlockingControls({ max, form }: { max: number; form: HTMLFormElement | null }): BlockingControl[] {
   const found: BlockingControl[] = [];
   const nameOf = (el: Element): string => el.getAttribute('aria-label')?.trim() || el.getAttribute('name') || el.id;
   for (const el of document.querySelectorAll('input, select, textarea, [aria-invalid="true"]')) {
     if (el instanceof HTMLInputElement && (el.type === 'hidden' || el.type === 'submit' || el.type === 'button' || el.type === 'reset' || el.type === 'image')) continue;
     const input = el as HTMLInputElement;
+    if (form && (el as HTMLInputElement).form !== form) continue;
     const checkbox = el instanceof HTMLInputElement && el.type === 'checkbox';
     let reason: BlockReason | undefined;
     if (checkbox && !input.checked && input.willValidate && (input.required || el.getAttribute('aria-required') === 'true')) reason = 'required, not ticked';
@@ -177,12 +178,12 @@ function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
   return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
 }
 
-/** Controls on the top-level document of each open page that block a form from submitting: kind, name and reason. Never a value, a placeholder or an error text, and never a frame. */
-export async function blockingControls(context: BrowserContext): Promise<string[]> {
+/** Controls on the top-level document of each open page that block a form from submitting: kind, name and reason. With `form`, only the controls of that form. Never a value, a placeholder or an error text, and never a frame. */
+export async function blockingControls(context: BrowserContext, form: JSHandle<HTMLFormElement> | null = null): Promise<string[]> {
   const listed: string[] = [];
   for (const page of context.pages()) {
     try {
-      const controls = await withDeadline(page.evaluate(readBlockingControls, MAX_LISTED), DIAGNOSTIC_DEADLINE_MS);
+      const controls = await withDeadline(page.evaluate(readBlockingControls, { max: MAX_LISTED, form }), DIAGNOSTIC_DEADLINE_MS);
       for (const c of controls) {
         if (!BLOCK_REASONS.includes(c.reason)) continue;
         const kind = KINDS.includes(c.kind) ? c.kind : 'control';

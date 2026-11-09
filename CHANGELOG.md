@@ -12,7 +12,9 @@ Not released yet. The newest release is 0.6.0, below.
 
 <!-- B09 -->
 
-<!-- U09 -->
+- A `wait` timeout after a click on a form's submit control lists only the blocking controls of that form (#990).
+- A test payment fill cannot hang past its deadline when a card frame stops responding (#1339).
+- The handoff label wraps to at most four lines, and the full text is in its `title` (#1384).
 
 <!-- W09 -->
 
