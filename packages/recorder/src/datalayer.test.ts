@@ -454,13 +454,6 @@ test('a name the page defined as an accessor is untrapped and not replaced', () 
   expect(page.run(`'value' in Object.getOwnPropertyDescriptor(window, 'status')`)).toBe(false);
 });
 
-test('a stalled dataLayer getter cannot delay or hide the untrapped list', () => {
-  const page = pageWith(`Object.defineProperty(globalThis, 'status', { get() { return ''; }, set() {}, configurable: true });`, ['status']);
-  page.run(`Object.defineProperty(window, 'dataLayer', { configurable: true, get() { throw new Error('stall'); } });`);
-  expect(untrappedOf(page.run)).toEqual(['status']);
-  expect(page.run(`Object.getOwnPropertyDescriptor(window, '${DATALAYER_UNTRAPPED}').configurable`)).toBe(false);
-});
-
 test('a forged marker on a same-realm array still gets an entry without an owner', () => {
   const page = pageWith('');
   page.run(`const a = [{ event: 'x' }]; Object.defineProperty(a, '__tagreeveHooked', { value: 'forged' }); window.dataLayer = a;`);

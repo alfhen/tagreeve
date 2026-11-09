@@ -1068,7 +1068,7 @@ export class Recorder {
     return resolveOwners(tallies);
   }
 
-  /** Reads the init script's frozen untrapped answer from each main frame, apart from the tally so page code cannot delay it. */
+  /** Reads the init script's frozen untrapped answer from each main frame, before any evaluate that runs page-reachable code, so page code cannot delay it. */
   private async collectUntrapped(): Promise<string[]> {
     const names = hookedLayerNames(this.options.dataLayerNames);
     const found: string[] = [];
@@ -1095,8 +1095,7 @@ export class Recorder {
   }
 
   private async tallyDataLayers(): Promise<Flag[]> {
-    const [tallies, untrapped] = await Promise.all([this.collectTallies(), this.collectUntrapped()]);
-    this.untrappedLayerNames = [...new Set(untrapped)];
+    const tallies = await this.collectTallies();
     const start = Date.now();
     while (postedAhead(tallies, this.payloadCounts) && Date.now() - start < TALLY_POSTED_WAIT_MS) await this.wait(20);
     return buildTallyFlags(this.runId, tallies, this.payloadCounts);
@@ -1136,6 +1135,8 @@ export class Recorder {
   async close(): Promise<RunResult> {
     const closeStartedAt = nodeNow();
     this.noteContainerExit();
+    // Must stay the first page evaluate: later ones run page-reachable code that can stall the main thread past this read's deadline.
+    this.untrappedLayerNames = [...new Set(await this.collectUntrapped())];
     await this.waitForLateTagReports();
     if (this.options.networkMode !== 'live') await this.flushUnloadQueues();
     const tallyFlags = await this.tallyDataLayers();
