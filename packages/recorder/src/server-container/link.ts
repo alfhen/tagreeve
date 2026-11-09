@@ -1,5 +1,5 @@
 import { hashEmail, type Hit, type HitLinkMiss, type Identity, type Request } from '@tagreeve/core';
-import { isServerHostUrl } from '../stub.ts';
+import { isServerContainerRequest, isServerHostUrl } from '../stub.ts';
 
 /** A shared value shorter than this proves nothing. */
 const MIN_VALUE_LENGTH = 8;
@@ -113,7 +113,7 @@ export function linkServerHits({ hits, requests, serverHosts, identity, inFlight
   const hitRequestIds = new Set(hits.map((h) => h.requestId));
   const hasConcurrentRequest = (only: Facts, from: number, to: number, callClientIds: ReadonlySet<string>) =>
     requests.some((r) => {
-      if (r.captured === 'serverContainer' || r.id === only.hit.requestId || !isServerHostUrl(r.url, serverHosts)) return false;
+      if (r.captured === 'serverContainer' || r.id === only.hit.requestId || !isServerContainerRequest(r, serverHosts)) return false;
       const sentAt = inFlight?.get(r.id)?.sentAt ?? r.t;
       if (sentAt < from || sentAt > to) return false;
       if (!hitRequestIds.has(r.id)) return true;

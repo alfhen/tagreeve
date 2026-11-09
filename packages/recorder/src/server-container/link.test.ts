@@ -337,6 +337,21 @@ describe('linkMiss', () => {
     expect(out[1]?.linkMiss).toEqual({ eventId: 'none', clientId: 'concurrentRequest' });
   });
 
+  test('a library load from a server host sent in flight does not break the exact link', () => {
+    const a = browserCall('pw-client-0001', 100);
+    const load = request('https://sgtm.example.invalid/gtm.js?id=GTM-PWTEST1', { t: 120, resourceType: 'script' });
+    const c = serverCall('pw-client-0001', 150);
+    const out = linkServerHits({
+      hits: [hit(a, 'ga4', 'Purchase', 100), hit(c, 'ga4', 'Purchase', 150)],
+      requests: [a, load, c],
+      serverHosts: hosts,
+      identity,
+      inFlight: new Map([[a.id, { sentAt: 100, answeredAt: 200 }]]),
+    });
+    expect(out[1]?.linkMiss).toBeUndefined();
+    expect(out[1]?.via).toMatchObject({ confidence: 'exact' });
+  });
+
   test('a container request with another client ID and another name does not break the exact link', () => {
     const a = browserCall('pw-client-0001', 100);
     const other = request('https://sgtm.example.invalid/g/collect?cid=pw-client-0002&en=PageView', { t: 120 });
