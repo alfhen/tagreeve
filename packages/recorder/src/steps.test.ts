@@ -375,19 +375,27 @@ describe('select and locator steps on a fake page', () => {
 
   describe('the form that a click remembers for the next wait', () => {
     class FakeButton {
-      type = 'submit';
-      constructor(public form: unknown) {}
+      constructor(
+        public form: unknown,
+        public type = 'submit',
+      ) {}
     }
-    class FakeInput {}
+    class FakeInput {
+      constructor(
+        public form: unknown,
+        public type: string,
+      ) {}
+    }
     const FORM = { fake: 'form' };
     const SUBMIT_CONTROLS = 'button, input[type=submit], input[type=image]';
 
     // The page's click targets run the real in-page function against a fake element; `inside` is what closest() finds.
-    const run = async (clicks: { inside: FakeButton | null }[]) => {
+    const run = async (clicks: { inside: FakeButton | FakeInput | null }[]) => {
       vi.stubGlobal('HTMLButtonElement', FakeButton);
       vi.stubGlobal('HTMLInputElement', FakeInput);
       const selectors: string[] = [];
       const evaluated: unknown[] = [];
+      const looked: unknown[] = [];
       let index = 0;
       const page = {
         goto: () => Promise.resolve(),
@@ -400,6 +408,7 @@ describe('select and locator steps on a fake page', () => {
             return {
               evaluateHandle: (fn: (el: unknown) => unknown) => {
                 const result = fn({ closest: (selector: string) => (selectors.push(selector), click.inside) });
+                looked.push(result);
                 return Promise.resolve({ asElement: () => result, dispose: () => Promise.resolve(), evaluate: () => Promise.resolve(true), form: result });
               },
               click: () => Promise.resolve(),
@@ -412,7 +421,7 @@ describe('select and locator steps on a fake page', () => {
         () => '',
         (e: Error) => e.message,
       );
-      return { selectors, evaluated, error };
+      return { selectors, evaluated, looked, error };
     };
 
     afterEach(() => vi.unstubAllGlobals());
@@ -425,8 +434,22 @@ describe('select and locator steps on a fake page', () => {
       expect(evaluated[0]).toMatchObject({ form: FORM });
     });
 
+    test.each([
+      ['a button of type button', () => new FakeButton(FORM, 'button'), false],
+      ['a button of type reset', () => new FakeButton(FORM, 'reset'), false],
+      ['an input of type image', () => new FakeInput(FORM, 'image'), true],
+      ['an input of type submit', () => new FakeInput(FORM, 'submit'), true],
+    ])('a click inside %s', async (_name, make, remembered) => {
+      const { evaluated, error } = await run([{ inside: make() }]);
+      expect(error).toContain('page did not reach');
+      expect(evaluated).toHaveLength(1);
+      if (remembered) expect(evaluated[0]).toMatchObject({ form: FORM });
+      else expect(evaluated[0]).toBeNull();
+    });
+
     test('a click in no submit control after a submit click makes the next wait pass no form', async () => {
-      const { evaluated, error } = await run([{ inside: new FakeButton(FORM) }, { inside: null }]);
+      const { evaluated, looked, error } = await run([{ inside: new FakeButton(FORM) }, { inside: null }]);
+      expect(looked).toEqual([FORM, null]);
       expect(error).toContain('page did not reach');
       expect(evaluated).toEqual([null]);
     });
