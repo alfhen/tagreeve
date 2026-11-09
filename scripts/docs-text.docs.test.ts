@@ -107,11 +107,15 @@ test('0.6.1 docs text: design.md', () => {
   expect(section(design, '### 5.2 Capture', '### 5.3')).toContain('lists each missed name once, at most five');
   expect(section(design, '## 13.', '## 14.')).toContain('shows a value-like event name as `(other)` in the record');
   expect(design).toContain('The miss reason is `concurrentRequest`');
+  expect(line(design, 'Version 5 adds `TagReport.t`')).toContain('`answeredBefore` or `concurrentRequest`');
+  expect(line(design, 'Version 5 adds `TagReport.t`')).toContain('`possibleRealDataPush`');
 });
 
 test('0.6.1 docs text: guides and changelog', () => {
   const reports = read('docs/guide/tag-reports.md');
-  expect(reports).toContain('`--gtm-override`');
+  const noReports = line(reports, 'A rule with no report for its container');
+  expect(noReports).toContain('install the reporter template in the container and run with `--gtm-override`');
+  expect(reports).not.toContain('`tagNameUnknown`. The HTML report shows both');
   const guide = read('docs/guide/server-container.md');
   expect(guide).toMatch(/\| Client ID \|[^\n]*\n(?:\|[^\n]*\n)*\| \| \| `concurrentRequest` \|/);
   const log = read('CHANGELOG.md');
