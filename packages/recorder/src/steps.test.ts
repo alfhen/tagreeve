@@ -396,6 +396,7 @@ describe('select and locator steps on a fake page', () => {
       const selectors: string[] = [];
       const evaluated: unknown[] = [];
       const looked: unknown[] = [];
+      const disposed: unknown[] = [];
       let index = 0;
       const page = {
         goto: () => Promise.resolve(),
@@ -409,7 +410,7 @@ describe('select and locator steps on a fake page', () => {
               evaluateHandle: (fn: (el: unknown) => unknown) => {
                 const result = fn({ closest: (selector: string) => (selectors.push(selector), click.inside) });
                 looked.push(result);
-                return Promise.resolve({ asElement: () => result, dispose: () => Promise.resolve(), evaluate: () => Promise.resolve(true), form: result });
+                return Promise.resolve({ asElement: () => result, dispose: () => (disposed.push(result), Promise.resolve()), evaluate: () => Promise.resolve(true), form: result });
               },
               click: () => Promise.resolve(),
             };
@@ -421,7 +422,7 @@ describe('select and locator steps on a fake page', () => {
         () => '',
         (e: Error) => e.message,
       );
-      return { selectors, evaluated, looked, error };
+      return { selectors, evaluated, looked, disposed, error };
     };
 
     afterEach(() => vi.unstubAllGlobals());
@@ -448,8 +449,9 @@ describe('select and locator steps on a fake page', () => {
     });
 
     test('a click in no submit control after a submit click makes the next wait pass no form', async () => {
-      const { evaluated, looked, error } = await run([{ inside: new FakeButton(FORM) }, { inside: null }]);
+      const { evaluated, looked, disposed, error } = await run([{ inside: new FakeButton(FORM) }, { inside: null }]);
       expect(looked).toEqual([FORM, null]);
+      expect(disposed[0]).toBe(FORM);
       expect(error).toContain('page did not reach');
       expect(evaluated).toEqual([null]);
     });

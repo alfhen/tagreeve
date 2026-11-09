@@ -170,13 +170,11 @@ export function readBlockingControls({ max, form: remembered }: { max: number; f
 
 const DIAGNOSTIC_DEADLINE_MS = 3000;
 
-class DiagnosticTimeout extends Error {}
-
 /** Playwright's `evaluate` has no timeout, and a page that stopped responding would hold the original timeout error back. */
 function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new DiagnosticTimeout('diagnostic timed out')), ms);
+    timer = setTimeout(() => reject(new Error('diagnostic timed out')), ms);
   });
   return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
 }
@@ -184,7 +182,7 @@ function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
 /** Controls on the top-level document of each open page that block a form from submitting: kind, name and reason. With `form`, only the controls of that form. Never a value, a placeholder or an error text, and never a frame. */
 export async function blockingControls(context: BrowserContext, form: JSHandle<HTMLFormElement> | null = null): Promise<string[]> {
   const listed: string[] = [];
-  // Decided once for every page: a form that is gone falls back to every control, a live form never leaks the controls of another page.
+  // A form of a closed page or a finished navigation makes this throw and falls back to every control; readBlockingControls covers a form detached in place.
   const live = form ? await withDeadline(form.evaluate((f) => f.isConnected), DIAGNOSTIC_DEADLINE_MS).catch(() => false) : false;
   const scope = live ? form : null;
   for (const page of context.pages()) {

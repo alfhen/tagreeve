@@ -138,6 +138,7 @@ test('a long handoff text keeps the pill inside a 390 px viewport with the Done 
   const run = await open('/handoff', LONG_TEXT);
   let timer: NodeJS.Timeout | undefined;
   try {
+    const naturalWidths: number[] = [];
     for (const width of [1280, 390]) {
       await run.page.setViewportSize({ width, height: 844 });
       const limit = Math.min(420, width - 32);
@@ -146,18 +147,19 @@ test('a long handoff text keeps the pill inside a 390 px viewport with the Done 
       const done = await doneBox(run.page);
       expect(box.x).toBeGreaterThanOrEqual(0);
       expect(box.x + box.width).toBeLessThanOrEqual(width);
-      expect(done.width).toBeGreaterThan(40);
+      expect(done.width).toBeGreaterThanOrEqual(55);
+      naturalWidths.push(done.width);
       expect(done.x).toBeGreaterThanOrEqual(box.x);
       expect(done.x + done.width).toBeLessThanOrEqual(box.x + box.width);
       expect(done.y).toBeGreaterThanOrEqual(box.y);
       expect(done.y + done.height).toBeLessThanOrEqual(box.y + box.height);
-      expect(done.x + done.width).toBeLessThanOrEqual(width);
       const hit = await run.page.evaluate(
         ([id, x, y]) => document.elementFromPoint(x as number, y as number) === document.getElementById(id as string),
         [HANDOFF_HOST_ID, done.x + done.width / 2, done.y + done.height / 2],
       );
       expect(hit).toBe(true);
     }
+    expect(Math.abs(naturalWidths[0]! - naturalWidths[1]!)).toBeLessThanOrEqual(1);
     const done = await doneBox(run.page);
     await run.page.mouse.click(done.x + done.width / 2, done.y + done.height / 2);
     const timeout = new Promise((_, reject) => {
