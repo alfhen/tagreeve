@@ -1,24 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { PACKAGE_TEMPLATE_FILE, readWebTagReporterTemplate } from '@tagreeve/recorder';
 import type { Io } from './run.ts';
-
-export const WEB_TEMPLATE_FILE_NAME = 'tagreeve-tag-reporter.tpl';
-
-// The build copies the template to dist/templates/; sources read it from the recorder package.
-const WEB_TEMPLATE_PATHS = [
-  new URL(`./templates/${WEB_TEMPLATE_FILE_NAME}`, import.meta.url),
-  new URL('../../recorder/src/gtm-templates/web-tag-reporter.tpl', import.meta.url),
-];
-
-function readWebTemplate(): string {
-  for (const path of WEB_TEMPLATE_PATHS) {
-    try {
-      return readFileSync(path, 'utf8');
-    } catch {
-      continue;
-    }
-  }
-  throw new Error('The web tag reporter template is missing from this install.');
-}
 
 const WEB_STEPS = [
   'In a GTM workspace, import the text in "template" as a custom tag template.',
@@ -34,8 +15,8 @@ export function webTemplateJson(): object {
   return {
     templateVersion: 1,
     name: 'web',
-    fileName: WEB_TEMPLATE_FILE_NAME,
-    template: readWebTemplate(),
+    fileName: PACKAGE_TEMPLATE_FILE,
+    template: readWebTagReporterTemplate(),
     setup: {
       trigger: { type: 'customEvent', eventName: '.*', regex: true },
       consent: 'noAdditionalConsentRequired',
@@ -47,6 +28,6 @@ export function webTemplateJson(): object {
 }
 
 export function templateCommand(io: Io, json: boolean): number {
-  io.stdout(json ? `${JSON.stringify(webTemplateJson(), null, 2)}\n` : readWebTemplate());
+  io.stdout(json ? `${JSON.stringify(webTemplateJson(), null, 2)}\n` : readWebTagReporterTemplate());
   return 0;
 }

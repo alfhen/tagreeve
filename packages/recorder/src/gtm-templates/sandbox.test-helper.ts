@@ -50,7 +50,8 @@ export function runSandbox(
       run.callbacks.push(cb as Fn);
     },
     callInWindow: (name, ...args) => {
-      if (!keysOf('callInWindow').includes(name as string)) {
+      const executable = granted.get('access_globals')?.entries.filter((e) => e.execute) ?? [];
+      if (!executable.some((e) => e.key === name)) {
         throw new Error(`callInWindow: no execute permission for ${String(name)}`);
       }
       run.windowCalls.push({ name: name as string, args });

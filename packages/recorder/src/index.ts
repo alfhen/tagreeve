@@ -9,6 +9,7 @@ export * from './recorder.ts';
 export * from './guard.ts';
 export * from './steps.ts';
 export * from './gtm-override.ts';
+export { PACKAGE_TEMPLATE_FILE, readWebTagReporterTemplate } from './gtm-templates/tpl.ts';
 export * from './gtm-scrub.ts';
 export * from './handoff-overlay.ts';
 export * from './payment.ts';

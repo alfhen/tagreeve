@@ -37,9 +37,18 @@ describe('Recorder.close and late tag reports', () => {
   }
 
   it('does not wait when the run got no report', async () => {
-    const { browser, recorder } = recorderWith(0);
-    await expect(recorder.close()).rejects.toThrow('stop here');
-    expect(browser.close).toHaveBeenCalledTimes(1);
+    vi.useFakeTimers();
+    try {
+      const { browser, recorder, inner } = recorderWith(0);
+      expect(inner.tagReports).toHaveLength(0);
+      expect(inner.lastTagReportAt).toBeGreaterThan(0);
+      const closing = recorder.close().catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(browser.close).toHaveBeenCalledTimes(1);
+      expect(await closing).toEqual(new Error('stop here'));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('waits until no report has arrived for 500 ms', async () => {

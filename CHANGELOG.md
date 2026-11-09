@@ -27,7 +27,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 - Tests only: the `dataLayer` hook and tally tests now check their inputs first and cover a frozen array, a fixed `push` and a failing binding. The unload gap, push shape and diff e2e tests check the main-frame rule, more leak values, a sandboxed frame and a literal rc.1 baseline (#1355, #1359, #1358, #1300, #1218, #1217, #1171, #1172, #1212, #1213). `/datalayer-build` now has the same masked keys and an email-keyed push in both builds, so the diff output is unchanged.
 
-<!-- G10 -->
+- `template web` reads the template only from the recorder package. When the bundled file is missing, it exits 2 with an error and prints nothing else. Tests and cleanup: the template permission parser reads each entry's flags by key name, and the build test builds into a temp folder, so `pnpm test` no longer deletes `dist/` (#1116, #1117, #1118, #1180, #1178, #1332, #1181, #1186).
 
 - Site: the agent callout on a guide follows the first paragraph (#750). The finished demo hit list scrolls and keeps every hit (#837). The run panel shows its Result line (#838). The commands panel keeps its indent when copied and does not split `--site` (#835). The docs theme fade covers the header and the sidebar (#857). The demo reply check allows only the numbers a reply can state (#759). Internal: #760, #729, #866.
 
