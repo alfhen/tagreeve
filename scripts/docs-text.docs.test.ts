@@ -80,3 +80,48 @@ test('AGENTS.md and design section 13 say log-ins are handoff steps on a hosted 
   expect(loginRuleProblem(read('AGENTS.md'), read('docs/design.md'))).toBeUndefined();
   expect(loginRuleProblem('Payments are handoff steps.', '**Other rules**\n- Payments are handoffs.\n## 14.')).toBeDefined();
 });
+
+const section = (text: string, from: string, to: string): string => text.slice(text.indexOf(from), text.indexOf(to, text.indexOf(from) + 1));
+const line = (text: string, needle: string): string => text.split('\n').find((l) => l.includes(needle)) ?? '';
+
+test('0.6.1 docs text: cli.md', () => {
+  const cli = read('docs/cli.md');
+  expect(cli).not.toContain('Neither message');
+  expect(cli).toContain('No message holds any text from the file');
+  expect(cli).not.toContain('names the path you gave');
+  expect(cli).not.toContain('only a missing path counts as absent');
+  expect(cli).not.toContain('saved by 0.6.0-rc.1');
+  expect(cli).toContain('saved before 0.6.0-rc.2');
+  expect(line(cli, '| 2 | Usage error')).toContain('`baseline save` that cannot name or write its file');
+  expect(line(cli, '| 2 | Usage error')).not.toContain('`baseline save` with one path on a suite record');
+  expect(section(cli, '### `tagreeve diff', '### `tagreeve baseline save')).toContain('`kindChanged` is a list of `{ epoch, event, frame, from, to }`');
+  expect(cli).toContain('answeredBefore, concurrentRequest } }');
+  expect(cli).toContain('`possibleRealDataPush` flag');
+});
+
+test('0.6.1 docs text: design.md', () => {
+  const design = read('docs/design.md');
+  expect(design).not.toContain('only a missing path counts as absent');
+  expect(design.indexOf('its flag is not given: `suite` with no folder')).toBeGreaterThan(-1);
+  expect(line(design, '| `tag: {')).toContain('`success`, `failure`, `exception` or `timeout`');
+  expect(section(design, '### 5.2 Capture', '### 5.3')).toContain('lists each missed name once, at most five');
+  expect(section(design, '## 13.', '## 14.')).toContain('shows a value-like event name as `(other)` in the record');
+  expect(design).toContain('The miss reason is `concurrentRequest`');
+  expect(line(design, 'Version 5 adds `TagReport.t`')).toContain('`answeredBefore` or `concurrentRequest`');
+  expect(line(design, 'Version 5 adds `TagReport.t`')).toContain('`possibleRealDataPush`');
+});
+
+test('0.6.1 docs text: guides and changelog', () => {
+  const reports = read('docs/guide/tag-reports.md');
+  const noReports = line(reports, 'A rule with no report for its container');
+  expect(noReports).toContain('install the reporter template in the container and run with `--gtm-override`');
+  expect(reports).not.toContain('`tagNameUnknown`. The HTML report shows both');
+  const guide = read('docs/guide/server-container.md');
+  expect(guide).toMatch(/\| Client ID \|[^\n]*\n(?:\|[^\n]*\n)*\| \| \| `concurrentRequest` \|/);
+  const log = read('CHANGELOG.md');
+  const rc3 = section(log, '## 0.6.0-rc.3', '## 0.6.0-rc.2');
+  expect(line(rc3, 'tag IDs as numbers')).not.toContain('published container');
+  expect(line(rc3, 'tag IDs as numbers')).toContain('GTM preview');
+  expect(rc3).toContain('or reloads after its input was found');
+  expect(section(log, '## 0.6.1', '## 0.6.0\n')).not.toContain('<!-- C09 -->');
+});

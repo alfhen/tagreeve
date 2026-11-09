@@ -109,7 +109,7 @@ Server container: image ok; 7 vendor calls, 5 linked exactly, 1 probable, 1 unli
 The report gives each server vendor its own row, for example `Google Ads (google-ads), sent by the server container`. Each call in a row is placed in the consent epoch of the browser hit it is linked to, so one row can span several epochs. Calls with no link are in an unlinked column after the last epoch. Notes on a result tell you how far to trust that link:
 
 - `serverSendProbableLink`: the call was linked to a browser hit by a value both hold, such as a client ID, and not proven. A probable link can warn but cannot fail a run. A client ID link is exact only when the call has the same client ID and event name as one browser hit whose request to the container was still waiting for its answer. That needs a container that answers after its tags send. If another browser hit with the same client ID and event name was sent before the call, answered or not, the link stays probable. A container that answers first does not give an exact link in practice: the rule gives one only when the call arrives before Tagreeve sees the answer.
-- `serverSendUnlinked`: no browser hit was found for the call. A check that depends on consent cannot judge it, so that check warns.
+- `serverSendUnlinked`: no browser hit was found for the call. A check that depends on consent cannot judge it, so that check warns. A rule with an exact `count` warns too when some of the unlinked calls, from none to all, could change its verdict.
 
 A rule that should judge only the browser, or only the container, takes `sentBy: browser` or `sentBy: server`. A browser-only `mustNot` on a Google host then ignores the container's own calls. See [Rules by sender](../cli.md#rules-by-sender).
 
@@ -119,7 +119,7 @@ With `--json`, the call counts are in the `serverContainer` field. If the contai
 
 Send a unique event ID with each event, for example the GA4 parameter `event_id`, and have the container's tags pass it on. A call whose event ID and event name match exactly one browser hit links by event ID, and that link is `exact`. This is the way to make a leak through the container fail a run. Whether the GA4 tag in sGTM passes `event_id` on is something to check in your own container, in a field test.
 
-The client ID link is narrower. It is `exact` only when exactly one browser hit with that client ID and event name was sent to the container before the call, and its request was still waiting for an answer. On a run with several pages, one client ID is on every hit of the same event name, so two or more hits usually match and the link stays `probable`. Do not count on it.
+The client ID link is narrower. It is `exact` only when exactly one browser hit with that client ID and event name was sent to the container before the call, and its request was still waiting for an answer, and no other browser request to the container shares one of the call's client IDs, or has no decoded hit, and was sent between that hit and the call. On a run with several pages, one client ID is on every hit of the same event name, so two or more hits usually match and the link stays `probable`. Do not count on it.
 
 ### Why a call is not exact
 
@@ -134,6 +134,7 @@ The client ID link is narrower. It is `exact` only when exactly one browser hit 
 | | | `noSameKeyHit` | No earlier browser hit to a `serverHosts` host has that client ID and event name. |
 | | | `severalSameKeyHits` | Two or more do. |
 | | | `answeredBefore` | One does, but the call came after its answer, or it has no answer time. The container answers before its tags send. |
+| | | `concurrentRequest` | One does, but another browser request to the container shares a client ID with the call, or has no decoded hit, and was sent between that hit and the call. The call may belong to that request. |
 
 `none` means the call had no event ID or no event name. A Google Ads conversion call often carries no event ID, so it often counts as `none`. A high `eventId.none` count often means the page sends no event ID or the container does not pass it on. To tell which, send a unique `event_id` from the page and read `linkMiss` on the hit. A high `clientId.answeredBefore` count means the container answers first. These counts only explain a link that is not exact. They do not show that an exact link went to the right browser hit.
 
