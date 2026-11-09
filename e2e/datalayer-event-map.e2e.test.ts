@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { outDir, root, run } from './cli-helpers.ts';
@@ -74,6 +74,9 @@ test('an event map file error names the file and the key, never a value', async 
   const { a, b } = await recordBuilds();
   const bad = join(outDir, 'bad-event-map.json');
   await writeFile(bad, JSON.stringify({ events: { legacy_promo: 'pw-secret-value-9 <' } }));
+  const written = await readFile(bad, 'utf8');
+  expect(written).toContain('legacy_promo');
+  expect(written).toContain('pw-secret-value-9');
   const result = await cli(['diff', a, b, '--event-map', bad]);
   expect(result.code).toBe(2);
   expect(result.stderr).toContain(bad);
