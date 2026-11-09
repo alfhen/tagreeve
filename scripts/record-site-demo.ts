@@ -169,7 +169,9 @@ async function readRecords(path: string): Promise<TagreeveRecord[]> {
     .map((line) => JSON.parse(line) as TagreeveRecord);
 }
 
-const fixDate = (text: string) => text.replace(/tagreeve\/runs\/\d{4}-\d{2}-\d{2}\//g, 'tagreeve/runs/2026-01-15/');
+const DEMO_DATE = '2026-01-15';
+
+const fixDate = (text: string) => text.replace(/tagreeve\/runs\/\d{4}-\d{2}-\d{2}\//g, `tagreeve/runs/${DEMO_DATE}/`);
 
 const toJsonl = (records: TagreeveRecord[]) => records.map((r) => JSON.stringify(r)).join('\n') + '\n';
 
@@ -191,7 +193,7 @@ async function record(): Promise<void> {
   try {
     await cp(join(demoDir, 'scenarios'), join(work, 'tagreeve'), { recursive: true });
     const clean = join(work, 'clean');
-    const cleanRuns = join(clean, 'tagreeve/runs/2026-01-15');
+    const cleanRuns = join(clean, 'tagreeve/runs', DEMO_DATE);
     await mkdir(cleanRuns, { recursive: true });
     const runIds = new Map<DemoScenario, string>();
 
@@ -213,7 +215,7 @@ async function record(): Promise<void> {
       if (s === 'reject') written.set('reject.json', rewriteHosts(firstJsonResult(await readRun(join(work, path)), path), site));
     }
 
-    const diff = check('diff', await cli(['diff', `tagreeve/runs/2026-01-15/${runIds.get('reject')}.jsonl`, `tagreeve/runs/2026-01-15/${runIds.get('accept')}.jsonl`], clean));
+    const diff = check('diff', await cli(['diff', `tagreeve/runs/${DEMO_DATE}/${runIds.get('reject')}.jsonl`, `tagreeve/runs/${DEMO_DATE}/${runIds.get('accept')}.jsonl`], clean));
     written.set('diff.txt', diff.stdout);
 
     console.error('Recording the suite');

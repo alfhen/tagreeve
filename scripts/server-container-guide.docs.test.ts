@@ -27,12 +27,13 @@ export function unsafeFileTargets(markdown: string): string[] {
   for (const snippet of snippets) {
     const text = snippet
       .replace(/\\\n/g, ' ')
-      .replace(/\d*>&\s*(?:\d+|-)(?=[\s;|&)]|$)/g, ' ')
+      .replace(/(?<=[?&][\w-]+=)<[A-Za-z][A-Za-z ]*>(?=&|$)/g, ' ')
+      .replace(/\d*>&\s*(?:\d+|-)(?=[\s;|&)<>"'`]|$)/g, ' ')
       .replace(/(?<!<)<(?!<)\s*[^\s;|&)<>]+/g, ' ');
     for (const m of text.matchAll(/(?:^|[^<>])>[>|]?\s*([^\s;|&)<>]+)/g)) targets.push(m[1]!);
-    for (const m of text.matchAll(/(?:^|[\s;|(])>&\s*([^\s;|&)<>]+)/g)) targets.push(m[1]!);
+    for (const m of text.matchAll(/(?:^|[^<>])>&\s*([^\s;|&)<>]+)/g)) targets.push(m[1]!);
     for (const m of text.matchAll(/\btee\s+([^;|&)<>\n]+)/g)) {
-      targets.push(...m[1]!.trim().split(/\s+/).filter((w) => !/^-/.test(w)));
+      targets.push(...m[1]!.trim().split(/\s+/).filter((w) => w && !/^-/.test(w)));
     }
     for (const m of text.matchAll(/\bchmod\s+([^;|&)\n]+)/g)) {
       const words = m[1]!.trim().split(/\s+/);
@@ -100,6 +101,14 @@ test.each([
   ['a redirect with >&', '```bash\ncat >&sgtm-config.txt\n```', ['sgtm-config.txt']],
   ['a chmod after a continuation', '```bash\nchmod \\\n  600 sgtm-config.txt\n```', ['sgtm-config.txt']],
   ['a clobber redirect', '```bash\necho x >| out.txt\n```', ['out.txt']],
+  ['a >& redirect with no space before it', '```bash\ncat x>&out.txt\n```', ['out.txt']],
+  ['a placeholder before &', 'use `id=GTM-PWTEST1&env=<env id>&auth=<auth>` here', []],
+  ['a process substitution after a flag', '```bash\ntagreeve run --server-container-config=<(pbpaste) > out.txt\n```', ['out.txt']],
+  ['an input redirect after an assignment', '```bash\nFOO=<in.txt; cat > out.txt\n```', ['out.txt']],
+  ['an input redirect after = then >', '```bash\necho a=<in.txt>out.txt\n```', ['out.txt']],
+  ['a tee with only an input redirect', '```bash\ntee < ~/plain.txt\n```', []],
+  ['an input redirect then >& with no space', '```bash\ncat <in.txt>&out.txt\n```', ['out.txt']],
+  ['an input redirect then a 2>& file', '```bash\ncat <in.txt 2>&err.txt\n```', ['err.txt']],
   ['a redirect with >& and a space', '```bash\ncat >& sgtm-config.txt\n```', ['sgtm-config.txt']],
   ['an absolute target outside home', '```bash\nbase64 > /tmp/sgtm-workspace-config.txt\n```', ['/tmp/sgtm-workspace-config.txt']],
   ['an absolute repo target', '```bash\ncat > /repo/checkout/sgtm-config.txt\n```', ['/repo/checkout/sgtm-config.txt']],
@@ -117,6 +126,12 @@ test.each([
   ['a single-quoted $HOME target', "```bash\ncat > '$HOME/x'\n```", ["'$HOME/x'"]],
   ['a quoted tilde tee target', '```bash\ntee "~/sgtm-config.txt"\n```', ['"~/sgtm-config.txt"']],
   ['a quoted relative target', '```bash\ncat > "out.txt"\n```', ['out.txt']],
+  ['a redirect after 2>&1', '```bash\ncat 2>&1>out.txt\n```', ['out.txt']],
+  ['2>&1 before a closing double quote', '```bash\nsh -c "cat 2>&1"\n```', []],
+  ['2>&1 before a closing single quote', "```bash\nsh -c 'cat 2>&1'\n```", []],
+  ['a safe target after 2>&1', '```bash\ncat 2>&1>~/a\n```', []],
+  ['a redirect after =<name>', '```bash\necho a=<in>out.txt\n```', ['out.txt']],
+  ['a spaced redirect after =<name>', '```bash\necho a=<in> out.txt\n```', ['out.txt']],
   ['home targets and stderr redirects', '```bash\ncat > ~/a 2>&1\nchmod 600 ~/a\n```', []],
 ])('the target check catches %s', (_name, markdown, expected) => {
   expect(unsafeFileTargets(markdown)).toEqual(expected);
@@ -157,7 +172,6 @@ test('a continuation joins only after an odd number of backslashes', () => {
 });
 
 test('the guide does not claim Google Ads calls never carry an event ID', () => {
-  const guide = readFileSync(join(root, 'docs/guide/server-container.md'), 'utf8');
   expect(guide).not.toContain('never carry one');
   expect(guide).toContain('often carries no event ID');
 });
