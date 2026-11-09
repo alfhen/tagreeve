@@ -1,5 +1,6 @@
 import { newId } from '@tagreeve/core';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
+import { DATALAYER_BINDING } from './datalayer.ts';
 import { buildTallyFlags, MAX_TALLY_KEYS, PayloadCounts, postedAhead, validateTally, type FrameTally } from './datalayer-tally.ts';
 
 const NAMES = ['dataLayer', 'myLayer'];
@@ -138,4 +139,32 @@ test('validateTally keeps an untrapped name only when it is a hooked name', () =
   expect(validateTally(0, { d: 'tok', arrays: [], untrapped: 'myLayer' }, NAMES)?.untrapped).toEqual([]);
   expect(validateTally(0, { d: 'tok', arrays: [], untrapped: ['myLayer'] }, NAMES)?.untrapped).toEqual([]);
   expect(validateTally(0, { d: 'tok', arrays: [] }, NAMES)?.untrapped).toEqual([]);
+});
+
+vi.mock('./selftest.ts', () => ({ runSelfTest: async () => ({ coverage: {}, clockOffset: 0, sourcePrefix: '' }) }));
+vi.mock('./collector.ts', () => ({ routeCollector: async () => undefined }));
+vi.mock('@tagreeve/consent', async (importOriginal) => ({ ...(await importOriginal<object>()), installConsent: async () => ({}) }));
+
+test('the recorder binding callback still records a push after more than MAX_TALLY_KEYS frames', async () => {
+  const { Recorder } = await import('./recorder.ts');
+  const bindings = new Map<string, (source: unknown, payload: unknown) => void>();
+  const context = {
+    route: async () => undefined,
+    addInitScript: async () => undefined,
+    on: () => undefined,
+    exposeBinding: async (name: string, callback: (source: unknown, payload: unknown) => void) => void bindings.set(name, callback),
+  };
+  const Ctor = Recorder as unknown as new (...args: unknown[]) => { init(): Promise<void>; dataLayerEvents: unknown[] };
+  const recorder = new Ctor({ networkMode: 'stub', site: 'http://localhost:1/' }, { version: () => '1' }, context, undefined, undefined, undefined, undefined);
+  await recorder.init();
+  const binding = bindings.get(DATALAYER_BINDING)!;
+  const page = { mainFrame: () => main };
+  const main = { page: () => page, parentFrame: () => null, url: () => 'http://localhost:1/' };
+  const frames = Array.from({ length: MAX_TALLY_KEYS + 1 }, () => ({ page: () => page, parentFrame: () => main, url: () => 'http://localhost:1/f' }));
+  for (const frame of frames) binding({ frame, page }, { t: 1000, args: '[{"event":"fill"}]', d: 'tok', a: 1 });
+  expect((recorder as unknown as { payloadCounts: { counts: Map<string, number> } }).payloadCounts.counts.size).toBe(MAX_TALLY_KEYS);
+  const before = recorder.dataLayerEvents.length;
+  binding({ frame: frames[frames.length - 1], page }, { t: 2000, args: '[{"event":"after_cap"}]', d: 'tok', a: 1 });
+  expect(before).toBe(frames.length);
+  expect(recorder.dataLayerEvents).toHaveLength(before + 1);
 });

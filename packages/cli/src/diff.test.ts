@@ -193,6 +193,17 @@ describe('dataLayer lines', () => {
     expect(formatDiff({ ...empty, dataLayer: joined }, 'a', 'b')).toContain('  new path coupon (string) in purchase (renamed from checkout_completed) [epoch undecided, frame main]\n');
   });
 
+  test('a joined move reads renamed from in the move line', () => {
+    const none = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], typeChanges: [], kindChanged: [], changed: false };
+    const moved = [
+      { event: 'purchase', renamedFrom: 'checkout_completed', kind: 'epoch' as const, pushKind: 'object' as const, frame: 'main', from: 'undecided', to: 'granted' },
+      { event: 'purchase', renamedFrom: 'checkout_completed', kind: 'frame' as const, epoch: 'granted', from: 'main', to: 'embedded' },
+    ];
+    const out = formatDiff({ ...empty, dataLayer: { ...none, moved } }, 'a', 'b');
+    expect(out).toContain('  moved event purchase (renamed from checkout_completed) from epoch undecided to granted [frame main]\n');
+    expect(out).toContain('  moved event purchase (renamed from checkout_completed) from frame main to embedded [epoch granted]\n');
+  });
+
   test('an unchanged dataLayer section still says no differences', () => {
     const none = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], typeChanges: [], moved: [], kindChanged: [], changed: false };
     expect(formatDiff({ ...empty, dataLayer: none }, 'a', 'b')).toContain('No differences.');

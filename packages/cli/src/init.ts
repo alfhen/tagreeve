@@ -1,17 +1,29 @@
 import { appendFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { Io } from './run.ts';
 import { gitIgnoreStatus } from './git-ignore.ts';
+import { DEFAULT_BASELINES, DEFAULT_CONFIG, DEFAULT_RUNS, DEFAULT_SCENARIOS } from './defaults.ts';
 
-export const IGNORE_LINE = '/tagreeve/runs/';
-const FOLDERS = ['tagreeve/scenarios', 'tagreeve/baselines'];
-const CONFIG = 'tagreeve/config.yml';
+export const IGNORE_LINE = `/${DEFAULT_RUNS}/`;
+const FOLDERS = [DEFAULT_SCENARIOS, DEFAULT_BASELINES];
 const STARTER_CONFIG = `configSchemaVersion: 1
 # Allowed keys: site, out, options. See docs/cli.md, "Project config".
 # site:
 # out:
 # options:
 `;
+
+class NotAFolder extends Error {
+  constructor() {
+    super('not a folder');
+  }
+}
+
+class NotAFile extends Error {
+  constructor() {
+    super('not a file');
+  }
+}
 
 type Action = 'created' | 'skipped' | 'added';
 interface Item {
@@ -29,7 +41,7 @@ async function ensureIgnoreLine(cwd: string): Promise<Item> {
     current = undefined;
   }
   if (current?.split(/\r?\n/).some((line) => line.trim() === IGNORE_LINE)) return { path: '.gitignore', action: 'skipped', text: `Skipped .gitignore: it already has ${IGNORE_LINE}` };
-  if ((await gitIgnoreStatus(join(cwd, 'tagreeve/runs'), { probe: 'folder' })) === 'ignored') return { path: '.gitignore', action: 'skipped', text: 'Skipped .gitignore: git already ignores tagreeve/runs/' };
+  if ((await gitIgnoreStatus(join(cwd, DEFAULT_RUNS), { probe: 'folder' })) === 'ignored') return { path: '.gitignore', action: 'skipped', text: `Skipped .gitignore: git already ignores ${DEFAULT_RUNS}/` };
   const prefix = current === undefined || current === '' || current.endsWith('\n') ? '' : '\n';
   await appendFile(file, `${prefix}${IGNORE_LINE}\n`);
   return current === undefined
@@ -39,25 +51,25 @@ async function ensureIgnoreLine(cwd: string): Promise<Item> {
 
 async function ensureFolder(cwd: string, folder: string): Promise<Item> {
   const found = await stat(join(cwd, folder)).catch(() => undefined);
-  if (found && !found.isDirectory()) throw Object.assign(new Error('not a folder'), { code: 'NOTFOLDER' });
+  if (found && !found.isDirectory()) throw new NotAFolder();
   if (found) return { path: `${folder}/`, action: 'skipped', text: `Skipped ${folder}/: it exists` };
   await mkdir(join(cwd, folder), { recursive: true });
   return { path: `${folder}/`, action: 'created', text: `Created ${folder}/` };
 }
 
 async function ensureConfig(cwd: string): Promise<Item> {
-  const found = await stat(join(cwd, CONFIG)).catch(() => undefined);
-  if (found && !found.isFile()) throw Object.assign(new Error('not a file'), { code: 'NOTFILE' });
-  if (found) return { path: CONFIG, action: 'skipped', text: `Skipped ${CONFIG}: it exists` };
-  await mkdir(join(cwd, 'tagreeve'), { recursive: true });
-  await writeFile(join(cwd, CONFIG), STARTER_CONFIG, { flag: 'wx' });
-  return { path: CONFIG, action: 'created', text: `Created ${CONFIG}` };
+  const found = await stat(join(cwd, DEFAULT_CONFIG)).catch(() => undefined);
+  if (found && !found.isFile()) throw new NotAFile();
+  if (found) return { path: DEFAULT_CONFIG, action: 'skipped', text: `Skipped ${DEFAULT_CONFIG}: it exists` };
+  await mkdir(dirname(join(cwd, DEFAULT_CONFIG)), { recursive: true });
+  await writeFile(join(cwd, DEFAULT_CONFIG), STARTER_CONFIG, { flag: 'wx' });
+  return { path: DEFAULT_CONFIG, action: 'created', text: `Created ${DEFAULT_CONFIG}` };
 }
 
 function failureText(path: string, error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;
-  if (code === 'NOTFOLDER') return `${path.replace(/\/$/, '')} is not a folder\n`;
-  if (code === 'NOTFILE') return `${path} is not a file\n`;
+  if (error instanceof NotAFolder) return `${path.replace(/\/$/, '')} is not a folder\n`;
+  if (error instanceof NotAFile) return `${path} is not a file\n`;
   const reason = code === 'EACCES' || code === 'EPERM' ? 'permission denied' : code === 'EEXIST' ? 'it exists' : code === 'ENOTDIR' || code === 'EISDIR' ? 'a file or folder is in the way' : 'the write failed';
   return `Could not write ${path}: ${reason}\n`;
 }
@@ -65,7 +77,7 @@ function failureText(path: string, error: unknown): string {
 export async function initCommand(io: Io, json = false, cwd: string = process.cwd()): Promise<number> {
   const steps: Array<[string, () => Promise<Item>]> = [
     ...FOLDERS.map((folder): [string, () => Promise<Item>] => [`${folder}/`, () => ensureFolder(cwd, folder)]),
-    [CONFIG, () => ensureConfig(cwd)],
+    [DEFAULT_CONFIG, () => ensureConfig(cwd)],
     ['.gitignore', () => ensureIgnoreLine(cwd)],
   ];
   const items: Item[] = [];

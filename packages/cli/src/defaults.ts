@@ -1,6 +1,6 @@
 import { readdir, stat } from 'node:fs/promises';
 
-export type DefaultSetting = 'scenarios' | 'trackerList' | 'autoconsentRules' | 'stores' | 'baseline';
+export type DefaultSetting = 'config' | 'scenarios' | 'trackerList' | 'autoconsentRules' | 'stores' | 'baseline';
 
 /** A file or folder used because its flag was not given. `path` is a fixed relative name; a baseline path is the default file for `run` or the default folder for `suite`. */
 export interface DefaultUsed {
@@ -8,6 +8,8 @@ export interface DefaultUsed {
   path: string;
 }
 
+export const DEFAULT_CONFIG = 'tagreeve/config.yml';
+export const DEFAULT_RUNS = 'tagreeve/runs';
 export const DEFAULT_SCENARIOS = 'tagreeve/scenarios';
 export const DEFAULT_TRACKER_LIST = 'tagreeve/trackers.json';
 export const DEFAULT_AUTOCONSENT_DIR = 'tagreeve/autoconsent';
@@ -15,6 +17,7 @@ export const DEFAULT_STORES = 'tagreeve/stores.json';
 export const DEFAULT_BASELINES = 'tagreeve/baselines';
 
 const SETTING_TEXT: Record<DefaultSetting, string> = {
+  config: 'project config',
   scenarios: 'scenario folder',
   trackerList: 'tracker list',
   autoconsentRules: 'autoconsent rules',
@@ -82,5 +85,6 @@ export async function defaultStores(used: DefaultUsed[]): Promise<string | undef
 
 export function formatDefaultsLine(defaults: readonly DefaultUsed[] | undefined): string | undefined {
   if (!defaults?.length) return undefined;
-  return `Defaults: ${defaults.map((d) => `${d.path} (${SETTING_TEXT[d.setting]})`).join(', ')}`;
+  const ordered = [...defaults.filter((d) => d.setting === 'config'), ...defaults.filter((d) => d.setting !== 'config')];
+  return `Defaults: ${ordered.map((d) => `${d.path} (${SETTING_TEXT[d.setting]})`).join(', ')}`;
 }

@@ -180,17 +180,20 @@ describe('push kind', () => {
 
   test('a Shopify object push pairs with a gtag purchase and warns once', () => {
     const d = diffPushes([kinded('checkout_completed', 'object', ['event', 'value'])], [kinded('purchase', 'gtag', ['value', 'currency'])]);
-    expect(d.kindChanged).toEqual([{ epoch: 'undecided', event: 'purchase', frame: 'main', from: 'object', to: 'gtag' }]);
+    expect(d.kindChanged).toEqual([{ epoch: 'undecided', event: 'purchase', frame: 'main', from: 'object', to: 'gtag', renamedFrom: 'checkout_completed' }]);
     expect(d.eventsRemoved).toEqual([]);
     expect(d.eventsAdded).toEqual([]);
     expect(d.pathsRemoved.map((p) => p.path)).toEqual(['event']);
     expect(d.pathsAdded.map((p) => p.path)).toEqual(['currency']);
   });
 
-  test('a user entry for a Shopify name gives the same pairing', () => {
-    const map = parseEventMap(JSON.stringify({ events: { checkout_completed: 'purchase' } }), 'm.json');
-    const d = diffPushes([kinded('checkout_completed', 'object', ['value'])], [kinded('purchase', 'gtag', ['value'])], { eventMap: map });
-    expect(d.kindChanged).toHaveLength(1);
+  test('a user entry for a Shopify name wins over the built-in pairing', () => {
+    const map = parseEventMap(JSON.stringify({ events: { checkout_completed: 'order_done' } }), 'm.json');
+    const a = [kinded('checkout_completed', 'object', ['value'])];
+    const b = [kinded('order_done', 'gtag', ['value'])];
+    expect(diffPushes(a, b).kindChanged).toEqual([]);
+    const d = diffPushes(a, b, { eventMap: map });
+    expect(d.kindChanged).toEqual([{ epoch: 'undecided', event: 'order_done', frame: 'main', from: 'object', to: 'gtag', renamedFrom: 'checkout_completed' }]);
     expect(d.eventsRemoved).toEqual([]);
   });
 

@@ -9,15 +9,15 @@ Not released yet. The newest release is 0.6.1, below.
 - The handoff label uses the room up to the pill's width limit and the pill has a 14 px radius, so four lines are not cut at the corners (#1428, #1411).
 - Tests for the card frame field, the form of a click, the controls of a form, and a required select and textarea (#1338, #1412, #1202). The handoff label title is covered by the unit test only, because the closed shadow root hides it from Playwright (#1417).
 
-<!-- E10 -->
+- `diff`: a move or a kind change of a joined pair now names the recorded event with `renamedFrom`, and moves have an optional `pushKind` in `--json`. A cross-epoch join forms only when it can become a move. The `push kind changed` warning says `(renamed from <name>)` for a joined pair.
 
 <!-- V10 -->
 
-<!-- F10 -->
+- Internal: the folder names under `tagreeve/` and the `Defaults:` line code live in one place. `run` and `suite` read the out folder and the old-runs notice from one call. No change in output (#972, #1041, #1049, #1061, #1330, #1137, #1132).
 
-<!-- D10 -->
+- Internal: one rule for what a Google loader URL is, for a valid layer name, for the GTM tag statuses and for a duration. Every duration key in a scenario now fails with the same message: "must be a duration such as 4s, 500ms or 2m" (#1327). Internal cleanups: #1236, #1357, #1238, #1318.
 
-<!-- Z10 -->
+- Tests and cleanup: #1105, #1106, #1107, #1108, #1325, #1124, #1169, #1365, #954, #1380.
 
 <!-- I10 -->
 

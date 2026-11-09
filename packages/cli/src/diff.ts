@@ -54,8 +54,8 @@ export function describePushDiff(d: PushDiff): string[] {
     ...d.typeChanges.map((p) => `type change ${p.path}: ${p.a.join('|')} -> ${p.b.join('|')} in ${named(p)} ${at(p)}`),
     ...d.moved.map((m) =>
       m.kind === 'frame'
-        ? `moved event ${m.event} from frame ${m.from} to ${m.to} [epoch ${m.epoch}]`
-        : `moved event ${m.event} from epoch ${m.from} to ${m.to} [frame ${m.frame}]`,
+        ? `moved event ${named(m)} from frame ${m.from} to ${m.to} [epoch ${m.epoch}]`
+        : `moved event ${named(m)} from epoch ${m.from} to ${m.to} [frame ${m.frame}]`,
     ),
   ];
 }
