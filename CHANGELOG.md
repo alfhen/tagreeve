@@ -33,7 +33,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 <!-- T10 -->
 
-Tests and cleanup: #1144, #1341, #1146, #1192, #1244, #1340, #1195, #1155, #1156, #908. `suite` now lets a usage error go up to `main`, as `run` does; the text and exit code are the same.
+- Tests and cleanup: #1144, #1341, #1146, #1192, #1244, #1340, #1195, #1155, #1156, #908. `suite` now lets a usage error go up to `main`, as `run` does; the text and exit code are the same.
 
 <!-- C10 -->
 
