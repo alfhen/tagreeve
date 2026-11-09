@@ -12,7 +12,8 @@ import {
 } from '@tagreeve/core';
 import { expect, test } from 'vitest';
 import { decodeRequest } from '@tagreeve/decoders';
-import { HASH_REQUIRED_VENDORS, effectiveConsentAt, epochForHit, evaluate, placeHitsInEpochs, type EvalEpoch } from './evaluate.ts';
+import { effectiveConsentAt, epochForHit, evaluate, placeHitsInEpochs, type EvalEpoch } from './evaluate.ts';
+import { HASH_REQUIRED_VENDORS } from './hash-vendors.ts';
 import { parseScenario } from './scenario.ts';
 import { README_SCENARIO } from './readme-scenario.ts';
 

@@ -1,3 +1,4 @@
+import { HASH_REQUIRED_VENDORS } from './hash-vendors.ts';
 import {
   fieldHashes,
   findStableHashes,
@@ -870,7 +871,6 @@ function joinLabels(labels: Set<string>): string {
 const PLAIN_ADDRESS_PARAMS = new Set(['user_data.city', 'user_data.postal_code', 'user_data.country']);
 // Only these vendors document plain city, postal code and country. The Conversions API requires them hashed.
 const PLAIN_ADDRESS_VENDORS = new Set(['sgtm']);
-export const HASH_REQUIRED_VENDORS: ReadonlySet<string> = new Set(['meta-capi']);
 const DIGEST_SHAPE = /^(?:[0-9a-f]{64}|[A-Za-z0-9+/_-]{43}=?)$/i;
 
 function allForms(h: HashForms): string[] {
@@ -1552,14 +1552,23 @@ function percentLayers(text: string): string[] {
 // every text form that holds the long value has the short value only inside it, and no base64-decoded reading holds the short
 // value outside the long one. A text form without the long value says nothing. At least one text form must hold the long value
 // (sawLong); a long value that only a base64-decoded reading holds is not an edge-shifted twin.
-function isEdgeShift(a: string, b: string, bodies: string[]): boolean {
+interface BodyForms {
+  textForms: Set<string>;
+  decoded: string[];
+}
+
+function bodyForms(raw: string): BodyForms {
+  const stripped = raw.replace(/\[\]|%5B%5D/gi, '');
+  const textForms = new Set(percentLayers(stripped).flatMap((layer) => [layer, jsonUnescaped(layer)]));
+  const decoded = [...textForms].flatMap((form) => readings(form)).filter((form) => !textForms.has(form));
+  return { textForms, decoded };
+}
+
+function isEdgeShift(a: string, b: string, bodies: readonly BodyForms[]): boolean {
   const [short, long] = a.length <= b.length ? [a, b] : [b, a];
   if (!long.includes(short)) return false;
   let sawLong = false;
-  const ok = bodies.every((raw) => {
-    const stripped = raw.replace(/\[\]|%5B%5D/gi, '');
-    const textForms = new Set(percentLayers(stripped).flatMap((layer) => [layer, jsonUnescaped(layer)]));
-    const decoded = [...textForms].flatMap((form) => readings(form)).filter((form) => !textForms.has(form));
+  const ok = bodies.every(({ textForms, decoded }) => {
     return [...textForms, ...decoded].every((text) => {
       if (text.includes(long)) {
         if (textForms.has(text)) sawLong = true;
@@ -1579,10 +1588,11 @@ function mergeEdgeReadings(found: Map<string, { kind: string; where: Map<string,
   const best = (f: { where: Map<string, number> }) => Math.min(...f.where.values());
   const valueOf = (key: string, kind: string) => key.slice(kind.length + 1);
   const fields = [...found].filter(([, f]) => best(f) < 2);
+  let forms: BodyForms[] | undefined;
   for (const [key, f] of [...found]) {
     if (best(f) < 2 || [...f.where.keys()].some((w) => w !== 'the body')) continue;
     const value = valueOf(key, f.kind);
-    const twin = fields.find(([k, other]) => other.kind === f.kind && isEdgeShift(valueOf(k, other.kind), value, bodies));
+    const twin = fields.find(([k, other]) => other.kind === f.kind && isEdgeShift(valueOf(k, other.kind), value, (forms ??= bodies.map(bodyForms))));
     if (!twin) continue;
     for (const [w, tier] of f.where) twin[1].where.set(w, Math.min(tier, twin[1].where.get(w) ?? tier));
     found.delete(key);
