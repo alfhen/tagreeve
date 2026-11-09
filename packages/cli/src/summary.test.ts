@@ -350,7 +350,7 @@ function serverRecords(error?: string): RunRecords {
 
 test('the summary counts the server container calls by link, in the line and in --json', () => {
   const summary = buildSummary(serverRecords(), [], 'run.jsonl');
-  expect(summary.serverContainer).toEqual({ calls: 4, exact: 2, probable: 1, unlinked: 1, forwarded: 3, notExact: { eventId: { none: 1, noMatch: 1, several: 0 }, clientId: { noClientId: 0, noSameKeyHit: 0, severalSameKeyHits: 0, answeredBefore: 2 } } });
+  expect(summary.serverContainer).toEqual({ calls: 4, exact: 2, probable: 1, unlinked: 1, forwarded: 3, notExact: { eventId: { none: 1, noMatch: 1, several: 0 }, clientId: { noClientId: 0, noSameKeyHit: 0, severalSameKeyHits: 0, answeredBefore: 2, concurrentRequest: 0 } } });
   const text = formatSummary(summary);
   expect(text).toContain('Server container: image ok; 4 vendor calls, 2 linked exactly, 1 probable, 1 unlinked; 3 requests forwarded to Google');
   expect(text).toContain('Not shown: Stape-only features');
