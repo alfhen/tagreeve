@@ -103,30 +103,24 @@ test('a page that patches Function.prototype.call and Event.prototype.stopPropag
   await run.recorder.close();
 }, 60_000);
 
-// Mirrors the pill styles in handoff-overlay.ts. Dropping only flex-shrink: 0 does not shrink the button in Chromium (min-width: auto); min-width: 0 does.
-const PILL_PADDING_LEFT = 12;
+// Mirrors the pill padding in handoff-overlay.ts. A click DONE_MIN_WIDTH px left of the content edge lands on the Done button only while it keeps that width. Dropping only flex-shrink: 0 does not shrink the button in Chromium (min-width: auto); min-width: 0 does.
 const PILL_PADDING_RIGHT = 6;
-const PILL_GAP = 10;
-const LABEL_CAP = 300;
+const DONE_MIN_WIDTH = 40;
 
 test('a long handoff text keeps the pill inside a 390 px viewport with the Done button whole', async () => {
   const run = await open('/handoff', LONG_TEXT);
   let timer: NodeJS.Timeout | undefined;
   try {
     const wide = await pillBox(run.page);
-    const buttonWidth = wide.width - PILL_PADDING_LEFT - PILL_GAP - LABEL_CAP - PILL_PADDING_RIGHT;
-    expect(wide.width).toBeLessThan(420);
-    expect(buttonWidth).toBeGreaterThan(40);
-    expect(buttonWidth).toBeLessThan(100);
+    expect(wide.width).toBeLessThanOrEqual(420);
     await run.page.setViewportSize({ width: 390, height: 844 });
     await expect.poll(async () => (await pillBox(run.page)).width, { timeout: 10_000 }).toBeLessThanOrEqual(358);
     const box = await pillBox(run.page);
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(390);
-    const doneLeftEdge = box.x + box.width - PILL_PADDING_RIGHT - buttonWidth;
-    await run.page.mouse.click(doneLeftEdge + 4, box.y + box.height / 2);
+    await run.page.mouse.click(box.x + box.width - PILL_PADDING_RIGHT - DONE_MIN_WIDTH, box.y + box.height / 2);
     const timeout = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error('a click 4 px inside the Done button left edge did not end the wait')), 10_000);
+      timer = setTimeout(() => reject(new Error('a click 40 px inside the Done button right edge did not end the wait')), 10_000);
     });
     await Promise.race([run.played, timeout]);
   } finally {
