@@ -33,7 +33,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 - Tests and cleanup: one `GOOGLE_VENDORS`, one `expectedTagsOf`, one "and N more" list helper and one `gcdLetterAt`. The Consent Mode setup, `report-marks` and `redactFlagDetail` tests check their inputs first and use the recorder builders (#1150, #1224, #1222, #1305, #1307, #1167, #1378).
 
-<!-- B10 -->
+- Tests and cleanup: #1144, #1341, #1146, #1192, #1244, #1340, #1195, #1155, #1156, #908. `suite` now lets a usage error go up to `main`, as `run` does; the text and exit code are the same.
 
 - Docs for 0.6.2: the handoff label width and radius, the `wait` timeout for a gone form, the exact count placements, unload sends in the container link rule, `renamedFrom` and `pushKind` in `diff --json`, the `in the push` label and the card frame reason. `init` creates nothing when a target is refused (#1455), and `diff` does not report the event path when a push changes kind (#1456). The docs-text test fails when a heading or a line it reads is missing. Three lines of 0.6.1 are corrected (#1395, #1397, #1413, #1435, #1436, #1437, #1445, #1446, #1447, #1438, #1439).
 

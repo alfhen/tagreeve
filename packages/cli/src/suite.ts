@@ -4,7 +4,7 @@ import { readRun, ulid } from '@tagreeve/core';
 import type { TrackerEntry } from '@tagreeve/decoders';
 import { diffRuns, mergeOptions, parseScenario, ScenarioError, type Scenario, type ScenarioOptions } from '@tagreeve/expect';
 import { GtmOverrideError, hasHandoff, hasPayment, normalizeHost, parseTestGtmOrigin, TEST_GTM_ORIGIN_ENV, type GtmOverrideInput, type TestPayment } from '@tagreeve/recorder';
-import { UsageError, usageHint, type Network, type SuiteArgs } from './args.ts';
+import { UsageError, type Network, type SuiteArgs } from './args.ts';
 import { baselineFileName, BaselineError, compareBaseline, readBaseline, type BaselineFile } from './baseline.ts';
 import { DEFAULT_BASELINES, DEFAULT_STORES, defaultScenarioDir, defaultStores, resolveAutoconsentRules, resolveTrackerList, formatDefaultsLine, type DefaultUsed } from './defaults.ts';
 import { warnIfNotIgnored } from './git-ignore.ts';
@@ -282,16 +282,6 @@ async function loadStores(path: string | undefined, io: Io): Promise<Store[] | u
 }
 
 export async function suiteCommand(args: SuiteArgs, io: Io, deps: SuiteDeps = { run: executeRun }): Promise<number> {
-  try {
-    return await runSuite(args, io, deps);
-  } catch (error) {
-    if (!(error instanceof UsageError)) throw error;
-    io.stderr(`${error.message}\n${usageHint(error.command)}\n`);
-    return 2;
-  }
-}
-
-async function runSuite(args: SuiteArgs, io: Io, deps: SuiteDeps): Promise<number> {
   if (args.allowTestPayment !== undefined && args.site === undefined && args.stores === undefined) {
     throw new UsageError('--allow-test-payment needs --site or --stores on the command line. A default file never supplies the host a test payment runs on.', 'suite');
   }

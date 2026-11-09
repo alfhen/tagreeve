@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { newId, RunWriter, type Run } from '@tagreeve/core';
 import { createFakeDocker } from '../../recorder/src/server-container/fake-docker.test-helper.ts';
 import { expect, test } from 'vitest';
-import type { SuiteArgs } from './args.ts';
+import { UsageError, type SuiteArgs } from './args.ts';
+import { main } from './main.ts';
 import { labelRecord, type RunOutcome, type RunSpec } from './run.ts';
 import { buildBaseline } from './baseline.ts';
 import { cellText, formatSuiteTable, suiteCommand, suiteExitCode, type SuiteManifest } from './suite.ts';
@@ -45,6 +46,13 @@ function capture() {
   const stdout: string[] = [];
   const stderr: string[] = [];
   return { io: { stdout: (t: string) => void stdout.push(t), stderr: (t: string) => void stderr.push(t) }, out: () => stdout.join(''), err: () => stderr.join('') };
+}
+
+async function usageMessage(run: Promise<number>): Promise<string> {
+  const error = await run.then(() => undefined, (e: unknown) => e);
+  expect(error).toBeInstanceOf(UsageError);
+  expect((error as UsageError).command).toBe('suite');
+  return (error as UsageError).message;
 }
 
 const pass: RunOutcome = { code: 0, summary: { ok: true, pass: true } as RunOutcome['summary'] };
@@ -553,10 +561,9 @@ test('--allow-test-payment that matches no store with --stores, --with-test-paym
   try {
     const fake = recorder();
     const c = capture();
-    const code = await suiteCommand(args(dir, out, { site: undefined, stores, withTestPayment: true, allowTestPayment: 'localhots' }), c.io, fake);
-    expect(code).toBe(2);
-    expect(c.err()).toContain('--allow-test-payment localhots');
-    expect(c.err()).not.toContain('4000');
+    const message = await usageMessage(suiteCommand(args(dir, out, { site: undefined, stores, withTestPayment: true, allowTestPayment: 'localhots' }), c.io, fake));
+    expect(message).toContain('--allow-test-payment localhots');
+    expect(message).not.toContain('4000');
     expect(fake.specs).toEqual([]);
   } finally {
     restore();
@@ -642,6 +649,9 @@ test('--server-container with a missing image exits 2 before any scenario and pr
     Object.assign(process.env, saved);
   }
   expect(fake.specs).toEqual([]);
+  expect(Buffer.from(env.TAGREEVE_SERVER_CONTAINER_CONFIG, 'base64').toString()).toContain('pw-fixture-auth');
+  expect(c.err()).not.toContain('pw-fixture-auth');
+  expect(c.err()).not.toContain(env.TAGREEVE_SERVER_CONTAINER_CONFIG);
   expect(c.err().match(/is not available/g)).toHaveLength(1);
   expect(c.err()).toContain('tagreeve server-container build');
 });
@@ -787,15 +797,14 @@ test('a flag replaces its default, --site means stores.json is not used, and no 
 test('suite with no site and no stores file, or no folder, names what is missing', async () => {
   await inProject({ 'tagreeve/scenarios/a.yml': VALID }, async () => {
     const c = capture();
-    expect(await suiteCommand(bare(), c.io, recorder())).toBe(2);
-    expect(c.err()).toContain('--site');
-    expect(c.err()).toContain('--stores');
-    expect(c.err()).toContain('tagreeve/stores.json');
+    const message = await usageMessage(suiteCommand(bare(), c.io, recorder()));
+    expect(message).toContain('--site');
+    expect(message).toContain('--stores');
+    expect(message).toContain('tagreeve/stores.json');
   });
   await inProject({}, async () => {
     const c = capture();
-    expect(await suiteCommand(bare({ site: 'https://x.example.com' }), c.io, recorder())).toBe(2);
-    expect(c.err()).toContain('tagreeve/scenarios');
+    expect(await usageMessage(suiteCommand(bare({ site: 'https://x.example.com' }), c.io, recorder()))).toContain('tagreeve/scenarios');
   });
 });
 
@@ -804,8 +813,7 @@ test('--allow-test-payment needs --site or --stores on the command line, also wh
   await inProject({ ...PROJECT, 'tagreeve/stores.json': stores }, async (root) => {
     const fake = recorder();
     const c = capture();
-    expect(await suiteCommand(bare({ out: join(root, 'out'), allowTestPayment: 'localhost' }), c.io, fake)).toBe(2);
-    expect(c.err()).toContain('--allow-test-payment');
+    expect(await usageMessage(suiteCommand(bare({ out: join(root, 'out'), allowTestPayment: 'localhost' }), c.io, fake))).toContain('--allow-test-payment');
     expect(fake.specs).toEqual([]);
   });
 });
@@ -900,35 +908,19 @@ const todayFolders = (): string[] => {
   return [at(new Date(Date.now() - 60_000)), at(new Date())];
 };
 
-test('the missing site, the missing folder and the test-payment refusals carry the suite help hint', async () => {
-  await inProject({ 'tagreeve/scenarios/a.yml': VALID }, async () => {
-    const c = capture();
-    expect(await suiteCommand(bare(), c.io, recorder())).toBe(2);
-    expect(c.err()).toContain('suite needs a site');
-    expect(c.err()).toContain(HINT);
-  });
-  await inProject({}, async () => {
-    const c = capture();
-    expect(await suiteCommand(bare({ site: 'https://x.example.com' }), c.io, recorder())).toBe(2);
-    expect(c.err()).toContain('suite needs a scenario folder');
-    expect(c.err()).toContain(HINT);
-  });
-  await inProject({ 'tagreeve/scenarios/a.yml': VALID }, async () => {
-    const c = capture();
-    expect(await suiteCommand(bare({ allowTestPayment: 'localhost' }), c.io, recorder())).toBe(2);
-    expect(c.err()).toContain('--allow-test-payment needs --site or --stores');
-    expect(c.err()).toContain(HINT);
-  });
-  const { dir, out } = await workDir({ 'pay.yml': PAYMENT });
-  const stores = await storesFile(dir, [{ name: 'local', site: 'http://localhost:4000' }]);
-  const restore = await allowHost(dir, 'localhots');
-  try {
-    const c = capture();
-    expect(await suiteCommand(args(dir, out, { site: undefined, stores, withTestPayment: true, allowTestPayment: 'localhots' }), c.io, recorder())).toBe(2);
-    expect(c.err()).toContain('--allow-test-payment localhots');
-    expect(c.err()).toContain(HINT);
-  } finally {
-    restore();
+test('main prints a suite usage error with the suite help hint and exits 2', async () => {
+  const cases: [string[], Record<string, string>, string][] = [
+    [['suite'], { 'tagreeve/scenarios/a.yml': VALID }, 'suite needs a site'],
+    [['suite', '--site', 'https://x.example.com'], {}, 'suite needs a scenario folder'],
+    [['suite', '--allow-test-payment', 'localhost'], { 'tagreeve/scenarios/a.yml': VALID }, '--allow-test-payment needs --site or --stores'],
+  ];
+  for (const [argv, files, message] of cases) {
+    await inProject(files, async () => {
+      const c = capture();
+      expect(await main(argv, c.io)).toBe(2);
+      expect(c.err()).toContain(message);
+      expect(c.err()).toContain(HINT);
+    });
   }
 });
 
@@ -959,8 +951,7 @@ test('--out gives no notice, and a refused test payment prints no notice', async
   await inProject(files, async () => {
     const c = capture();
     const refused = bare({ out: undefined, stores: 'tagreeve/stores.json', withTestPayment: true, allowTestPayment: 'localhots' });
-    expect(await suiteCommand(refused, c.io, recorder())).toBe(2);
-    expect(c.err()).toContain('--allow-test-payment localhots: no store');
+    expect(await usageMessage(suiteCommand(refused, c.io, recorder()))).toContain('--allow-test-payment localhots: no store');
     expect(c.err()).not.toContain('holds older records');
   });
 });
@@ -970,6 +961,9 @@ test('a --stores cell record holds the store name and the site origin, and no st
   const stores = await storesFile(dir, [{ name: 'se', site: 'https://shop.example.se/private/path?token=abc', vars: { size: 'pw-secret-value' } }]);
   const written: string[] = [];
   const run = async (spec: RunSpec): Promise<RunOutcome> => {
+    expect(spec.site).toContain('token=abc');
+    expect(spec.site).toContain('/private/path');
+    expect(JSON.stringify(spec.parsed)).toContain('pw-secret-value');
     await mkdir(out, { recursive: true });
     const path = join(out, `raw-${written.length}.jsonl`);
     await writeFile(path, `${JSON.stringify({ type: 'run', id: 'run_1', scenario: spec.scenarioName, site: spec.site })}\n`);
@@ -986,9 +980,9 @@ test('a --stores cell record holds the store name and the site origin, and no st
 test('suite --baseline with a missing scenario folder hints that the folder was read as the baseline folder', async () => {
   await inProject({}, async () => {
     const c = capture();
-    expect(await suiteCommand(bare({ site: 'https://x.example.com', baseline: 'e2e/baseline' }), c.io, recorder())).toBe(2);
-    expect(c.err()).toContain('suite needs a scenario folder');
-    expect(c.err()).toContain('"e2e/baseline" was read as the baseline folder');
+    const message = await usageMessage(suiteCommand(bare({ site: 'https://x.example.com', baseline: 'e2e/baseline' }), c.io, recorder()));
+    expect(message).toContain('suite needs a scenario folder');
+    expect(message).toContain('"e2e/baseline" was read as the baseline folder');
   });
 });
 
@@ -1014,6 +1008,8 @@ test('a baseline path that holds ENOENT does not turn an invalid file into a mis
   expect(await suiteCommand(args(dir, out, { baseline: folder }), c.io, recorder())).toBe(2);
   expect(c.err()).toContain('is not valid JSON');
   expect(c.err()).not.toContain('Baseline files missing');
+  expect(c.err()).toContain('Fix an invalid file');
+  expect(c.err()).not.toContain('Save missing files');
 });
 
 test('two cells that map to one baseline file name exit 2 and name both cells', async () => {
@@ -1022,11 +1018,11 @@ test('two cells that map to one baseline file name exit 2 and name both cells', 
   await saveBaseline(folder, 'a.workspace.json', ['page_view']);
   const rec = recorder();
   const c = capture();
-  expect(await suiteCommand(args(dir, out, { baseline: folder, variants: [{ name: 'published' }, { name: 'workspace' }] }), c.io, rec)).toBe(2);
+  const message = await usageMessage(suiteCommand(args(dir, out, { baseline: folder, variants: [{ name: 'published' }, { name: 'workspace' }] }), c.io, rec));
   expect(rec.specs).toHaveLength(0);
-  expect(c.err()).toContain('a.workspace (published)');
-  expect(c.err()).toContain('a (workspace)');
-  expect(c.err()).toContain('a.workspace.json');
+  expect(message).toContain('a.workspace (published)');
+  expect(message).toContain('a (workspace)');
+  expect(message).toContain('a.workspace.json');
 });
 
 test('a saved drifting baseline changes nothing without --baseline', async () => {
