@@ -4,7 +4,7 @@
 
 Not released yet. The newest release is 0.6.0, below.
 
-<!-- L09 -->
+- A `dataLayer` push that holds an email, phone or hash that is not from the run identity now gets a `possibleRealDataPush` flag. It is a warning: the `possibleRealData` check does not count it and the exit code does not change. The flag detail names the push and the key paths, never the value. A tag name with a hex token after a character such as `!`, `$`, `^` or `~` reads `(other)` (#937, #1322).
 
 <!-- E09 -->
 

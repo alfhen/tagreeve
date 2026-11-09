@@ -365,6 +365,8 @@ export type FlagKind =
   | 'unknownDestination'
   | 'firstPartySubdomain'
   | 'possibleRealData'
+  // A `dataLayer` push holds data that is not from the run identity. A warning only: the `possibleRealData` check does not count it.
+  | 'possibleRealDataPush'
   | 'sandboxPageUrl'
   | 'stubBypass'
   | 'unloadGap'
