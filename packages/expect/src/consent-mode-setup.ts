@@ -17,7 +17,7 @@ export interface ConsentModeSetup {
 function tagId(hit: Hit): string {
   const conversionId = hit.params.conversionId;
   const tid = hit.vendor === 'ga4' ? hit.params.tid : conversionId && /^\d+$/.test(conversionId) ? `AW-${conversionId}` : undefined;
-  return tid && TAG_ID.test(tid) ? tid : '(no tag ID)';
+  return tid && TAG_ID.test(tid) ? tid : `${hit.vendor === 'ga4' ? 'GA4' : 'Google Ads'} (no tag ID)`;
 }
 
 function list(names: readonly string[]): string {
@@ -25,7 +25,8 @@ function list(names: readonly string[]): string {
 }
 
 function lettersNote(sets: ReadonlyMap<string, Set<string>>): string {
-  return [...sets].slice(0, MAX_LISTED).map(([tid, letters]) => `${tid} ${[...letters].slice(0, MAX_LETTER_SETS).join(', ')}`).join('; ');
+  const shown = [...sets].slice(0, MAX_LISTED).map(([tid, letters]) => `${tid} ${[...letters].slice(0, MAX_LETTER_SETS).join(', ')}`).join('; ');
+  return sets.size > MAX_LISTED ? `${shown}; and ${sets.size - MAX_LISTED} more` : shown;
 }
 
 /** Judges Google hits by their own `gcd`. The caller leaves out server container hits: their consent signals come from the browser hit they link to. */
@@ -73,7 +74,8 @@ export function consentModeSetup(hits: readonly Hit[], dataLayer: readonly DataL
     const groups = [...unset].map(([tid, names]) => {
       const ordered = GCD_SIGNALS.filter((n) => names.has(n));
       const note = v1Only.has(tid) ? ' (a default for ad_storage and analytics_storage only, without the two v2 signals)' : '';
-      const letters = [...(letterSets.get(tid) ?? [])].slice(0, MAX_LETTER_SETS).join(', ');
+      const unsetFirst = [...(letterSets.get(tid) ?? [])].sort((a, b) => Number(b.includes('l')) - Number(a.includes('l')));
+      const letters = unsetFirst.slice(0, MAX_LETTER_SETS).join(', ');
       return `Google tag ${tid} never set ${list(ordered)}${note} (gcd letters: ${letters})`;
     });
     const shown = groups.slice(0, MAX_LISTED).join('; ');
