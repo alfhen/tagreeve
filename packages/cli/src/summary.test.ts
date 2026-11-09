@@ -507,14 +507,15 @@ test('a possibleRealData detail is built from a request that holds a foreign ema
   expect(redactFlagDetail(flag.detail, 'possibleRealData')).toBe(flag.detail);
 });
 
-const dataLayerFlag = (flags: { detail: string }[]): string => {
+const dataLayerFlag = (kind: string, flags: { kind: string; detail: string }[]): string => {
   expect(flags).toHaveLength(1);
+  expect(flags[0]!.kind).toBe(kind);
   return flags[0]!.detail;
 };
 const runId = 'run_1' as never;
-const incomplete = dataLayerFlag(buildTallyFlags(runId, [{ frame: 0, d: 'tok', arrays: [{ layer: 'dataLayer', a: 1, length: 3, posted: 0 }], untrapped: [] }], new PayloadCounts()));
-const notHooked = dataLayerFlag([buildDataLayerNotHookedFlag({ runId, loaders: [{ id: 'req_1' as never, name: 'x' }], hooked: [] })!]);
-const reassigned = dataLayerFlag(buildDataLayerReassignedFlags({ runId, reassigns: [{ n: 0, t: 2, doc: 'd' }], loaders: [{ t: 1, doc: 'd' }] }));
+const incomplete = dataLayerFlag('dataLayerIncomplete', buildTallyFlags(runId, [{ frame: 0, d: 'tok', arrays: [{ layer: 'dataLayer', a: 1, length: 3, posted: 0 }], untrapped: [] }], new PayloadCounts()));
+const notHooked = dataLayerFlag('dataLayerNotHooked', [buildDataLayerNotHookedFlag({ runId, loaders: [{ id: 'req_1' as never, name: 'x' }], hooked: [] })!]);
+const reassigned = dataLayerFlag('dataLayerReassigned', buildDataLayerReassignedFlags({ runId, reassigns: [{ n: 0, t: 2, doc: 'd' }], loaders: [{ t: 1, doc: 'd' }] }));
 
 test.each([
   ['netLogUnreadable', 'The net log could not be read, so requests sent while a frame unloads may be missing.'],

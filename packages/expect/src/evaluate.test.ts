@@ -291,6 +291,12 @@ test('a vendor added to the required-hash set fails a plain address field with n
   }
 });
 
+test('the plain-required message starts with a capital when meta-capi is the only vendor', () => {
+  const capi = hit({ vendor: 'meta-capi', params: { 'user_data.city': 'nowhere', 'user_data.email_address': hashEmail(identity.email).hex } });
+  const result = evaluate([capi.hit, capi.req], parseScenario('start: /\nexpect:\n  must:\n    - { identity.hashesMatch: true }'), { identity })[0]!;
+  expect(result.message).toContain('not a hash. The Conversions API takes these hashed.');
+});
+
 test('the plain-required message names each vendor that sent the plain field', () => {
   const email = hashEmail(identity.email).hex;
   const ga4 = hit({ vendor: 'ga4', params: { 'user_data.city': 'nowhere', 'user_data.email_address': email } });
