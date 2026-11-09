@@ -496,6 +496,16 @@ test('a gtag purchase against an object purchase baseline pairs and warns', () =
   expect(warnings.some((w) => w.startsWith('dataLayer new event') || w.startsWith('dataLayer removed event'))).toBe(false);
 });
 
+test('a joined kind change names the baseline event it was recorded as', () => {
+  const saved = makeRun(['page_view']);
+  pushTo(saved, { event: 'checkout_completed', value: 1 }, 'dle_1');
+  const baseline = parseBaseline(JSON.stringify(buildBaseline(saved, false)), 'b.json');
+  expect(baseline.dataLayer!.map((g) => [g.event, g.kind])).toEqual([['checkout_completed', 'object']]);
+  const now = makeRun(['page_view']);
+  pushGtagPurchase(now);
+  expect(compareBaseline(baseline, now).warnings).toContain('dataLayer push kind changed: purchase (renamed from checkout_completed)');
+});
+
 test('a baseline with one kinded and one unkinded push group is refused', () => {
   const saved = makeRun(['page_view']);
   pushTo(saved, { event: 'purchase', value: 1 }, 'dle_1');

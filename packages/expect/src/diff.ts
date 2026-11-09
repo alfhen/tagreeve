@@ -115,7 +115,7 @@ export function diffRuns(a: RunRecords, b: RunRecords, options: DiffOptions = {}
   const pushesB = pushGroups(b);
   if (pushesA.length > 0 || pushesB.length > 0) {
     result.dataLayer = diffPushes(pushesA, pushesB, { acrossFrames: options.acrossFrames, epochOrder: epochOrder(b), eventMap: options.eventMap });
-    result.warnings.push(...result.dataLayer.kindChanged.map((k) => `push kind changed: ${k.event}`));
+    result.warnings.push(...result.dataLayer.kindChanged.map(kindChangeWarning));
   }
   return result;
 }
@@ -154,7 +154,12 @@ export interface PushTypeChange extends PushRef {
 
 export interface PushMove {
   event: string;
+  /** The first side's recorded name, when the event table or a user map joined it to `event`. */
+  renamedFrom?: string;
+  /** The move type. Not the push kind: see `pushKind`. */
   kind: 'epoch' | 'frame';
+  /** The push kind of the moved event. Absent when the push kinds were merged. */
+  pushKind?: PushKind;
   from: string;
   to: string;
   /** The frame kind of an epoch move. */
@@ -169,6 +174,24 @@ export interface PushKindChange {
   frame: string;
   from: PushKind;
   to: PushKind;
+  /** The first side's recorded name, when the event table or a user map joined it to `event`. */
+  renamedFrom?: string;
+}
+
+export function kindChangeWarning(k: PushKindChange): string {
+  return `push kind changed: ${k.event}${k.renamedFrom === undefined ? '' : ` (renamed from ${k.renamedFrom})`}`;
+}
+
+/** True when a group on either side has no push kind, so the two sides are compared without kinds. */
+export function kindsMerged(a: PushGroup[], b: PushGroup[]): boolean {
+  return [...a, ...b].some((g) => g.kind === undefined);
+}
+
+/** True when `from` and `to` are next to each other in `order` and each appears in it once. A move is only ever to such an epoch. */
+export function neighbourEpochs(order: string[], from: string, to: string): boolean {
+  const i = order.indexOf(from);
+  const j = order.indexOf(to);
+  return i >= 0 && j >= 0 && Math.abs(i - j) === 1 && order.filter((l) => l === from || l === to).length === 2;
 }
 
 export interface PushDiff {
@@ -263,14 +286,30 @@ const epochEventId = (g: PushGroup): string => JSON.stringify([g.epoch, g.event]
 
 const byEventThenEpoch = (x: PushGroup, y: PushGroup): number => (x.event < y.event ? -1 : x.event > y.event ? 1 : x.epoch < y.epoch ? -1 : x.epoch > y.epoch ? 1 : 0);
 
-/** Names each first-side group as the run recorded it. A name that only one side has in an epoch joins a one-side name of the other run, in the same epoch first, when the table or the user map says they are one event. The second side's name wins. One (epoch, name) of the first side joins at most one of the second, and no join gives a first-side group an (epoch, name) that another first-side group has or was given. */
-export function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap): NamedGroup[] {
+export interface PairContext {
+  /** The labels of the current run's consent epochs. Without it no join crosses epochs. */
+  epochOrder?: string[];
+  acrossFrames?: boolean;
+  mergeKinds?: boolean;
+}
+
+/** Names each first-side group as the run recorded it. A name that only one side has in an epoch joins a one-side name of the other run, in the same epoch first, when the table or the user map says they are one event. The second side's name wins. A join across epochs forms only when the move matcher of `diffPushes` would accept it: neighbour epochs and the same kinds, frames and key path types. One (epoch, name) of the first side joins at most one of the second, and no join gives a first-side group an (epoch, name) that another first-side group has or was given. */
+export function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap, context: PairContext = {}): NamedGroup[] {
   const inA = new Set(a.map(epochEventId));
   const inB = new Set(b.map(epochEventId));
   const unique = (groups: PushGroup[]): PushGroup[] => [...new Map(groups.map((g) => [epochEventId(g), g])).values()];
   const onlyA = unique(a.filter((g) => !inB.has(epochEventId(g)))).sort(byEventThenEpoch);
   const onlyB = unique(b.filter((g) => !inA.has(epochEventId(g)))).sort(byEventThenEpoch);
   const movedNames = new Set(onlyA.map((g) => g.event).filter((n) => onlyB.some((g) => g.event === n)));
+  const normalized = normalizePushGroups(a, userMap);
+  const shapeOf = (groups: PushGroup[], from: PushGroup[], epoch: string, event: string): string =>
+    JSON.stringify(
+      [...pushNodes(groups.filter((_, i) => from[i]!.epoch === epoch && from[i]!.event === event), context.acrossFrames ?? false, context.mergeKinds ?? false).values()]
+        .map((n) => JSON.stringify([n.kind ?? null, n.frame, typesId(n)]))
+        .sort(),
+    );
+  const canMove = (from: PushGroup, to: PushGroup): boolean =>
+    neighbourEpochs(context.epochOrder ?? [], from.epoch, to.epoch) && shapeOf(normalized, a, from.epoch, from.event) === shapeOf(b, b, to.epoch, to.event);
   const taken = new Set(inA);
   const claimed = new Set<string>();
   const joined = new Map<string, string>();
@@ -279,7 +318,7 @@ export function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap): N
       if (joined.has(epochEventId(from)) || (!sameEpoch && movedNames.has(from.event))) continue;
       const want = mappedEventName(from.event, userMap);
       const to = onlyB.find(
-        (g) => !claimed.has(epochEventId(g)) && builtInEventName(g.event) === want && !taken.has(JSON.stringify([from.epoch, g.event])) && (sameEpoch ? g.epoch === from.epoch : !movedNames.has(g.event)),
+        (g) => !claimed.has(epochEventId(g)) && builtInEventName(g.event) === want && !taken.has(JSON.stringify([from.epoch, g.event])) && (sameEpoch ? g.epoch === from.epoch : !movedNames.has(g.event) && canMove(from, g)),
       );
       if (to === undefined) continue;
       claimed.add(epochEventId(to));
@@ -291,19 +330,22 @@ export function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap): N
   pair(false);
   const targets = new Set(Object.values(userMap?.events ?? {}));
   const kept = mapPushGroups(a, (e) => e, userMap?.paths, (r) => [r, builtInEventName(r)].filter((k, i) => i === 0 || !targets.has(k)));
-  return normalizePushGroups(a, userMap).map((g, i) => {
+  return normalized.map((g, i) => {
     const recorded = a[i]!;
     const to = joined.get(epochEventId(recorded));
     return to === undefined ? kept[i]! : { ...g, event: to, renamedFrom: recorded.event };
   });
 }
-const typesId = (n: PushNode) => JSON.stringify([...n.types].sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)));
+function typesId(n: PushNode): string {
+  return JSON.stringify([...n.types].sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)));
+}
 
 /** Compares push shapes. Nothing here is drift: the caller reports the changes as warnings. */
 export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOptions = {}): PushDiff {
   const result: PushDiff = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], typeChanges: [], moved: [], kindChanged: [], changed: false };
-  const mergeKinds = [...a, ...b].some((g) => g.kind === undefined);
-  const na = pushNodes(pairNames(a, b, options.eventMap), options.acrossFrames ?? false, mergeKinds);
+  const mergeKinds = kindsMerged(a, b);
+  const order = options.epochOrder ?? [];
+  const na = pushNodes(pairNames(a, b, options.eventMap, { epochOrder: order, acrossFrames: options.acrossFrames, mergeKinds }), options.acrossFrames ?? false, mergeKinds);
   const nb = pushNodes(b, options.acrossFrames ?? false, mergeKinds);
   const gone: PushNode[] = [];
   const fresh: PushNode[] = [];
@@ -315,7 +357,7 @@ export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOpti
     }
     for (const [path, types] of x.types) if (!y.types.has(path)) result.pathsRemoved.push({ ...nodeRef(x), path, types });
     if (x.frames.slice().sort().join() !== y.frames.slice().sort().join()) {
-      result.moved.push({ event: y.event, kind: 'frame', epoch: y.epoch, from: x.frames.slice().sort().join('+'), to: y.frames.slice().sort().join('+') });
+      result.moved.push({ event: y.event, ...(x.renamedFrom === undefined ? {} : { renamedFrom: x.renamedFrom }), kind: 'frame', ...(y.kind === undefined ? {} : { pushKind: y.kind }), epoch: y.epoch, from: x.frames.slice().sort().join('+'), to: y.frames.slice().sort().join('+') });
     }
   };
   for (const id of [...new Set([...na.keys(), ...nb.keys()])].sort()) {
@@ -333,25 +375,21 @@ export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOpti
     if (!f) continue;
     gone.splice(gone.indexOf(g), 1);
     fresh.splice(fresh.indexOf(f), 1);
-    result.kindChanged.push({ epoch: g.epoch, event: g.event, frame: g.frame, from: g.kind!, to: f.kind! });
+    result.kindChanged.push({ epoch: g.epoch, event: g.event, frame: g.frame, from: g.kind!, to: f.kind!, ...(g.renamedFrom === undefined ? {} : { renamedFrom: g.renamedFrom }) });
     compare(g, f);
   }
 
-  const order = options.epochOrder ?? [];
   const taken = new Set<PushNode>();
   for (const g of gone) {
-    const i = order.indexOf(g.epoch);
-    const match = fresh.find((f) => {
-      if (taken.has(f) || f.event !== g.event || f.kind !== g.kind || f.frame !== g.frame || typesId(f) !== typesId(g)) return false;
-      const j = order.indexOf(f.epoch);
-      return i >= 0 && j >= 0 && Math.abs(i - j) === 1 && order.filter((l) => l === g.epoch || l === f.epoch).length === 2;
-    });
+    const match = fresh.find(
+      (f) => !taken.has(f) && f.event === g.event && f.kind === g.kind && f.frame === g.frame && typesId(f) === typesId(g) && neighbourEpochs(order, g.epoch, f.epoch),
+    );
     if (!match) {
       result.eventsRemoved.push({ ...nodeRef({ ...g, renamedFrom: undefined }), event: g.renamedFrom ?? g.event });
       continue;
     }
     taken.add(match);
-    result.moved.push({ event: g.event, kind: 'epoch', frame: g.frame, from: g.epoch, to: match.epoch });
+    result.moved.push({ event: g.event, ...(g.renamedFrom === undefined ? {} : { renamedFrom: g.renamedFrom }), kind: 'epoch', ...(g.kind === undefined ? {} : { pushKind: g.kind }), frame: g.frame, from: g.epoch, to: match.epoch });
   }
   for (const f of fresh) if (!taken.has(f)) result.eventsAdded.push(nodeRef(f));
   result.changed = result.eventsAdded.length + result.eventsRemoved.length + result.pathsAdded.length + result.pathsRemoved.length + result.typeChanges.length + result.kindChanged.length > 0;
@@ -484,10 +522,7 @@ function findMove(epochs: Map<string, { a?: ShapeKey; b?: ShapeKey }>, order: st
   const d1 = total(v1.b) - total(v1.a);
   if (d1 + total(v2.b) - total(v2.a) !== 0) return undefined;
   const [from, to] = d1 < 0 ? [[e1, v1], [e2, v2]] as const : [[e2, v2], [e1, v1]] as const;
-  const i = order.indexOf(from[0]);
-  const j = order.indexOf(to[0]);
-  if (i < 0 || j < 0 || Math.abs(i - j) !== 1) return undefined;
-  if (order.filter((l) => l === from[0] || l === to[0]).length !== 2) return undefined;
+  if (!neighbourEpochs(order, from[0], to[0])) return undefined;
   if (!contains(tupleCounts(from[1].a), tupleCounts(from[1].b))) return undefined;
   if (!contains(tupleCounts(to[1].b), tupleCounts(to[1].a))) return undefined;
   if (!sameCounts(surplusByIds(from[1].a, from[1].b), surplusByIds(to[1].b, to[1].a))) return undefined;
