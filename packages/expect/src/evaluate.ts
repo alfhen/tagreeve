@@ -173,9 +173,15 @@ function placementsChange(ctx: Context, rule: Rule, unlinked: readonly Hit[], pr
   const prefixes = isPlainExactCount(rule);
   // A plain exact count tries the unlinked hits by number, n + 1 placements, so only a subset search counts them against the cap.
   if ((prefixes ? 0 : unlinked.length) + reach.length > MAX_SEARCHED_HITS) return true;
-  const unlinkedStates = prefixes ? unlinked.length + 1 : 2 ** unlinked.length;
-  for (let u = 0; u < unlinkedStates; u++) {
-    const placed = prefixes ? unlinked.slice(0, u) : unlinked.filter((_, i) => u & (2 ** i));
+  if (prefixes) {
+    // Every placed unlinked hit and every selected probable hit is in scope, so only how many of each counts: (n + 1)(r + 1) runs.
+    for (let u = 0; u <= unlinked.length; u++) {
+      for (let j = 0; j <= reach.length; j++) if (run(unlinked.slice(0, u), reach.slice(0, j))) return true;
+    }
+    return false;
+  }
+  for (let u = 0; u < 2 ** unlinked.length; u++) {
+    const placed = unlinked.filter((_, i) => u & (2 ** i));
     for (let code = 0; code < 2 ** reach.length; code++) if (run(placed, reach.filter((_, i) => code & (2 ** i)))) return true;
   }
   return false;

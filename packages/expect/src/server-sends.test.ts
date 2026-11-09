@@ -308,6 +308,20 @@ describe('rules on a server hit', () => {
       expect(result.note).toBeUndefined();
       expect(result.severity).toBeUndefined();
     });
+
+    test('a plain exact count with many unlinked and probable hits is decided by number, quickly', () => {
+      const five = '  must:\n    - { vendor: meta-capi, in: epoch(denied), count: 5 }';
+      const direct = Array.from({ length: 6 }, (_, i) => browser(100 + i, { vendor: 'meta-capi' }));
+      const unlinked = Array.from({ length: 50 }, (_, i) => capi(300 + i, undefined));
+      const vias = Array.from({ length: 10 }, (_, i) => browser(500 + i));
+      const probable = vias.map((via, i) => capi(1500 + i, link(via, 'probable')));
+      const unrelated = Array.from({ length: 200 }, (_, i) => browser(3000 + i));
+      const started = performance.now();
+      const result = rule(five, [...direct, ...unlinked, ...vias, ...probable, ...unrelated]);
+      expect(result.pass).toBe(false);
+      expect(result.note).toBeUndefined();
+      expect(performance.now() - started).toBeLessThan(3000);
+    });
   });
 
   describe('an exact count tries every placement of the probable links', () => {
