@@ -24,6 +24,7 @@ test('a push that holds a foreign email gets a possibleRealDataPush warning that
     expect(f.recordIds.some((id) => pushIds.has(id))).toBe(true);
     expect(f.detail).toMatch(/^dataLayer push dle_\S+ in step \S+ carries \d+ .*value\(s\) that are not from the run identity/);
     expect(f.detail).not.toContain(EMAIL);
+    expect(f.detail).not.toContain('the body');
   }
 
   expect(r.failed).not.toContain('builtin: possibleRealData');

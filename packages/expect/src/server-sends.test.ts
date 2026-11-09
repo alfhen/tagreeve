@@ -1,4 +1,4 @@
-import { createIdentity, newId, type ConsentState, type Hit, type HitVia, type Request, type Result, type Step } from '@tagreeve/core';
+import { createIdentity, hashEmail, newId, type ConsentState, type Hit, type HitVia, type Request, type Result, type Step } from '@tagreeve/core';
 import { describe, expect, test } from 'vitest';
 import { effectiveConsentAt, epochForHit, evaluate, judgeIndex, judgedAt, placeHitsInEpochs, type EvalEpoch } from './evaluate.ts';
 import { parseScenario } from './scenario.ts';
@@ -265,6 +265,66 @@ describe('rules on a server hit', () => {
   test('an exact count that one of two unlinked hits would meet cannot be judged', () => {
     const results = rule('  must:\n    - { vendor: meta-capi, in: epoch(denied), count: 1 }', [capi(500, undefined), capi(600, undefined)]);
     expect(results).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked' });
+  });
+
+  describe('an exact count tries every placement of the unlinked hits', () => {
+    const wrongEm = { fields: ['em'], params: { em: 'a'.repeat(64) } };
+    const rightEm = { fields: ['em'], params: { em: hashEmail(identity.email).hex } };
+    const only = '  must:\n    - { vendor: meta-capi, in: epoch(denied), count: 1, body.only: [event_name] }';
+    const hashes = '  must:\n    - { vendor: meta-capi, in: epoch(denied), count: 1, identity.hashesMatch: true }';
+    const plain = '  must:\n    - { vendor: meta-capi, in: epoch(denied), count: 1 }';
+    const dirty = { fields: ['event_name', 'email'], idFields: [] };
+    const clean = { fields: ['event_name'], idFields: [] };
+
+    // Invariant: a hard verdict needs every placement of the unlinked hits to give it. Each row has an A and a B, both unlinked.
+    const table: { shape: string; yaml: string; a: Partial<Hit>; b: Partial<Hit>; warns: boolean }[] = [
+      { shape: 'plain count, two hits', yaml: plain, a: {}, b: {}, warns: true },
+      { shape: 'body.only, A outside and B clean', yaml: only, a: dirty, b: clean, warns: true },
+      { shape: 'body.only, A clean and B outside', yaml: only, a: clean, b: dirty, warns: true },
+      { shape: 'body.only, both outside', yaml: only, a: dirty, b: dirty, warns: false },
+      { shape: 'hashesMatch, A wrong and B right', yaml: hashes, a: wrongEm, b: rightEm, warns: true },
+      { shape: 'hashesMatch, both wrong', yaml: hashes, a: wrongEm, b: wrongEm, warns: false },
+    ];
+    test.each(table)('$shape', ({ yaml, a, b, warns }) => {
+      const result = rule(yaml, [capi(500, undefined, a), capi(600, undefined, b)]);
+      expect(result.pass).toBe(false);
+      if (warns) expect(result).toMatchObject({ severity: 'warn', note: 'serverSendUnlinked' });
+      else expect(result.note).toBeUndefined();
+    });
+
+    test('with more than 10 unlinked hits in scope it warns without a search', () => {
+      const many = (n: number) => Array.from({ length: n }, (_, i) => capi(100 + i, undefined, { ...dirty }));
+      expect(rule(only, many(10)).note).toBeUndefined();
+      expect(rule(only, many(11))).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked' });
+    });
+  });
+
+  describe('an exact count tries every placement of the probable links', () => {
+    const exact = '  must:\n    - { vendor: meta-capi, in: epoch(denied), count: 1 }';
+
+    test('a failing count that one hit placed by its own time would meet warns', () => {
+      const viaX = browser(500);
+      const viaY = browser(600);
+      const results = rule(exact, [viaX, viaY, capi(1500, link(viaX, 'probable')), capi(1600, link(viaY, 'probable'))]);
+      expect(results).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendProbableLink' });
+    });
+
+    test('a passing count that one hit placed by its own time would break carries the note', () => {
+      const viaX = browser(500);
+      const viaY = browser(1200);
+      const direct = browser(100, { vendor: 'meta-capi' });
+      const two = '  must:\n    - { vendor: meta-capi, in: epoch(denied), count: 2 }';
+      const results = rule(two, [direct, viaX, viaY, capi(1500, link(viaX, 'probable')), capi(600, link(viaY, 'probable'))]);
+      expect(results).toMatchObject({ pass: true, note: 'serverSendProbableLink' });
+    });
+
+    test('a count that every placement gives the same verdict for has no note', () => {
+      const viaX = browser(500);
+      const viaY = browser(600);
+      const results = rule(exact, [viaX, viaY, capi(100, link(viaX, 'probable')), capi(200, link(viaY, 'probable'))]);
+      expect(results.pass).toBe(false);
+      expect(results.note).toBeUndefined();
+    });
   });
 
   test('a rule without a consent scope counts an unlinked hit as it does any other', () => {
