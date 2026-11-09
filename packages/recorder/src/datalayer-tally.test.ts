@@ -162,6 +162,7 @@ test('the recorder binding callback still records a push after more than MAX_TAL
   const main = { page: () => page, parentFrame: () => null, url: () => 'http://localhost:1/' };
   const frames = Array.from({ length: MAX_TALLY_KEYS + 1 }, () => ({ page: () => page, parentFrame: () => main, url: () => 'http://localhost:1/f' }));
   for (const frame of frames) binding({ frame, page }, { t: 1000, args: '[{"event":"fill"}]', d: 'tok', a: 1 });
+  expect((recorder as unknown as { payloadCounts: { counts: Map<string, number> } }).payloadCounts.counts.size).toBe(MAX_TALLY_KEYS);
   const before = recorder.dataLayerEvents.length;
   binding({ frame: frames[frames.length - 1], page }, { t: 2000, args: '[{"event":"after_cap"}]', d: 'tok', a: 1 });
   expect(before).toBe(frames.length);

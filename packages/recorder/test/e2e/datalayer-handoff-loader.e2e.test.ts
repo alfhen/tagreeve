@@ -50,6 +50,7 @@ test('a loader sent during a handoff names its layer, and the stored URL is reda
   expect(loader).toBeDefined();
   expect(loader!.redacted).toBe('handoff');
   expect(loader!.url).not.toContain('myLayer');
+  expect(loader!.url).toMatch(/l=(\[|%5B)redacted(\]|%5D)/);
   expect(flags).toEqual([]);
 }, 60_000);
 

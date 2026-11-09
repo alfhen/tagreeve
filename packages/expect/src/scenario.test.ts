@@ -324,7 +324,7 @@ test.each([
   expect(() => parseScenario(good)).not.toThrow();
   const message = errorOf(text);
   expect(message).toContain(DURATION_MESSAGE);
-  expect(message).toContain(key.replace('steps[0].', '').replace(/^options\./, 'options.'));
+  expect(message).toContain(`${key}: ${DURATION_MESSAGE}`);
 });
 
 test('optionalTimeout keeps its range check', () => {
@@ -334,7 +334,7 @@ test('optionalTimeout keeps its range check', () => {
 test('isDataLayerName agrees with the constants for every case', () => {
   for (const name of ['dataLayer', 'myLayer', '_a', '$a', 'a'.repeat(64)]) expect(isDataLayerName(name)).toBe(true);
   for (const name of ['', '1a', 'a b', 'a-b', 'a'.repeat(65), ...NEVER_TRAPPED_NAMES, 3, null, undefined, {}]) expect(isDataLayerName(name)).toBe(false);
-  for (const name of NEVER_TRAPPED_NAMES) expect(DATALAYER_NAME_PATTERN.test(name) || name === '__proto__').toBe(true);
+  for (const name of NEVER_TRAPPED_NAMES) expect(DATALAYER_NAME_PATTERN.test(name)).toBe(true);
 });
 
 test('options.dataLayerNames accepts exactly the names isDataLayerName accepts', () => {
