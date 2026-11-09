@@ -25,4 +25,10 @@ describe('wordmark script', () => {
       expect(result.stderr).not.toMatch(/@fontsource|node_modules/);
     });
   }
+
+  it('has a README that names only the WOFF source', () => {
+    const readme = readFileSync(fileURLToPath(new URL('../brand/README.md', import.meta.url)), 'utf8');
+    expect(readme).toContain('jost-latin-500-normal.woff');
+    expect(readme).not.toMatch(/Get Jost from \[Google Fonts\]/);
+  });
 });
