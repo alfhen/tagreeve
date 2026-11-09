@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
 import { readRun, type RunRecords } from '@tagreeve/core';
-import { diffPushes, diffShapes, hitShape, pushGroups, type DiffKey, type PushGroup, type ShapeDiff, type ShapeKey, type ShapeMove } from '@tagreeve/expect';
+import { diffPushes, diffShapes, hitShape, kindChangeWarning, kindsMerged, pushGroups, type DiffKey, type PushGroup, type ShapeDiff, type ShapeKey, type ShapeMove } from '@tagreeve/expect';
 import { PUBLISHED_VARIANT, type BaselineArgs } from './args.ts';
 import { describePushDiff } from './diff.ts';
 import { DEFAULT_BASELINES } from './defaults.ts';
@@ -189,10 +189,11 @@ export function compareBaseline(baseline: BaselineFile, records: RunRecords): Ba
   if (baseline.dataLayer === undefined) {
     warnings.push('dataLayer pushes not compared: the baseline has no push shapes (saved before 0.6.0-rc.2). Save it again to compare them.');
   } else {
-    const pushes = diffPushes(baseline.dataLayer, pushGroups(records), { epochOrder });
+    const current = pushGroups(records);
+    const pushes = diffPushes(baseline.dataLayer, current, { epochOrder });
     warnings.push(...describePushDiff(pushes).map((line) => `dataLayer ${line}`));
-    warnings.push(...pushes.kindChanged.map((k) => `dataLayer push kind changed: ${k.event}`));
-    if (baseline.dataLayer.some((g) => g.kind === undefined)) {
+    warnings.push(...pushes.kindChanged.map((k) => `dataLayer ${kindChangeWarning(k)}`));
+    if (kindsMerged(baseline.dataLayer, current)) {
       warnings.push('dataLayer push kinds not compared: the baseline was saved by 0.6.0-rc.2. Save it again to compare them.');
     }
   }

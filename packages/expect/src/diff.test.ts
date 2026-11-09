@@ -2,7 +2,7 @@ import { newId, type ConsentEpoch, type Flag, type Hit, type Request, type RunRe
 import { describe, expect, test } from 'vitest';
 import type { DataLayerEvent } from '@tagreeve/core';
 import { parseEventMap } from './event-map.ts';
-import { diffPushes, diffRuns, diffShapes, hitShape, pairNames, pushGroups, type PushGroup, type ShapeKey, type ShapeTuple } from './diff.ts';
+import { diffPushes, diffRuns, diffShapes, hitShape, kindsMerged, neighbourEpochs, pairNames, pushGroups, type PushGroup, type ShapeKey, type ShapeTuple } from './diff.ts';
 
 const state = { analytics: 'denied', ads: 'denied', adUserData: 'denied', adPersonalization: 'denied' } as const;
 const consent = { ...state, raw: { gcs: 'G100' } };
@@ -536,7 +536,7 @@ describe('push shapes in diffRuns', () => {
     expect(merged.eventsRemoved).toEqual([]);
     expect(merged.eventsAdded).toEqual([]);
     expect(merged.changed).toBe(false);
-    expect(merged.moved).toEqual([{ event: 'add_to_cart', kind: 'frame', epoch: 'undecided', from: 'embedded', to: 'main' }]);
+    expect(merged.moved).toEqual([{ event: 'add_to_cart', kind: 'frame', pushKind: 'object', epoch: 'undecided', from: 'embedded', to: 'main' }]);
   });
 
   test('acrossFrames still reports a path that differs', () => {
@@ -554,7 +554,7 @@ describe('push shapes in diffRuns', () => {
     b.consentEpochs.push(epoch(b.run.id, 'granted', 100));
     addPush(b, { event: 'view_item', id: 'x' }, { t: 200 });
     const d = diffRuns(a, b).dataLayer!;
-    expect(d.moved).toEqual([{ event: 'view_item', kind: 'epoch', frame: 'main', from: 'undecided', to: 'granted' }]);
+    expect(d.moved).toEqual([{ event: 'view_item', kind: 'epoch', pushKind: 'object', frame: 'main', from: 'undecided', to: 'granted' }]);
     expect(d.eventsAdded).toEqual([]);
     expect(d.eventsRemoved).toEqual([]);
     expect(d.changed).toBe(false);
@@ -777,9 +777,153 @@ describe('push kind in diffRuns', () => {
     addPush(a, { event: 'checkout_completed', value: 1 });
     addPush(b, { event: 'purchase' }, { args: ['event', 'purchase', { value: 1 }] });
     const result = diffRuns(a, b);
-    expect(result.warnings).toEqual(['push kind changed: purchase']);
+    expect(result.warnings).toEqual(['push kind changed: purchase (renamed from checkout_completed)']);
     expect(result.dataLayer!.eventsRemoved).toEqual([]);
     expect(result.dataLayer!.eventsAdded).toEqual([]);
     expect(result.dataLayer!.pathsRemoved.map((p) => p.path)).toEqual(['event']);
+  });
+});
+
+describe('renamed pairs in diffPushes', () => {
+  const ORDER = ['undecided', 'granted', 'denied'];
+  const g = (epoch: string, event: string, over: Partial<PushGroup> = {}): PushGroup => ({ epoch, event, kind: 'object', frame: 'main', paths: [{ path: 'x', types: ['string'] }], ...over });
+  const other = [{ path: 'y', types: ['number'] }];
+  const map = parseEventMap(JSON.stringify({ events: { checkout_completed: 'purchase', order_done: 'purchase' } }), 'm.json');
+
+  test('a join across neighbour epochs is one move that names both recorded names', () => {
+    const d = diffPushes([g('undecided', 'checkout_completed')], [g('granted', 'purchase')], { epochOrder: ORDER });
+    expect(d.moved).toEqual([{ event: 'purchase', renamedFrom: 'checkout_completed', kind: 'epoch', pushKind: 'object', frame: 'main', from: 'undecided', to: 'granted' }]);
+    expect(d.eventsAdded).toEqual([]);
+    expect(d.eventsRemoved).toEqual([]);
+  });
+
+  test('a move of an event with the same recorded name has no renamedFrom', () => {
+    const d = diffPushes([g('undecided', 'purchase')], [g('granted', 'purchase')], { epochOrder: ORDER });
+    expect(d.moved).toEqual([{ event: 'purchase', kind: 'epoch', pushKind: 'object', frame: 'main', from: 'undecided', to: 'granted' }]);
+  });
+
+  test('a frame move of a joined pair names the recorded name, and a kind-merged move has no pushKind', () => {
+    const d = diffPushes([g('undecided', 'checkout_completed', { frame: 'embedded' })], [g('undecided', 'purchase')], { acrossFrames: true });
+    expect(d.moved).toEqual([{ event: 'purchase', renamedFrom: 'checkout_completed', kind: 'frame', pushKind: 'object', epoch: 'undecided', from: 'embedded', to: 'main' }]);
+    const noKind: PushGroup = { ...g('undecided', 'checkout_completed'), kind: undefined };
+    const merged = diffPushes([noKind], [g('granted', 'purchase')], { epochOrder: ORDER });
+    expect(merged.moved).toEqual([{ event: 'purchase', renamedFrom: 'checkout_completed', kind: 'epoch', frame: 'main', from: 'undecided', to: 'granted' }]);
+  });
+
+  test('a kind change of a joined pair names the recorded name', () => {
+    const d = diffPushes([g('undecided', 'checkout_completed')], [g('undecided', 'purchase', { kind: 'gtag' })]);
+    expect(d.kindChanged).toEqual([{ epoch: 'undecided', event: 'purchase', frame: 'main', from: 'object', to: 'gtag', renamedFrom: 'checkout_completed' }]);
+  });
+
+  test.each([
+    ['checkout_completed then order_done', ['checkout_completed', 'order_done']],
+    ['order_done then checkout_completed', ['order_done', 'checkout_completed']],
+  ])('a join that cannot become a move is not claimed (%s)', (_name, names) => {
+    const [first, second] = names as [string, string];
+    const aSide = [
+      g('undecided', first, { paths: other }),
+      g('denied', second),
+    ];
+    const d = diffPushes(aSide, [g('granted', 'purchase')], { epochOrder: ORDER, eventMap: map });
+    expect(d.moved).toEqual([{ event: 'purchase', renamedFrom: second, kind: 'epoch', pushKind: 'object', frame: 'main', from: 'denied', to: 'granted' }]);
+    expect(d.eventsRemoved).toEqual([{ epoch: 'undecided', event: first, kind: 'object', frame: 'main' }]);
+    expect(d.eventsAdded).toEqual([]);
+  });
+
+  test('without an epoch order no join crosses epochs', () => {
+    const d = diffPushes([g('undecided', 'checkout_completed')], [g('granted', 'purchase')]);
+    expect(d.moved).toEqual([]);
+    expect(d.eventsRemoved.map((e) => e.event)).toEqual(['checkout_completed']);
+    expect(d.eventsAdded.map((e) => e.event)).toEqual(['purchase']);
+  });
+
+  test('a cross-epoch join needs the same kind, frame and types', () => {
+    const run = (to: PushGroup) => diffPushes([g('undecided', 'checkout_completed')], [to], { epochOrder: ORDER });
+    expect(run(g('granted', 'purchase')).moved).toHaveLength(1);
+    expect(run(g('granted', 'purchase', { kind: 'gtag' })).moved).toEqual([]);
+    expect(run(g('granted', 'purchase', { frame: 'embedded' })).moved).toEqual([]);
+    expect(run(g('granted', 'purchase', { paths: other })).moved).toEqual([]);
+  });
+
+  const names = ['checkout_completed', 'order_done', 'purchase'];
+  const cells = ORDER.flatMap((epoch) => names.map((event) => ({ epoch, event })));
+  const sides: { epoch: string; event: string }[][] = [];
+  for (let m = 0; m < 1 << cells.length; m++) {
+    const picked = cells.filter((_, i) => m & (1 << i));
+    if (picked.length <= 3) sides.push(picked);
+  }
+
+  test('every dataLayer entry names the event as one run pushed it, and a joined pair has renamedFrom', () => {
+    let checked = 0;
+    for (const sa of sides) {
+      for (const sb of sides) {
+        const a = sa.map((c) => g(c.epoch, c.event));
+        const b = sb.map((c) => g(c.epoch, c.event, c.event === 'order_done' ? { paths: other } : {}));
+        const d = diffPushes(a, b, { epochOrder: ORDER, eventMap: map });
+        const aNames = new Set(a.map((x) => x.event));
+        const bNames = new Set(b.map((x) => x.event));
+        const joined = (e: { event: string; renamedFrom?: string }): void => {
+          expect(bNames.has(e.event)).toBe(true);
+          if (e.renamedFrom === undefined) return;
+          expect(aNames.has(e.renamedFrom)).toBe(true);
+          expect(e.renamedFrom).not.toBe(e.event);
+        };
+        for (const list of [d.pathsAdded, d.pathsRemoved, d.typeChanges, d.kindChanged, d.moved, d.eventsAdded]) list.forEach(joined);
+        for (const e of [...d.pathsRemoved, ...d.eventsRemoved]) expect(aNames.has('renamedFrom' in e && e.renamedFrom ? e.renamedFrom : e.event)).toBe(true);
+        for (const m of d.moved) {
+          const from = m.kind === 'epoch' ? m.from : m.epoch;
+          const recorded = m.renamedFrom ?? m.event;
+          expect(a.some((x) => x.event === recorded && (m.kind === 'frame' ? x.epoch === from : x.epoch === from))).toBe(true);
+        }
+        checked++;
+      }
+    }
+    expect(checked).toBe(sides.length ** 2);
+  });
+
+  test('the rule for next-door epochs', () => {
+    expect(neighbourEpochs(ORDER, 'undecided', 'granted')).toBe(true);
+    expect(neighbourEpochs(ORDER, 'denied', 'granted')).toBe(true);
+    expect(neighbourEpochs(ORDER, 'undecided', 'denied')).toBe(false);
+    expect(neighbourEpochs(ORDER, 'undecided', 'undecided')).toBe(false);
+    expect(neighbourEpochs(ORDER, 'undecided', 'other')).toBe(false);
+    expect(neighbourEpochs(['undecided', 'granted', 'undecided'], 'undecided', 'granted')).toBe(false);
+  });
+
+  test('the push kinds are merged when any group on either side has none', () => {
+    const noKind: PushGroup = { ...g('undecided', 'e'), kind: undefined };
+    expect(kindsMerged([g('undecided', 'e')], [g('undecided', 'e')])).toBe(false);
+    expect(kindsMerged([noKind], [g('undecided', 'e')])).toBe(true);
+    expect(kindsMerged([g('undecided', 'e')], [noKind])).toBe(true);
+  });
+});
+
+describe('renamed pairs in diffRuns', () => {
+  test('a joined epoch move and a joined kind change carry renamedFrom, and the warning too', () => {
+    const a = makeRun();
+    const b = makeRun();
+    b.consentEpochs.push(epoch(b.run.id, 'granted', 100));
+    addPush(a, { event: 'checkout_completed', value: 1 });
+    addPush(b, { event: 'purchase', value: 1 }, { t: 150 });
+    const moved = diffRuns(a, b).dataLayer!;
+    expect(moved.moved).toEqual([expect.objectContaining({ event: 'purchase', renamedFrom: 'checkout_completed', from: 'undecided', to: 'granted' })]);
+    const c = makeRun();
+    addPush(c, { event: 'purchase' }, { args: ['event', 'purchase', { value: 1 }] });
+    const changed = diffRuns(a, c);
+    expect(changed.warnings).toEqual(['push kind changed: purchase (renamed from checkout_completed)']);
+    expect(changed.dataLayer!.kindChanged[0]).toMatchObject({ renamedFrom: 'checkout_completed' });
+  });
+
+  test('two purchase groups of different kinds on one side stay two nodes', () => {
+    const a = makeRun();
+    const b = makeRun();
+    addPush(a, { event: 'purchase', value: 1 });
+    addPush(a, { event: 'purchase' }, { args: ['event', 'purchase', { value: 1 }] });
+    addPush(b, { event: 'purchase' }, { args: ['event', 'purchase', { value: 1 }] });
+    expect(pushGroups(a)).toHaveLength(2);
+    const d = diffRuns(a, b);
+    expect(d.warnings).toEqual([]);
+    expect(d.dataLayer!.kindChanged).toEqual([]);
+    expect(d.dataLayer!.eventsRemoved).toEqual([expect.objectContaining({ event: 'purchase', kind: 'object' })]);
   });
 });

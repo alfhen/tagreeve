@@ -6,7 +6,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 <!-- U10 -->
 
-<!-- E10 -->
+- `diff`: a move or a kind change of a joined pair now names the recorded event with `renamedFrom`, and moves have an optional `pushKind` in `--json`. A cross-epoch join forms only when it can become a move. The `push kind changed` warning says `(renamed from <name>)` for a joined pair.
 
 <!-- V10 -->
 
