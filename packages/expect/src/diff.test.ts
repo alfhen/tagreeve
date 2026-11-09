@@ -905,6 +905,80 @@ describe('renamed pairs in diffPushes', () => {
     }, 30_000);
   });
 
+  describe('epoch moves are a maximum matching', () => {
+    const ORDER5 = ['undecided', 'granted', 'denied', 'withdrawn', 'mixed'];
+    const cells = ORDER5.flatMap((epoch) => ['checkout_completed', 'purchase'].flatMap((event) => (['main', 'embedded'] as const).map((frame) => ({ epoch, event, frame }))));
+    const upTo = (max: number): (typeof cells)[] => {
+      const out: (typeof cells)[] = [];
+      for (let m = 0; m < 1 << cells.length; m++) {
+        const picked = cells.filter((_, i) => m & (1 << i));
+        if (picked.length <= max) out.push(picked);
+      }
+      return out;
+    };
+    const build = (c: (typeof cells)[number]): PushGroup => g(c.epoch, c.event, { frame: c.frame });
+
+    const maxMatching = (gone: PushGroup[], fresh: PushGroup[], acrossFrames: boolean): number => {
+      const edge = (x: PushGroup, y: PushGroup): boolean => x.event === y.event && (acrossFrames || x.frame === y.frame) && neighbourEpochs(ORDER5, x.epoch, y.epoch);
+      const go = (i: number, used: Set<number>): number => {
+        if (i === gone.length) return 0;
+        let best = go(i + 1, used);
+        fresh.forEach((f, j) => {
+          if (used.has(j) || !edge(gone[i]!, f)) return;
+          used.add(j);
+          best = Math.max(best, 1 + go(i + 1, used));
+          used.delete(j);
+        });
+        return best;
+      };
+      return go(0, new Set());
+    };
+
+    test('a joined node leaves the epoch another gone node needs', () => {
+      const a = [g('granted', 'purchase', { frame: 'embedded' }), g('withdrawn', 'checkout_completed', { frame: 'embedded' })];
+      const b = [g('granted', 'purchase'), g('denied', 'purchase', { frame: 'embedded' }), g('mixed', 'purchase', { frame: 'embedded' })];
+      const d = diffPushes(a, b, { epochOrder: ORDER5, eventMap: map });
+      expect(d.moved.map((m) => [m.renamedFrom ?? m.event, m.kind === 'epoch' ? m.from : null, m.kind === 'epoch' ? m.to : null]).sort()).toEqual([
+        ['checkout_completed', 'withdrawn', 'mixed'],
+        ['purchase', 'granted', 'denied'],
+      ]);
+      expect(d.eventsRemoved).toEqual([]);
+      expect(d.eventsAdded).toEqual([expect.objectContaining({ epoch: 'granted', event: 'purchase', frame: 'main' })]);
+    });
+
+    test('exhaustive: the epoch moves are as many as the largest matching, and a join is a move whenever a largest matching moves it', () => {
+      let checked = 0;
+      let joinedMoves = 0;
+      const sidesA = upTo(2);
+      const sidesB = upTo(3);
+      for (const acrossFrames of [false, true]) {
+        for (const sa of sidesA) {
+          for (const sb of sidesB) {
+            const a = sa.map(build);
+            const b = sb.map(build);
+            const d = diffPushes(a, b, { epochOrder: ORDER5, eventMap: map, acrossFrames });
+            const named = pairNames(a, b, map, { epochOrder: ORDER5, acrossFrames });
+            const key = (x: PushGroup): string => JSON.stringify([x.epoch, x.event, acrossFrames ? 'any' : x.frame]);
+            const inB = new Set(b.map(key));
+            const inNamed = new Set(named.map(key));
+            const uniq = (xs: PushGroup[]): PushGroup[] => [...new Map(xs.map((x) => [key(x), x])).values()];
+            const gone = uniq(named.filter((x) => !inB.has(key(x))));
+            const fresh = uniq(b.filter((x) => !inNamed.has(key(x))));
+            const moves = d.moved.filter((m) => m.kind === 'epoch').length;
+            const best = maxMatching(gone, fresh, acrossFrames);
+            expect(moves, JSON.stringify([acrossFrames, sa, sb])).toBe(best);
+            expect(d.eventsRemoved.length + moves).toBe(gone.length);
+            expect(d.eventsAdded.length + moves).toBe(fresh.length);
+            joinedMoves += d.moved.filter((m) => m.kind === 'epoch' && m.renamedFrom !== undefined).length;
+            checked++;
+          }
+        }
+      }
+      expect(checked).toBe(2 * sidesA.length * sidesB.length);
+      expect(joinedMoves).toBeGreaterThan(0);
+    }, 120_000);
+  });
+
   test('a frame move of a joined pair names the recorded name, and a kind-merged move has no pushKind', () => {
     const d = diffPushes([g('undecided', 'checkout_completed', { frame: 'embedded' })], [g('undecided', 'purchase')], { acrossFrames: true });
     expect(d.moved).toEqual([{ event: 'purchase', renamedFrom: 'checkout_completed', kind: 'frame', pushKind: 'object', epoch: 'undecided', from: 'embedded', to: 'main' }]);

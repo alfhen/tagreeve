@@ -380,16 +380,30 @@ export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOpti
 
   const taken = new Set<PushNode>();
   const matches = new Map<PushNode, PushNode>();
-  const matchOf = (g: PushNode, inEpoch: (f: PushNode) => boolean): void => {
-    const match = fresh.find(
-      (f) => !taken.has(f) && inEpoch(f) && f.event === g.event && f.kind === g.kind && f.frame === g.frame && typesId(f) === typesId(g) && neighbourEpochs(order, g.epoch, f.epoch),
-    );
-    if (!match) return;
-    taken.add(match);
-    matches.set(g, match);
+  const neighbours = (g: PushNode): PushNode[] =>
+    fresh
+      .filter((f) => f.event === g.event && f.kind === g.kind && f.frame === g.frame && typesId(f) === typesId(g) && neighbourEpochs(order, g.epoch, f.epoch))
+      .sort((x, y) => Number(y.epoch === g.joinedTo) - Number(x.epoch === g.joinedTo));
+  // A maximum matching: a greedy pass can leave a same-name move unmatched, whichever order it runs in. A joined node prefers the epoch pairNames chose.
+  const owner = new Map<PushNode, PushNode>();
+  const augment = (g: PushNode, seen: Set<PushNode>): boolean => {
+    for (const f of neighbours(g)) {
+      if (seen.has(f)) continue;
+      seen.add(f);
+      const holder = owner.get(f);
+      if (holder === undefined || augment(holder, seen)) {
+        owner.set(f, g);
+        return true;
+      }
+    }
+    return false;
   };
-  for (const g of gone) if (g.joinedTo !== undefined) matchOf(g, (f) => f.epoch === g.joinedTo);
-  for (const g of gone) if (!matches.has(g)) matchOf(g, () => true);
+  const byJoin = [...gone].sort((x, y) => Number(y.joinedTo !== undefined) - Number(x.joinedTo !== undefined));
+  for (const g of byJoin) augment(g, new Set());
+  for (const [f, g] of owner) {
+    taken.add(f);
+    matches.set(g, f);
+  }
   for (const g of gone) {
     const match = matches.get(g);
     if (!match) {
