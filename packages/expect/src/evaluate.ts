@@ -30,9 +30,9 @@ import {
   globToRegExp,
 } from '@tagreeve/core';
 import { GA4_BODY_ONLY_IGNORE, type MultipartBody, bodyEntries, guardFieldName, multipartPartName, splitMultipart, META_BODY_ONLY_IGNORE, META_CAPI_BODY_ONLY_IGNORE, META_CAPI_PARAM_NAMES, metaCapiBaseParam, SGTM_BODY_ONLY_IGNORE, isSandboxPageUrl, maskValuePath, matchesIgnoreList, identifierClass, identifierSignal, type IdentifierClass } from '@tagreeve/decoders';
-import { consentModeSetup } from './consent-mode-setup.ts';
+import { consentModeSetup, GOOGLE_VENDORS } from './consent-mode-setup.ts';
 import { hostMatches } from './hosts.ts';
-import { evaluateTagRule, type ExpectedTags } from './tags.ts';
+import { evaluateTagRule, expectedTagsOf, type ExpectedTags } from './tags.ts';
 import { consentFields, countHolds, describeCount, type ConsentField, type Filter, type Rule, type Scenario, type BuiltinName } from './scenario.ts';
 
 export type EvalEpoch = ConsentEpoch;
@@ -47,7 +47,6 @@ export const DEFAULT_GRACE_MS = 50;
 
 const MAX_LISTED = 5;
 const MAX_NAMES = 12;
-const GOOGLE_VENDORS = new Set(['ga4', 'google-ads']);
 
 type Input = TagreeveRecord | EvalEpoch;
 
@@ -88,7 +87,7 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
     responses: records.filter((r): r is Response => r.type === 'response'),
     checkpoints: records.filter((r): r is Checkpoint => r.type === 'checkpoint'),
     tagReports: records.filter((r): r is TagReport => r.type === 'tagReport'),
-    ...(runRecord?.gtmOverride && { expectedTags: { container: runRecord.gtmOverride.container, tags: runRecord.gtmOverride.expectedTags } }),
+    expectedTags: expectedTagsOf(runRecord),
     networkMode: runRecord?.networkMode,
     grace: options.graceWindowMs ?? scenario.options.graceWindow ?? DEFAULT_GRACE_MS,
     identity: options.identity ?? identityOf(runRecord),

@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { evaluate } from './evaluate.ts';
 import { parseScenario } from './scenario.ts';
 import { isValueSegment } from '@tagreeve/decoders';
-import { maskTagName, summarizeTags } from './tags.ts';
+import { expectedTagsOf, listWithMore, maskTagName, summarizeTags } from './tags.ts';
 
 const runId = newId('run');
 
@@ -192,4 +192,21 @@ test.each(['thanks-', 'x~', 'thanks!', 'thanks$', 'thanks^'])('maskTagName masks
 
 test('maskTagName keeps GA4 page_view', () => {
   expect(maskTagName('GA4 page_view')).toBe('GA4 page_view');
+});
+
+test('expectedTagsOf reads the run override, and is undefined without one', () => {
+  expect(expectedTagsOf(undefined)).toBeUndefined();
+  expect(expectedTagsOf({ gtmOverride: null })).toBeUndefined();
+  expect(expectedTagsOf({})).toBeUndefined();
+  expect(expectedTagsOf({ gtmOverride: OVERRIDE })).toEqual({ container: 'GTM-PWTEST1', tags: OVERRIDE.expectedTags });
+});
+
+test.each([
+  [[], ''],
+  [['a'], 'a'],
+  [['a', 'b', 'c'], 'a, b, c'],
+  [['a', 'b', 'c', 'd'], 'a, b, c and 1 more'],
+  [['a', 'b', 'c', 'd', 'e', 'f'], 'a, b, c and 3 more'],
+])('listWithMore(%j, 3) is %j', (items, shown) => {
+  expect(listWithMore(items, 3)).toBe(shown);
 });

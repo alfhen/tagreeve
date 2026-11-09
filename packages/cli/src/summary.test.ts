@@ -1,12 +1,12 @@
-import type { DataLayerEvent, Hit, Result, RunRecords } from '@tagreeve/core';
+import type { DataLayerEvent, Hit, Request, Result, RunRecords } from '@tagreeve/core';
 import type { PushShape } from '@tagreeve/expect';
-import { buildUnloadGapFlags } from '@tagreeve/recorder';
+import { buildFlags, buildUnloadGapFlags } from '@tagreeve/recorder';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
-import { newId } from '@tagreeve/core';
+import { createIdentity, newId } from '@tagreeve/core';
 import { applyBaseline, buildSummary, dataLayerLabelRank, redactFlagDetail, countHits, exitCodeFor, formatDuration, formatSummary, type Summary } from './summary.ts';
 import { main } from './main.ts';
 import { runCommand } from './run.ts';
@@ -473,20 +473,49 @@ test('an unlisted flag kind is masked at the end of its detail', () => {
   expect(redactFlagDetail('GET /a?email=1', 'unloadGap')).toBe('GET /a?email=1');
 });
 
+const flagRequest = (url: string, over: Partial<Request> = {}): Request => ({
+  type: 'request', id: newId('request'), runId: 'run_1', stepId: null, t: 1, method: 'GET', url, resourceType: 'image', frameUrl: null, initiator: null, headers: {}, postData: null, outcome: 'passed', ...over,
+}) as Request;
+const built = (kind: string, input: Partial<Parameters<typeof buildFlags>[0]>) => {
+  const flags = buildFlags({ runId: 'run_1' as never, networkMode: 'stub', siteUrl: 'https://shop.example.com/', requests: [], hits: [], routedRequestIds: new Set(), ...input }).filter((f) => f.kind === kind);
+  expect(flags, `${kind} built`).toHaveLength(1);
+  return flags[0]!;
+};
+const identity = createIdentity(7);
+const foreign = 'pw-other.user@example.test';
+const redirected = flagRequest('https://px.example.net/c?u=1', { id: 'req_hop' as never, outcome: 'failed', failure: 'net::ERR_FAILED' });
+const sandboxed = { type: 'hit', id: 'hit_s', runId: 'run_1', stepId: null, requestId: 'req_s', t: 1, vendor: 'ga4', event: null, page: 'https://s.example.com/web-pixels@abc/sandbox/modern/a?q=1' } as unknown as Hit;
+
 test.each([
-  ['unknownDestination', 'GET https://t.example.net/a?email=1', 'GET https://t.example.net/a?email'],
-  ['firstPartySubdomain', 'GET https://t.example.net/a?email=1', 'GET https://t.example.net/a?email'],
-  ['platformHost', 'GET https://www.googletagmanager.com/gtag/js?id=1', 'GET https://www.googletagmanager.com/gtag/js?id'],
-  ['stubBypass', 'It was not routed, so it was not stubbed: https://px.example.net/c?u=1', 'It was not routed, so it was not stubbed: https://px.example.net/c?u'],
-  ['possibleRedirectHop', 'x; Chromium may have followed a redirect that was not recorded and not stubbed: https://px.example.net/c?u=1', 'x; Chromium may have followed a redirect that was not recorded and not stubbed: https://px.example.net/c?u'],
-  ['sandboxPageUrl', 'ga4 received https://s.example.com/a?q=1 as the page', 'ga4 received https://s.example.com/a?q as the page'],
-  ['netLogUnreadable', 'The net log could not be read, so requests sent while a frame unloads may be missing.', 'The net log could not be read, so requests sent while a frame unloads may be missing.'],
-  ['serverContainerFailed', 'The server container did not run: timeout.', 'The server container did not run: timeout.'],
-  ['dataLayerReassigned', 'Frame 0 replaced window.dataLayer with a new array after a Google loader request. Pushes to the new array are still recorded.', 'Frame 0 replaced window.dataLayer with a new array after a Google loader request. Pushes to the new array are still recorded.'],
-  ['dataLayerNotHooked', 'A Google loader names the data layer "x", which is not hooked, so pushes to it are not recorded. Add it to options.dataLayerNames.', 'A Google loader names the data layer "x", which is not hooked, so pushes to it are not recorded. Add it to options.dataLayerNames.'],
-  ['dataLayerIncomplete', 'Frame 0: dataLayer holds 3 items, and 2 were recorded. A page script may have replaced dataLayer.push or the array.', 'Frame 0: dataLayer holds 3 items, and 2 were recorded. A page script may have replaced dataLayer.push or the array.'],
-])('redactFlagDetail handles a %s detail as the recorder writes it', (kind, detail, shown) => {
-  expect(redactFlagDetail(detail, kind)).toBe(shown);
+  ['unknownDestination', built('unknownDestination', { requests: [flagRequest('https://t.example.net/a?email=1')] }), 'GET https://t.example.net/a?email'],
+  ['firstPartySubdomain', built('firstPartySubdomain', { requests: [flagRequest('https://t.shop.example.com/a?email=1')] }), 'GET https://t.shop.example.com/a?email'],
+  ['platformHost', built('platformHost', { requests: [flagRequest('https://cdn.shopify.com/s/trekkie.js?id=1', { resourceType: 'fetch' })] }), 'GET https://cdn.shopify.com/s/trekkie.js?id'],
+  ['stubBypass', built('stubBypass', { requests: [flagRequest('https://region1.google-analytics.com/g/collect?v=2&tid=G-PWTEST0001', { resourceType: 'fetch' })] }), 'It was not routed, so it was not stubbed: https://region1.google-analytics.com/g/collect?v&tid'],
+  ['possibleRedirectHop', built('possibleRedirectHop', { requests: [redirected], handedToChromium: new Set([redirected.id]) }), 'It failed with no response; Chromium may have followed a redirect that was not recorded and not stubbed: https://px.example.net/c?u'],
+  ['sandboxPageUrl', built('sandboxPageUrl', { hits: [sandboxed] }), 'ga4 received https://s.example.com/web-pixels@abc/sandbox/modern/a?q as the page'],
+  ['possibleRealData', built('possibleRealData', { identity, requests: [flagRequest(`https://t.example.net/a?contact=${foreign}`)] }), undefined],
+])('redactFlagDetail handles a %s detail as the recorder builds it', (kind, flag, shown) => {
+  expect(flag.kind).toBe(kind);
+  expect(flag.detail.length).toBeGreaterThan(0);
+  const out = redactFlagDetail(flag.detail, flag.kind);
+  expect(out).toBe(shown ?? flag.detail);
+  expect(out).not.toContain(foreign);
+});
+
+test('a possibleRealData detail is built from a request that holds a foreign email, and prints no value', () => {
+  const flag = built('possibleRealData', { identity, requests: [flagRequest(`https://t.example.net/a?contact=${foreign}`)] });
+  expect(flag.detail).toMatch(/^request req_\w+ carries 1 email value\(s\) that are not from the run identity, in the URL$/);
+  expect(redactFlagDetail(flag.detail, 'possibleRealData')).toBe(flag.detail);
+});
+
+test.each([
+  ['netLogUnreadable', 'The net log could not be read, so requests sent while a frame unloads may be missing.'],
+  ['serverContainerFailed', 'The server container did not run: timeout.'],
+  ['dataLayerReassigned', 'Frame 0 replaced window.dataLayer with a new array after a Google loader request. Pushes to the new array are still recorded.'],
+  ['dataLayerNotHooked', 'A Google loader names the data layer "x", which is not hooked, so pushes to it are not recorded. Add it to options.dataLayerNames.'],
+  ['dataLayerIncomplete', 'Frame 0: dataLayer holds 3 items, and 2 were recorded. A page script may have replaced dataLayer.push or the array.'],
+])('redactFlagDetail keeps a %s detail whole', (kind, detail) => {
+  expect(redactFlagDetail(detail, kind)).toBe(detail);
 });
 
 test('a path segment that holds an email, a phone or a hash reads (other)', () => {
