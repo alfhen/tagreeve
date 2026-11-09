@@ -35,7 +35,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 <!-- B10 -->
 
-- Docs for 0.6.2: the handoff label width and radius, the `wait` timeout for a gone form, the exact count placements, unload sends in the container link rule, `renamedFrom` and `pushKind` in `diff --json`, the `in the push` label and the card frame reason. The docs-text test fails when a heading or a line it reads is missing. Three lines of 0.6.1 are corrected (#1395, #1397, #1413, #1435, #1436, #1437, #1445, #1446, #1447, #1438, #1439).
+- Docs for 0.6.2: the handoff label width and radius, the `wait` timeout for a gone form, the exact count placements, unload sends in the container link rule, `renamedFrom` and `pushKind` in `diff --json`, the `in the push` label and the card frame reason. `init` creates nothing when a target is refused (#1455), and `diff` does not report the event path when a push changes kind (#1456). The docs-text test fails when a heading or a line it reads is missing. Three lines of 0.6.1 are corrected (#1395, #1397, #1413, #1435, #1436, #1437, #1445, #1446, #1447, #1438, #1439).
 
 <!-- X08 -->
 

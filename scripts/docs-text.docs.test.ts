@@ -159,7 +159,13 @@ test('0.6.2 docs text: cli.md', () => {
   expect(line(cli, 'A `handoff` step waits for a person.')).toContain('cut after the fourth line with an ellipsis');
   expect(line(cli, 'A `handoff` step waits for a person.')).toContain('14 px radius');
   expect(cli).not.toContain('The label is at most 300 px wide');
-  expect(line(cli, 'At the step, the page is on the allowed host')).toContain('`the card frame could not be read`');
+  expect(line(cli, 'At the step, the page is on the allowed host')).toContain('`test mode could not be checked: the card frame could not be read`');
+  expect(line(cli, 'At the step, the page is on the allowed host')).not.toContain('or `the card frame could not be read`');
+  expect(line(cli, 'The step types into the first matching card iframe')).toContain('`card field <field> could not be filled: the card frame could not be read`');
+  const init = section(cli, '### `tagreeve init`', '### `tagreeve template web`');
+  expect(init).toContain('it checks every target. If any target is refused, it creates nothing');
+  expect(init).toContain('`{ "items": [] }`');
+  expect(init).toContain('`Could not write .gitignore: a file or folder is in the way`');
   expect(line(cli, '`wait` also takes a URL')).toContain('When the remembered form is no longer in the page');
   expect(line(cli, '`wait` also takes a URL')).toContain('inside a submit button');
   const diff = section(cli, '### `tagreeve diff', '### `tagreeve baseline save');
