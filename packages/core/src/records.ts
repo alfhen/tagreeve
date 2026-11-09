@@ -32,6 +32,7 @@ export interface CaptureCoverage {
  * `TagReport.frame` and `TagReport.client`, `Hit.linkMiss`, `DataLayerEvent.layer`, `Request.frame`, the notes
  * `noTagReports` and `tagNameUnknown`, and the flag kinds `dataLayerReassigned` and `dataLayerNotHooked`.
  * 0.6.0-rc.3 adds, within version 5, the flag kind `dataLayerIncomplete` and the optional field `InvalidReport.got`.
+ * 0.6.1 adds, within version 5, the flag kind `possibleRealDataPush` and the `HitLinkMiss.clientId` value `concurrentRequest`.
  * A new flag kind or a new optional field that an older reader of the same version reads correctly does not bump
  * the version. A new required field, or a changed meaning, does.
  * A record with no version is version 0.

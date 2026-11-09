@@ -81,8 +81,26 @@ test('AGENTS.md and design section 13 say log-ins are handoff steps on a hosted 
   expect(loginRuleProblem('Payments are handoff steps.', '**Other rules**\n- Payments are handoffs.\n## 14.')).toBeDefined();
 });
 
-const section = (text: string, from: string, to: string): string => text.slice(text.indexOf(from), text.indexOf(to, text.indexOf(from) + 1));
-const line = (text: string, needle: string): string => text.split('\n').find((l) => l.includes(needle)) ?? '';
+const section = (text: string, from: string, to: string): string => {
+  const start = text.indexOf(from);
+  if (start < 0) throw new Error(`section start not found: ${from}`);
+  const end = text.indexOf(to, start + 1);
+  if (end < 0) throw new Error(`section end not found: ${to}`);
+  return text.slice(start, end);
+};
+const line = (text: string, needle: string): string => {
+  const found = text.split('\n').find((l) => l.includes(needle));
+  if (found === undefined) throw new Error(`line not found: ${needle}`);
+  return found;
+};
+
+test('section and line throw when a bound or a line is missing', () => {
+  expect(() => section('## A\ntext\n## B', '## Renamed', '## B')).toThrow('section start not found');
+  expect(() => section('## A\ntext\n## B', '## A', '## Renamed')).toThrow('section end not found');
+  expect(section('## A\ntext\n## B', '## A', '## B')).toBe('## A\ntext\n');
+  expect(() => line('one\ntwo', 'three')).toThrow('line not found');
+  expect(line('one\ntwo', 'tw')).toBe('two');
+});
 
 test('0.6.1 docs text: cli.md', () => {
   const cli = read('docs/cli.md');
@@ -124,4 +142,54 @@ test('0.6.1 docs text: guides and changelog', () => {
   expect(line(rc3, 'tag IDs as numbers')).toContain('GTM preview');
   expect(rc3).toContain('or reloads after its input was found');
   expect(section(log, '## 0.6.1', '## 0.6.0\n')).not.toContain('<!-- C09 -->');
+});
+
+test('0.6.1 docs text: the path defaults say a path of the wrong kind is skipped', () => {
+  const cli = read('docs/cli.md');
+  const skipped = 'is skipped like a missing one';
+  expect(line(cli, '| `--autoconsent-rules <file>`')).toContain(skipped);
+  expect(line(cli, '| `--tracker-list <file>`')).toContain(skipped);
+  expect(line(cli, '| `--stores <file>`')).toContain(skipped);
+  expect(line(read('docs/design.md'), '**CLI:** `tagreeve run`')).toContain('is skipped like a missing one');
+});
+
+test('0.6.2 docs text: cli.md', () => {
+  const cli = read('docs/cli.md');
+  expect(line(cli, 'A `handoff` step waits for a person.')).toContain('`min(420px, 100vw - 32px)`');
+  expect(line(cli, 'A `handoff` step waits for a person.')).toContain('cut after the fourth line with an ellipsis');
+  expect(line(cli, 'A `handoff` step waits for a person.')).toContain('14 px radius');
+  expect(cli).not.toContain('The label is at most 300 px wide');
+  expect(line(cli, 'At the step, the page is on the allowed host')).toContain('`the card frame could not be read`');
+  expect(line(cli, '`wait` also takes a URL')).toContain('When the remembered form is no longer in the page');
+  expect(line(cli, '`wait` also takes a URL')).toContain('inside a submit button');
+  const diff = section(cli, '### `tagreeve diff', '### `tagreeve baseline save');
+  expect(diff).toContain('`pushKind` (`gtag` or `object`)');
+  expect(diff).toContain('`kind` stays the move type');
+  expect(diff).toContain('`push kind changed: purchase (renamed from checkout_completed)`');
+  expect(diff).toContain('only when the epochs are neighbours');
+});
+
+test('0.6.2 docs text: design.md, guides and records.ts', () => {
+  const design = read('docs/design.md');
+  expect(design).not.toContain('(0.6.0-rc.1) loads');
+  expect(design).toContain('saved before 0.6.0-rc.2, loads and warns that pushes are not compared');
+  expect(design).toContain('`moved` or `kindChanged` entry of a joined pair has `renamedFrom` too');
+  expect(design).toContain('A send from `pagehide` or `visibilitychange` is answered in the page and never reaches the container');
+  expect(design).toContain('tries every placement of up to 10 such hits');
+  expect(design).toContain('reads `in the push`');
+  const guide = read('docs/guide/server-container.md');
+  expect(line(guide, '- `serverSendProbableLink`')).toContain('`identity.hashesMatch`');
+  expect(line(guide, '- `serverSendProbableLink`')).toContain('`pagehide`');
+  expect(line(guide, '- `serverSendProbableLink`')).toContain('shares a client ID with the call');
+  expect(line(guide, '- `serverSendUnlinked`')).toContain('up to 10 calls');
+  expect(line(read('docs/guide/reading-results.md'), '- `possibleRealDataPush`')).toContain('never fails a run');
+  expect(read('packages/core/src/records.ts')).toContain('the flag kind `possibleRealDataPush` and the `HitLinkMiss.clientId` value `concurrentRequest`');
+});
+
+test('0.6.1 changelog lines are corrected', () => {
+  const released = section(read('CHANGELOG.md'), '## 0.6.1\n', '## 0.6.0\n');
+  expect(released).not.toContain('get no push findings');
+  expect(released).toContain('A record from 0.6.0 or earlier has no push flags. Nothing adds them to a stored record.');
+  expect(released).toContain('**A `must` rule with an exact `count` can warn with `serverSendUnlinked`**');
+  expect(line(released, '`consentModeSetup` names a hit with no tag ID')).toMatch(/\(#1306, #1308, #1309, #1385\)\.$/);
 });
