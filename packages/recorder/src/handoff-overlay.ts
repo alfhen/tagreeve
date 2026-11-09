@@ -170,8 +170,8 @@ export function handoffOverlayScript(nonce: string): string {
     setText(button, 'Done');
     appendChild(pill, label, button);
     appendToRoot(root, pill);
-    apply(pill, { display: 'flex', 'align-items': 'flex-start', gap: '10px', padding: '6px 6px 6px 12px', background: '#1d2530', color: '#fff', font: '13px/1.3 system-ui, sans-serif', 'border-radius': '999px', 'box-sizing': 'border-box', 'max-width': '100%', 'box-shadow': '0 2px 10px rgba(0,0,0,.35)', cursor: 'grab', 'user-select': 'none', 'touch-action': 'none' });
-    apply(label, { display: '-webkit-box', '-webkit-box-orient': 'vertical', '-webkit-line-clamp': '4', overflow: 'hidden', 'overflow-wrap': 'anywhere', 'max-width': '300px', 'min-width': '0' });
+    apply(pill, { display: 'flex', 'align-items': 'flex-start', gap: '10px', padding: '6px 6px 6px 12px', background: '#1d2530', color: '#fff', font: '13px/1.3 system-ui, sans-serif', 'border-radius': '14px', 'box-sizing': 'border-box', 'max-width': '100%', 'box-shadow': '0 2px 10px rgba(0,0,0,.35)', cursor: 'grab', 'user-select': 'none', 'touch-action': 'none' });
+    apply(label, { display: '-webkit-box', '-webkit-box-orient': 'vertical', '-webkit-line-clamp': '4', overflow: 'hidden', 'overflow-wrap': 'anywhere', 'min-width': '0' });
     apply(button, { all: 'unset', 'box-sizing': 'border-box', background: '#2f7d4f', color: '#fff', padding: '4px 14px', 'align-self': 'stretch', display: 'flex', 'align-items': 'center', 'border-radius': '999px', 'font-weight': '600', cursor: 'pointer', 'flex-shrink': '0' });
     addListener(button, 'click', (event) => {
       if (!trusted(event)) return;

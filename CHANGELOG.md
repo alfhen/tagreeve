@@ -4,7 +4,10 @@
 
 Not released yet. The newest release is 0.6.1, below.
 
-<!-- U10 -->
+- A test payment now ends by its deadline when a card frame stops answering before the fill. The reason reads `the card frame could not be read`, and the grace after the deadline no longer restarts at each await (#1404, #1418).
+- A click inside a submit button remembers the button's form for the next `wait` timeout. When that form is gone, the timeout lists every blocking control (#1419, #1415).
+- The handoff label uses the room up to the pill's width limit and the pill has a 14 px radius, so four lines are not cut at the corners (#1428, #1411).
+- Tests for the card frame field, the form of a click, the controls of a form, and a required select and textarea (#1338, #1412, #1202). The handoff label title is covered by the unit test only, because the closed shadow root hides it from Playwright (#1417).
 
 - `diff`: a move or a kind change of a joined pair now names the recorded event with `renamedFrom`, and moves have an optional `pushKind` in `--json`. A cross-epoch join forms only when it can become a move. The `push kind changed` warning says `(renamed from <name>)` for a joined pair.
 

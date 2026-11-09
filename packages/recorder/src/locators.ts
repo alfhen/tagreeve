@@ -147,7 +147,8 @@ interface BlockingControl {
 }
 
 /** Runs in the page. Reads `validity` and attributes only, never a value, and never calls `checkValidity()` or `reportValidity()`. Clones nothing, so no page code runs and no image loads. Every control is named by `aria-label`, `name` or `id` and never by page text, so no error text can reach a name. */
-function readBlockingControls({ max, form }: { max: number; form: HTMLFormElement | null }): BlockingControl[] {
+export function readBlockingControls({ max, form: remembered }: { max: number; form: HTMLFormElement | null }): BlockingControl[] {
+  const form = remembered?.isConnected && remembered.ownerDocument === document ? remembered : null;
   const found: BlockingControl[] = [];
   const nameOf = (el: Element): string => el.getAttribute('aria-label')?.trim() || el.getAttribute('name') || el.id;
   for (const el of document.querySelectorAll('input, select, textarea, [aria-invalid="true"]')) {
@@ -181,9 +182,12 @@ function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
 /** Controls on the top-level document of each open page that block a form from submitting: kind, name and reason. With `form`, only the controls of that form. Never a value, a placeholder or an error text, and never a frame. */
 export async function blockingControls(context: BrowserContext, form: JSHandle<HTMLFormElement> | null = null): Promise<string[]> {
   const listed: string[] = [];
+  // A form of a closed page or a finished navigation makes this throw and falls back to every control; readBlockingControls covers a form detached in place.
+  const live = form ? await withDeadline(form.evaluate((f) => f.isConnected), DIAGNOSTIC_DEADLINE_MS).catch(() => false) : false;
+  const scope = live ? form : null;
   for (const page of context.pages()) {
     try {
-      const controls = await withDeadline(page.evaluate(readBlockingControls, { max: MAX_LISTED, form }), DIAGNOSTIC_DEADLINE_MS);
+      const controls = await withDeadline(page.evaluate(readBlockingControls, { max: MAX_LISTED, form: scope }), DIAGNOSTIC_DEADLINE_MS);
       for (const c of controls) {
         if (!BLOCK_REASONS.includes(c.reason)) continue;
         const kind = KINDS.includes(c.kind) ? c.kind : 'control';

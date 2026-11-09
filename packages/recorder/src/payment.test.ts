@@ -65,6 +65,12 @@ interface Setup {
   hangEvaluateAll?: boolean;
   /** contentFrame never settles once the input handle is resolved. */
   hangContentFrameAfterResolve?: boolean;
+  /** The pre-fill awaits that never settle. */
+  hangElementHandles?: boolean;
+  hangIsVisible?: boolean;
+  hangEvaluateHandle?: boolean;
+  /** Every contentFrame call answers after this many ms. */
+  contentFrameDelay?: number;
   failFill?: boolean;
   failFillAt?: number;
   fillMessage?: (value: string) => string;
@@ -120,9 +126,10 @@ function fake(setup: Setup = {}) {
       if (failFill && fills++ === failFillAt) throw new Error(setup.fillMessage?.(value) ?? `locator.fill: Timeout. fill("${value}")`);
     };
     return {
-    isVisible: async () => frame.visible,
-    evaluateHandle: async () => container,
+    isVisible: async () => (setup.hangIsVisible ? never<boolean>() : frame.visible),
+    evaluateHandle: async () => (setup.hangEvaluateHandle ? never<typeof container>() : container),
     contentFrame: async () =>
+      (setup.contentFrameDelay ? await new Promise((resolve) => setTimeout(resolve, setup.contentFrameDelay)) : undefined) ||
       (setup.hangContentFrameFrom !== undefined && contentFrameCalls++ >= setup.hangContentFrameFrom) || (setup.hangContentFrameAfterResolve && resolved)
         ? never()
         : frame.url === null
@@ -178,7 +185,7 @@ function fake(setup: Setup = {}) {
     locator: (selector: string) => {
       log.push(`locator ${selector}`);
       const parts = selector.split(',').map((s) => s.trim());
-      return { elementHandles: async () => frames.filter((f) => !f.matches || f.matches.some((m) => parts.includes(m))).map((f) => element(f, selector)) };
+      return { elementHandles: async () => (setup.hangElementHandles ? never<unknown[]>() : frames.filter((f) => !f.matches || f.matches.some((m) => parts.includes(m))).map((f) => element(f, selector))) };
     },
   } as unknown as Page;
   const recorder = { holdRedaction: () => void log.push('hold') };
@@ -330,6 +337,12 @@ describe('duplicate frames and inputs', () => {
       inputs: [{ name: 'secret-attr', autocomplete: 'x', type: 'text' }],
     });
     expect(error?.message).toBe('card field number could not be filled: the card frame is gone or not served from the card host');
+  });
+
+  test('another accepted card document is filled', async () => {
+    const { error, log } = await play({ frameUrl: 'http://127.0.0.1:4000/card-frame-extra-input' });
+    expect(error).toBeUndefined();
+    expect(fills(log)).toHaveLength(3);
   });
 
   test('a frame that moves to another accepted document during the input read gives the gone-frame reason', async () => {
@@ -634,5 +647,42 @@ describe('a frame that stops responding', () => {
     const { error, elapsed } = await timed({ hangCountFrom: 0 });
     expect(error?.message).toBe('card field number could not be filled: the card frame could not be read');
     expect(elapsed).toBeLessThan(LIMIT);
+  });
+});
+
+describe('the awaits before the fill end by the deadline and its grace', () => {
+  const TIMEOUT = 200;
+  const LIMIT = TIMEOUT + 1000;
+
+  test.each([
+    ['elementHandles', { hangElementHandles: true }, 'card field number could not be filled: the card frame could not be read'],
+    ['contentFrame', { hangContentFrameFrom: 0 }, 'card field number could not be filled: the card frame could not be read'],
+    ['isVisible', { hangIsVisible: true }, 'card field number could not be filled: the card frame could not be read'],
+    ['evaluateHandle', { hangEvaluateHandle: true }, 'test mode could not be checked: the card frame could not be read'],
+  ] as const)('a hung %s gives the unreadable reason, types nothing and does not hold', async (_name, hang, message) => {
+    const started = Date.now();
+    const { error, log } = await play({ timeout: TIMEOUT, ...hang });
+    expect(error?.message).toBe(message);
+    expect(Date.now() - started).toBeLessThan(LIMIT);
+    expect(log.filter((l) => l.startsWith('fill') || l === 'hold')).toEqual([]);
+  });
+
+  test('a hung evaluateHandle after slow frame lookups still ends by the step deadline and its grace', async () => {
+    const started = Date.now();
+    const { error } = await play({ timeout: 1000, contentFrameDelay: 300, hangEvaluateHandle: true });
+    expect(error?.message).toBe('test mode could not be checked: the card frame could not be read');
+    expect(Date.now() - started).toBeLessThan(1000 + 500 + 400);
+  });
+
+  test('a hung evaluateHandle does not matter when the provider is declared', async () => {
+    const { error } = await play({ timeout: TIMEOUT, hangEvaluateHandle: true }, { host: 'localhost', declaredProviders: ['fixture'] });
+    expect(error).toBeUndefined();
+  });
+
+  test('slow answers after the deadline share one grace and do not chain', async () => {
+    const started = Date.now();
+    const { error } = await play({ timeout: 100, contentFrameDelay: 400, counts: [2], inputs: [] });
+    expect(error).toBeDefined();
+    expect(Date.now() - started).toBeLessThan(100 + 500 + 400 + 300);
   });
 });

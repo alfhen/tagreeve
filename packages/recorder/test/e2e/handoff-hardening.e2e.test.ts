@@ -103,30 +103,67 @@ test('a page that patches Function.prototype.call and Event.prototype.stopPropag
   await run.recorder.close();
 }, 60_000);
 
-// Mirrors the pill styles in handoff-overlay.ts. Dropping only flex-shrink: 0 does not shrink the button in Chromium (min-width: auto); min-width: 0 does.
-const PILL_PADDING_LEFT = 12;
-const PILL_PADDING_RIGHT = 6;
-const PILL_GAP = 10;
-const LABEL_CAP = 300;
+// The Done button is in a closed shadow root that no page script can reach, so its own box is found by its fill colour (#2f7d4f) in a screenshot.
+async function doneBox(page: Page) {
+  const shot = (await page.screenshot({ scale: 'css' })).toString('base64');
+  const box = await page.evaluate(async (png) => {
+    const bytes = Uint8Array.from(atob(png), (c) => c.charCodeAt(0));
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(bitmap, 0, 0);
+    const { data, width, height } = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+    let left = width;
+    let top = height;
+    let right = -1;
+    let bottom = -1;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        if (Math.abs(data[i]! - 0x2f) < 6 && Math.abs(data[i + 1]! - 0x7d) < 6 && Math.abs(data[i + 2]! - 0x4f) < 6) {
+          if (x < left) left = x;
+          if (x > right) right = x;
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+        }
+      }
+    }
+    return right < 0 ? null : { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
+  }, shot);
+  if (!box) throw new Error('the Done button is not drawn');
+  return box;
+}
 
 test('a long handoff text keeps the pill inside a 390 px viewport with the Done button whole', async () => {
   const run = await open('/handoff', LONG_TEXT);
   let timer: NodeJS.Timeout | undefined;
   try {
-    const wide = await pillBox(run.page);
-    const buttonWidth = wide.width - PILL_PADDING_LEFT - PILL_GAP - LABEL_CAP - PILL_PADDING_RIGHT;
-    expect(wide.width).toBeLessThan(420);
-    expect(buttonWidth).toBeGreaterThan(40);
-    expect(buttonWidth).toBeLessThan(100);
-    await run.page.setViewportSize({ width: 390, height: 844 });
-    await expect.poll(async () => (await pillBox(run.page)).width, { timeout: 10_000 }).toBeLessThanOrEqual(358);
-    const box = await pillBox(run.page);
-    expect(box.x).toBeGreaterThanOrEqual(0);
-    expect(box.x + box.width).toBeLessThanOrEqual(390);
-    const doneLeftEdge = box.x + box.width - PILL_PADDING_RIGHT - buttonWidth;
-    await run.page.mouse.click(doneLeftEdge + 4, box.y + box.height / 2);
+    const naturalWidths: number[] = [];
+    for (const width of [1280, 390]) {
+      await run.page.setViewportSize({ width, height: 844 });
+      const limit = Math.min(420, width - 32);
+      await expect.poll(async () => (await pillBox(run.page)).width, { timeout: 10_000 }).toBeLessThanOrEqual(limit);
+      const box = await pillBox(run.page);
+      const done = await doneBox(run.page);
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(width);
+      expect(done.width).toBeGreaterThanOrEqual(55);
+      naturalWidths.push(done.width);
+      expect(done.x).toBeGreaterThanOrEqual(box.x);
+      expect(done.x + done.width).toBeLessThanOrEqual(box.x + box.width);
+      expect(done.y).toBeGreaterThanOrEqual(box.y);
+      expect(done.y + done.height).toBeLessThanOrEqual(box.y + box.height);
+      const hit = await run.page.evaluate(
+        ([id, x, y]) => document.elementFromPoint(x as number, y as number) === document.getElementById(id as string),
+        [HANDOFF_HOST_ID, done.x + done.width / 2, done.y + done.height / 2],
+      );
+      expect(hit).toBe(true);
+    }
+    expect(Math.abs(naturalWidths[0]! - naturalWidths[1]!)).toBeLessThanOrEqual(1);
+    const done = await doneBox(run.page);
+    await run.page.mouse.click(done.x + done.width / 2, done.y + done.height / 2);
     const timeout = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error('a click 4 px inside the Done button left edge did not end the wait')), 10_000);
+      timer = setTimeout(() => reject(new Error('a click at the centre of the Done button did not end the wait')), 10_000);
     });
     await Promise.race([run.played, timeout]);
   } finally {

@@ -269,6 +269,24 @@ test.each(GUARD_CASES)('name guard: $name', async ({ html, expected, forbidden }
   }
 });
 
+test.each([
+  { name: 'a required select with an empty option', html: '<label>Country <select name="country" required><option value="">Fakeoption choose</option><option value="x">Fakeoption two</option></select></label>', expected: 'select "country" (invalid)' },
+  { name: 'a required textarea', html: '<label>Note <textarea name="note" required></textarea></label><p>Faketextarea help</p>', expected: 'textarea "note" (invalid)' },
+])('guard: $name is listed by kind and name only', async ({ html, expected }) => {
+  const recorder = await launchRecorder({ networkMode: 'stub', outDir, site: site.url });
+  try {
+    const page = await recorder.context.newPage();
+    await page.setContent(`<!doctype html><body><form>${html}</form></body>`);
+    expect(await page.evaluate(() => [...document.querySelectorAll<HTMLSelectElement | HTMLTextAreaElement>('select, textarea')].map((e) => e.validity.valid))).toEqual([false]);
+    expect(await page.content()).toContain('Fake');
+    const listed = await blockingControls(recorder.context);
+    expect(listed).toEqual([expected]);
+    expect(listed.join(' ')).not.toContain('Fake');
+  } finally {
+    await recorder.close().catch(() => undefined);
+  }
+});
+
 test('the name reader never clones a node', async () => {
   const recorder = await launchRecorder({ networkMode: 'stub', outDir, site: site.url });
   try {

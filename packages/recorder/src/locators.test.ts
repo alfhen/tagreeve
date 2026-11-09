@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, test, vi } from 'vitest';
-import { blockingControls, controlsFromSnapshot, resolveLocator, timeoutMessage, visibleName } from './locators.ts';
+import { blockingControls, controlsFromSnapshot, readBlockingControls, resolveLocator, timeoutMessage, visibleName } from './locators.ts';
 
 describe('visibleName', () => {
   test('hides an email, a 6+ digit run and a hash-shaped name', () => {
@@ -206,6 +206,86 @@ describe('a role locator timeout', () => {
   });
 });
 
+describe('readBlockingControls on a small DOM', () => {
+  class FakeInput {
+    type = 'text';
+    willValidate = true;
+    validity = { valid: false };
+    checked = false;
+    required = false;
+    constructor(
+      readonly id: string,
+      public form: unknown,
+    ) {}
+    getAttribute(name: string): string | null {
+      return name === 'name' ? this.id : null;
+    }
+  }
+  const FORM = { isConnected: true, ownerDocument: undefined as unknown };
+  const OTHER = { isConnected: true, ownerDocument: undefined as unknown };
+  const dom = (): FakeInput[] => [new FakeInput('inside', FORM), new FakeInput('outside', OTHER)];
+  const run = (form: unknown): string[] => {
+    const doc = { querySelectorAll: () => dom() };
+    FORM.ownerDocument = doc;
+    OTHER.ownerDocument = doc;
+    vi.stubGlobal('document', doc);
+    vi.stubGlobal('HTMLInputElement', FakeInput);
+    try {
+      return readBlockingControls({ max: 10, form: form as never }).map((c) => c.name);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  };
+
+  test('with a form, a control outside it is not listed', () => {
+    expect(dom().map((c) => c.id)).toEqual(['inside', 'outside']);
+    expect(run(FORM)).toEqual(['inside']);
+  });
+
+  test('with no form, every control is listed', () => {
+    expect(run(null)).toEqual(['inside', 'outside']);
+  });
+
+  test('a form that is not connected lists every control', () => {
+    expect(run({ ...FORM, isConnected: false })).toEqual(['inside', 'outside']);
+  });
+
+  test('a form of another document lists every control', () => {
+    expect(run({ ...FORM, ownerDocument: {} })).toEqual(['inside', 'outside']);
+  });
+});
+
+describe('blockingControls with a form that is gone', () => {
+  const rows = [{ kind: 'text', name: 'City', reason: 'invalid' }];
+
+  const formWith = (connected: boolean | Error) => ({ evaluate: () => (connected instanceof Error ? Promise.reject(connected) : Promise.resolve(connected)) }) as never;
+
+  test('lists every control when the form is not connected', async () => {
+    const evaluate = vi.fn(() => Promise.resolve(rows));
+    expect(await blockingControls({ pages: () => [{ evaluate }] } as never, formWith(false))).toEqual(['text "City" (invalid)']);
+    expect(evaluate).toHaveBeenCalledWith(expect.any(Function), { max: 10, form: null });
+  });
+
+  test('lists every control when the page of the form has gone', async () => {
+    const evaluate = vi.fn(() => Promise.resolve(rows));
+    await blockingControls({ pages: () => [{ evaluate }] } as never, formWith(new Error('Target closed')));
+    expect(evaluate).toHaveBeenCalledWith(expect.any(Function), { max: 10, form: null });
+  });
+
+  test('with a live form, a page that throws is skipped and not listed in full', async () => {
+    const mine = vi.fn(() => Promise.resolve(rows));
+    const other = vi.fn((_fn: unknown, arg: { form: unknown }) => (arg.form ? Promise.reject(new Error('handle from another page')) : Promise.resolve([{ kind: 'text', name: 'otherpage', reason: 'invalid' }])));
+    expect(await blockingControls({ pages: () => [{ evaluate: other }, { evaluate: mine }] } as never, formWith(true))).toEqual(['text "City" (invalid)']);
+    expect(other).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not retry when there was no form', async () => {
+    const evaluate = vi.fn(() => Promise.reject(new Error('closed')));
+    expect(await blockingControls({ pages: () => [{ evaluate }] } as never)).toEqual([]);
+    expect(evaluate).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('blockingControls', () => {
   const contextOf = (...pages: unknown[][]) => ({ pages: () => pages.map((raw) => ({ evaluate: () => Promise.resolve(raw) })) }) as never;
 
@@ -244,7 +324,7 @@ describe('blockingControls', () => {
 
   test('passes the clicked form to the page, and none by default', async () => {
     const evaluate = vi.fn(() => Promise.resolve([]));
-    const form = { fake: 'form' } as never;
+    const form = { fake: 'form', evaluate: () => Promise.resolve(true) } as never;
     await blockingControls({ pages: () => [{ evaluate }] } as never, form);
     expect(evaluate).toHaveBeenLastCalledWith(expect.any(Function), { max: 10, form });
     await blockingControls({ pages: () => [{ evaluate }] } as never);

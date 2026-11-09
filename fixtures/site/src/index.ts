@@ -44,6 +44,7 @@ const pages: Record<string, string> = {
   '/terms-aria-invalid': 'terms-aria-invalid.html',
   '/terms-none': 'terms-none.html',
   '/terms-fields': 'terms-fields.html',
+  '/terms-reload': 'terms-reload.html',
   '/handoff/until': 'handoff-until.html',
   '/viewport': 'viewport.html',
   '/datalayer-frame': 'datalayer-frame.html',

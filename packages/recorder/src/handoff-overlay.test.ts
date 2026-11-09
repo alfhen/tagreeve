@@ -73,6 +73,19 @@ test('the label wraps and keeps its full text in the title', () => {
   expect(script).toContain('setTitle(label, text)');
 });
 
+test('the label has no fixed width and the pill has a 14 px radius, not a full round', () => {
+  const script = handoffOverlayScript('nonce-1');
+  const label = script.match(/apply\(label, \{[^}]*\}\)/)?.[0] ?? '';
+  const pill = script.match(/apply\(pill, \{[^}]*\}\)/)?.[0] ?? '';
+  const done = script.match(/apply\(button, \{[^}]*\}\)/)?.[0] ?? '';
+  expect(label).toContain("'-webkit-line-clamp': '4'");
+  expect(label).not.toMatch(/max-width|300px/);
+  expect(pill).toContain("'max-width': '100%'");
+  expect(pill).toContain("'border-radius': '14px'");
+  expect(pill).not.toContain('999px');
+  expect(done).toContain("'align-self': 'stretch'");
+});
+
 test('the overlay script runs only in the top frame and makes no request', () => {
   const script = handoffOverlayScript('nonce-1');
   expect(script).toContain('window.top !== window');
