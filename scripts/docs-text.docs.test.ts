@@ -208,7 +208,7 @@ test('#1478: the payment frame deadlines are named, not "the step deadline"', ()
   const frames = line(read('docs/cli.md'), 'At the step, the page is on the allowed host');
   expect(frames).not.toContain('Every wait on a card frame ends by the step deadline');
   expect(frames).toContain('end by the shorter of the step timeout and 5 s');
-  expect(frames).toContain('The fill of each card field has its own deadline of the step timeout');
+  expect(frames).toContain('The fill of every card field shares the step deadline');
   expect(frames).toContain('at most 500 ms after its deadline');
 });
 
