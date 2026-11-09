@@ -8,14 +8,14 @@ export interface TallyArray {
   a: number | null;
   length: number;
   posted: number;
-  /** Token of the frame whose hook marked this array, when the array came from another realm. */
-  owner?: string;
 }
 
 export interface FrameTally {
   frame: number;
   d: string;
   arrays: TallyArray[];
+  /** Hooked names the page defined in a way the hook cannot trap. */
+  untrapped: string[];
 }
 
 /** Counts of the push payloads the binding received, by frame number, document token, layer and array number. */
@@ -53,12 +53,6 @@ export class PayloadCounts {
 
 const isCount = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 
-/** The hooked names the page defined in a way the hook cannot trap, from the frozen answer of the init script. */
-export function parseUntrapped(text: unknown, names: readonly string[]): string[] {
-  // The init script runs before page scripts, so the default name is always trapped.
-  return [...new Set(parseNames(text).filter((n) => n !== DEFAULT_DATALAYER && names.includes(n)))];
-}
-
 function parseNames(text: unknown): string[] {
   if (typeof text !== 'string' || text.length > 4096) return [];
   try {
@@ -72,32 +66,19 @@ function parseNames(text: unknown): string[] {
 /** Keeps only the numbers and hooked names of a page's answer. Anything else is dropped. */
 export function validateTally(frame: number, value: unknown, names: readonly string[]): FrameTally | null {
   if (typeof value !== 'object' || value === null) return null;
-  const { d, arrays } = value as { d?: unknown; arrays?: unknown };
+  const { d, arrays, untrapped } = value as { d?: unknown; arrays?: unknown; untrapped?: unknown };
   if (typeof d !== 'string' || d.length > 64 || !Array.isArray(arrays)) return null;
   const kept: TallyArray[] = [];
   for (const entry of arrays) {
     if (typeof entry !== 'object' || entry === null) continue;
-    const { layer, a, length, posted, owner } = entry as Record<string, unknown>;
+    const { layer, a, length, posted } = entry as Record<string, unknown>;
     if (typeof layer !== 'string' || !names.includes(layer)) continue;
     if (!isCount(length) || !isCount(posted) || !(a === null || isCount(a))) continue;
-    kept.push({ layer, a, length, posted, ...(typeof owner === 'string' && owner.length <= 64 ? { owner } : {}) });
+    kept.push({ layer, a, length, posted });
   }
-  return { frame, d, arrays: kept };
-}
-
-/**
- * Drops an array that carries another realm's marker when a different frame's tally has that token and an array
- * at least as long. Any other marked array is kept, so a marker the page forged does not hide an unrecorded array.
- */
-export function resolveOwners(tallies: readonly FrameTally[]): FrameTally[] {
-  return tallies.map((tally) => ({
-    ...tally,
-    arrays: tally.arrays.flatMap(({ owner, ...array }) => {
-      if (owner === undefined) return [array];
-      const owned = tallies.some((other) => other.frame !== tally.frame && other.d === owner && other.arrays.some((o) => o.a !== null && o.length >= array.length));
-      return owned ? [] : [array];
-    }),
-  }));
+  // The init script runs before page scripts, so the default name is always trapped.
+  const untrappedKept = parseNames(untrapped).filter((n) => n !== DEFAULT_DATALAYER && names.includes(n));
+  return { frame, d, arrays: kept, untrapped: [...new Set(untrappedKept)] };
 }
 
 /** True while the binding has received fewer payloads than a tally says the hook posted. */

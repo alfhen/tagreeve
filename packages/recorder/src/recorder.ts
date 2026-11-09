@@ -49,8 +49,8 @@ import {
 } from 'playwright';
 import { routeCollector, type CollectorHandler, type ParsedReport } from './collector.ts';
 import { COLLECTOR_ORIGIN, SELFTEST_ORIGIN } from './origins.ts';
-import { DATALAYER_BINDING, DATALAYER_TALLY, DATALAYER_UNTRAPPED, dataLayerEventFromPayload, dataLayerInitScript, hookedLayerNames, type DataLayerPayload } from './datalayer.ts';
-import { buildTallyFlags, parseUntrapped, PayloadCounts, postedAhead, resolveOwners, validateTally, type FrameTally } from './datalayer-tally.ts';
+import { DATALAYER_BINDING, DATALAYER_TALLY, dataLayerEventFromPayload, dataLayerInitScript, hookedLayerNames, type DataLayerPayload } from './datalayer.ts';
+import { buildTallyFlags, PayloadCounts, postedAhead, validateTally, type FrameTally } from './datalayer-tally.ts';
 import { buildDataLayerNotHookedFlag, loaderLayerName } from './datalayer-names.ts';
 import { parseTagReport, TAG_REPORT_BINDING } from './tag-report.ts';
 import { buildFlags, buildUnloadGapFlags, type FrameRef } from './flags.ts';
@@ -1044,17 +1044,18 @@ export class Recorder {
   private async collectTallies(): Promise<FrameTally[]> {
     const names = hookedLayerNames(this.options.dataLayerNames);
     const tallies: FrameTally[] = [];
-    let frames: Frame[] = [];
+    let frames: { frame: Frame; top: boolean }[] = [];
     try {
-      frames = this.context.pages().flatMap((page) => page.frames());
+      // page.frames() lists the main frame first.
+      frames = this.context.pages().flatMap((page) => page.frames().map((frame, i) => ({ frame, top: i === 0 })));
     } catch {
       return tallies;
     }
     const script = `window.${DATALAYER_TALLY}?.()`;
-    const asking = frames.map(async (frame) => {
+    const asking = frames.map(async ({ frame, top }) => {
       try {
         const tally = validateTally(this.frameNumber(frame), await frame.evaluate(script), names);
-        if (tally) tallies.push(tally);
+        if (tally) tallies.push(top ? tally : { ...tally, untrapped: [] });
       } catch {
         // a frame that fails or detaches gets no flag
       }
@@ -1065,38 +1066,12 @@ export class Recorder {
     });
     await Promise.race([Promise.all(asking), deadline]);
     clearTimeout(timer);
-    return resolveOwners(tallies);
-  }
-
-  /** Reads the init script's frozen untrapped answer from each main frame, apart from the tally so page code cannot delay it. */
-  private async collectUntrapped(): Promise<string[]> {
-    const names = hookedLayerNames(this.options.dataLayerNames);
-    const found: string[] = [];
-    let mains: Frame[] = [];
-    try {
-      mains = this.context.pages().map((page) => page.mainFrame());
-    } catch {
-      return found;
-    }
-    const asking = mains.map(async (frame) => {
-      try {
-        found.push(...parseUntrapped(await frame.evaluate(`window.${DATALAYER_UNTRAPPED}`), names));
-      } catch {
-        // a frame that fails or detaches adds nothing
-      }
-    });
-    let timer: NodeJS.Timeout | undefined;
-    const deadline = new Promise<void>((resolve) => {
-      timer = setTimeout(resolve, TALLY_DEADLINE_MS);
-    });
-    await Promise.race([Promise.all(asking), deadline]);
-    clearTimeout(timer);
-    return [...found];
+    return [...tallies];
   }
 
   private async tallyDataLayers(): Promise<Flag[]> {
-    const [tallies, untrapped] = await Promise.all([this.collectTallies(), this.collectUntrapped()]);
-    this.untrappedLayerNames = [...new Set(untrapped)];
+    const tallies = await this.collectTallies();
+    this.untrappedLayerNames = [...new Set(tallies.flatMap((t) => t.untrapped))];
     const start = Date.now();
     while (postedAhead(tallies, this.payloadCounts) && Date.now() - start < TALLY_POSTED_WAIT_MS) await this.wait(20);
     return buildTallyFlags(this.runId, tallies, this.payloadCounts);

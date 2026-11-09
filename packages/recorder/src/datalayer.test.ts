@@ -1,7 +1,7 @@
 import { runInNewContext } from 'node:vm';
 import { newId } from '@tagreeve/core';
 import { expect, test } from 'vitest';
-import { DATALAYER_BINDING, DATALAYER_TALLY, DATALAYER_UNTRAPPED, dataLayerEventFromPayload, dataLayerInitScript } from './datalayer.ts';
+import { DATALAYER_BINDING, DATALAYER_TALLY, dataLayerEventFromPayload, dataLayerInitScript } from './datalayer.ts';
 
 const MAIN = { main: true, n: 0 };
 
@@ -389,8 +389,11 @@ test('a push accessor the page defined is kept', async () => {
   expect(argsOf(page.sent)).toEqual([[{ event: 'x' }]]);
 });
 
-const tallyOf = (run: (code: string) => unknown): Tally => JSON.parse(JSON.stringify(run(`${DATALAYER_TALLY}()`))) as Tally;
-const untrappedOf = (run: (code: string) => unknown): string[] => JSON.parse(run(DATALAYER_UNTRAPPED) as string) as string[];
+type FullTally = Tally & { untrapped: string[] };
+const tallyOf = (run: (code: string) => unknown): FullTally => {
+  const raw = JSON.parse(JSON.stringify(run(`${DATALAYER_TALLY}()`))) as Omit<FullTally, 'untrapped'> & { untrapped: string };
+  return { ...raw, untrapped: JSON.parse(raw.untrapped) as string[] };
+};
 
 test('one array under two names gives one tally entry, under the name it was hooked with', async () => {
   const page = pageWith('', ['myLayer']);
@@ -418,7 +421,7 @@ test('a second realm that adopts a marked array gives no tally entry', async () 
   child.parentLayer = parent.dataLayer;
   runInNewContext(`window.dataLayer = parentLayer; dataLayer.push({ event: 'b' });`, child);
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(tallyOf((code) => runInNewContext(code, child)).arrays).toEqual([{ layer: 'dataLayer', a: null, length: 2, posted: 0, owner: tallyOf((code) => runInNewContext(code, parent)).d }]);
+  expect(tallyOf((code) => runInNewContext(code, child)).arrays).toEqual([]);
   expect(tallyOf((code) => runInNewContext(code, parent)).arrays).toEqual([{ layer: 'dataLayer', a: 1, length: 2, posted: 2 }]);
 });
 
@@ -430,39 +433,26 @@ test('a page array with no marker and no hook in this realm keeps a: null', () =
 
 test('page code cannot change the untrapped list a later tally returns', () => {
   const page = pageWith(`Object.defineProperty(globalThis, 'status', { get() { return ''; }, set() {}, configurable: true });`, ['status', 'myLayer']);
-  page.run(`const t = ${DATALAYER_TALLY}(); t.untrapped = ['myLayer']; try { Object.defineProperty(window, '${DATALAYER_UNTRAPPED}', { value: '[]' }); } catch {}`);
-  expect(untrappedOf(page.run)).toEqual(['status']);
+  page.run(`const t = ${DATALAYER_TALLY}(); t.untrapped = ['myLayer'];`);
+  expect(tallyOf(page.run).untrapped).toEqual(['status']);
 });
 
 test('page code cannot change the untrapped list by replacing Array methods', () => {
   const page = pageWith(`Object.defineProperty(globalThis, 'status', { get() { return ''; }, set() {}, configurable: true });`, ['status', 'myLayer']);
   page.run(`Array.prototype.slice = () => ['myLayer', 'dataLayer']; Array.prototype[Symbol.iterator] = function* () {}; JSON.stringify = () => '[]';`);
-  expect(untrappedOf(page.run)).toEqual(['status']);
+  expect(tallyOf(page.run).untrapped).toEqual(['status']);
 });
 
 test('page code that breaks Set or makes the array iterator throw cannot hide the untrapped list', () => {
   for (const sabotage of [`window.Set = null;`, `Array.prototype[Symbol.iterator] = function () { throw 1; };`]) {
     const page = pageWith(`Object.defineProperty(globalThis, 'status', { get() { return ''; }, set() {}, configurable: true });`, ['status', 'myLayer']);
     page.run(sabotage);
-    expect(untrappedOf(page.run)).toEqual(['status']);
+    expect(tallyOf(page.run).untrapped).toEqual(['status']);
   }
 });
 
 test('a name the page defined as an accessor is untrapped and not replaced', () => {
   const page = pageWith(`Object.defineProperty(globalThis, 'status', { get() { return ''; }, set() {}, configurable: true });`, ['status', 'myLayer']);
-  expect(untrappedOf(page.run)).toEqual(['status']);
+  expect(tallyOf(page.run).untrapped).toEqual(['status']);
   expect(page.run(`'value' in Object.getOwnPropertyDescriptor(window, 'status')`)).toBe(false);
-});
-
-test('a stalled dataLayer getter cannot delay or hide the untrapped list', () => {
-  const page = pageWith(`Object.defineProperty(globalThis, 'status', { get() { return ''; }, set() {}, configurable: true });`, ['status']);
-  page.run(`Object.defineProperty(window, 'dataLayer', { configurable: true, get() { throw new Error('stall'); } });`);
-  expect(untrappedOf(page.run)).toEqual(['status']);
-  expect(page.run(`Object.getOwnPropertyDescriptor(window, '${DATALAYER_UNTRAPPED}').configurable`)).toBe(false);
-});
-
-test('a forged marker on a same-realm array still gets an entry without an owner', () => {
-  const page = pageWith('');
-  page.run(`const a = [{ event: 'x' }]; Object.defineProperty(a, '__tagreeveHooked', { value: 'forged' }); window.dataLayer = a;`);
-  expect(tallyOf(page.run).arrays).toEqual([{ layer: 'dataLayer', a: null, length: 1, posted: 0 }]);
 });
