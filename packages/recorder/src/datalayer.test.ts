@@ -15,7 +15,11 @@ interface Sent {
   reassigned?: true;
 }
 
-function pageWith(setup: string, names: string[] = []): { sent: Sent[]; run: (code: string) => unknown; flush: () => Promise<void> } {
+function pageWith(
+  setup: string,
+  names: string[] = [],
+  binding: (payload: Sent) => unknown = () => Promise.resolve(),
+): { sent: Sent[]; run: (code: string) => unknown; flush: () => Promise<void> } {
   const sent: Sent[] = [];
   const sandbox: Record<string, unknown> = {
     performance: { timeOrigin: 1000, now: () => 5 },
@@ -24,7 +28,7 @@ function pageWith(setup: string, names: string[] = []): { sent: Sent[]; run: (co
     addEventListener: () => {},
     [DATALAYER_BINDING]: (payload: Sent) => {
       sent.push(payload);
-      return Promise.resolve();
+      return binding(payload);
     },
   };
   sandbox.window = sandbox;
@@ -340,12 +344,58 @@ test('assigning the same array again posts no reassigned notice', async () => {
   expect(page.sent.filter((s) => s.reassigned)).toHaveLength(0);
 });
 
-test('the tally reading the name queues no second check', async () => {
+test('the tally reading the name queues no second check, so a push that skips the base after the read stays unrecorded', async () => {
   const page = pageWith('');
   page.run(`window.dataLayer = []; window.saved = dataLayer; Array.prototype.push.call(saved, { event: 'a' });`);
-  page.run(`${DATALAYER_TALLY}()`);
   await page.flush();
-  expect(page.sent).toHaveLength(1);
+  page.run(`${DATALAYER_TALLY}(); Array.prototype.push.call(saved, { event: 'late' });`);
+  await page.flush();
+  expect(argsOf(page.sent)).toEqual([[{ event: 'a' }]]);
+  expect(page.run('saved.length')).toBe(2);
+});
+
+test('a page read of the name does queue a check that records the late push', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; window.saved = dataLayer; dataLayer.length; Array.prototype.push.call(saved, { event: 'late' });`);
+  await page.flush();
+  expect(argsOf(page.sent)).toEqual([[{ event: 'late' }]]);
+});
+
+test('a frozen array is hooked without throwing and keeps its early items', async () => {
+  const page = pageWith(`window.dataLayer = Object.freeze([{ event: 'early' }]);`);
+  await page.flush();
+  expect(argsOf(page.sent)).toEqual([[{ event: 'early' }]]);
+  expect(() => page.run(`${DATALAYER_TALLY}()`)).not.toThrow();
+  expect(page.run('dataLayer.length')).toBe(1);
+});
+
+test('a non-configurable push stays the page function and the growth check still records', async () => {
+  const page = pageWith('');
+  page.run(`const l = []; globalThis.mine = function (...a) { return Array.prototype.push.apply(this, a); }; Object.defineProperty(l, 'push', { value: mine, configurable: false, writable: false }); window.dataLayer = l; dataLayer.push({ event: 'x' });`);
+  expect(page.run('dataLayer.push === mine')).toBe(true);
+  expect((page.run(`${DATALAYER_TALLY}()`) as Tally).arrays).toEqual([{ layer: 'dataLayer', a: 1, length: 1, posted: 1 }]);
+  await page.flush();
+  expect(argsOf(page.sent)).toEqual([[{ event: 'x' }]]);
+});
+
+test('a binding that throws, rejects or is missing never reaches the page and is not counted as posted', async () => {
+  const bindings: [string, (payload: Sent) => unknown][] = [
+    ['throws', () => { throw new Error('binding gone'); }],
+    ['rejects', () => Promise.reject(new Error('binding gone'))],
+  ];
+  for (const [label, binding] of bindings) {
+    const page = pageWith('', [], binding);
+    expect(() => page.run(`window.dataLayer = []; dataLayer.push({ event: 'a' }); dataLayer.length`), label).not.toThrow();
+    await page.flush();
+    expect(page.run('dataLayer.length'), label).toBe(1);
+    const posted = (page.run(`${DATALAYER_TALLY}()`) as Tally).arrays[0]!.posted;
+    expect(posted, label).toBe(label === 'throws' ? 0 : 1);
+  }
+  const absent = pageWith('');
+  absent.run(`delete window[${JSON.stringify(DATALAYER_BINDING)}]; window.dataLayer = []; dataLayer.push({ event: 'a' });`);
+  await absent.flush();
+  expect(absent.run('dataLayer.length')).toBe(1);
+  expect((absent.run(`${DATALAYER_TALLY}()`) as Tally).arrays[0]!.posted).toBe(0);
 });
 
 function realm(sent: Sent[], tag: string) {

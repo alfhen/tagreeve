@@ -33,7 +33,7 @@ function cli(args: string[]): Promise<{ code: number; stdout: string; stderr: st
   });
 }
 
-const LEAKS = ['sku-1', '25.5', 'fake.person', 'example.test', 'gid://', '1234567890', 'deadbeef', 'pw-secret-value', 'tok-value'];
+const LEAKS = ['sku-1', '25.5', 'fake.person', 'example.test', 'gid://', '1234567890', 'deadbeef', 'pw-secret-value', 'tok-value', 'USD'];
 
 function expectNoLeaks(...outs: string[]) {
   for (const out of outs) for (const leak of LEAKS) expect(out).not.toContain(leak);
@@ -50,7 +50,10 @@ async function recordBuilds() {
   expect(cart(b).map((e) => e.frame?.main)).toEqual([true]);
   const args = JSON.stringify(b.records!.dataLayerEvents.map((e) => e.args)) + JSON.stringify(a.records!.dataLayerEvents.map((e) => e.args));
   for (const leak of LEAKS) expect(args + JSON.stringify(b.records!.dataLayerEvents.map((e) => e.event))).toContain(leak);
-  return { a: (JSON.parse(a.stdout) as { path: string }).path, b: (JSON.parse(b.stdout) as { path: string }).path };
+  const paths = { a: (JSON.parse(a.stdout) as { path: string }).path, b: (JSON.parse(b.stdout) as { path: string }).path };
+  const savedA = await readFile(paths.a, 'utf8');
+  for (const leak of LEAKS) expect(savedA, leak).toContain(leak);
+  return paths;
 }
 
 test('diff names the missing path, the type change and the frame move, and never prints a pushed value', async () => {
@@ -109,8 +112,7 @@ test('a baseline of build a and a run of build b exit 0 with push warnings, and 
   expect(text.stdout).toContain('dataLayer missing path ecommerce.value');
   expectNoLeaks(text.stdout, text.stderr);
 
-  const rc1 = JSON.parse(file) as Record<string, unknown>;
-  delete rc1.dataLayer;
+  const rc1 = { baselineSchemaVersion: 1, scenario: 'datalayer-build-a.yml', site: 'localhost', byPage: false, keys: [] };
   const rc1Path = join(outDir, 'datalayer-baseline-rc1.json');
   await writeFile(rc1Path, JSON.stringify(rc1));
   const old = await run('datalayer-build-b', ['--baseline', rc1Path]);

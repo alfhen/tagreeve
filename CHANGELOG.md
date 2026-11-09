@@ -25,7 +25,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 <!-- K10 -->
 
-<!-- J10 -->
+- Tests only: the `dataLayer` hook and tally tests now check their inputs first and cover a frozen array, a fixed `push` and a failing binding. The unload gap, push shape and diff e2e tests check the main-frame rule, more leak values, a sandboxed frame and a literal rc.1 baseline (#1355, #1359, #1358, #1300, #1218, #1217, #1171, #1172, #1212, #1213). `/datalayer-build` now has the same masked keys and an email-keyed push in both builds, so the diff output is unchanged.
 
 <!-- G10 -->
 

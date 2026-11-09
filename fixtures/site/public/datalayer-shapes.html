@@ -6,8 +6,8 @@
 </head>
 <body>
 <h1>DataLayer shapes</h1>
-<p>Pushes a <code>purchase</code> with items, a key that is a fake email, an event named with a fake email, a Shopify GID key and a consent default. An embedded frame pushes a key that is a fake checkout token. All values are fake.</p>
-<iframe id="child" title="Embedded frame"></iframe>
+<p>Pushes a <code>purchase</code> with items, a key that is a fake email, an event named with a fake email, a Shopify GID key and a consent default. A sandboxed embedded frame, which has an opaque origin, pushes a key that is a fake checkout token. All values are fake.</p>
+<iframe id="child" title="Embedded frame" sandbox="allow-scripts"></iframe>
 <script>
 var q = new URLSearchParams(location.search);
 window.dataLayer = window.dataLayer || [];
