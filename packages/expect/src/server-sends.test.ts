@@ -297,6 +297,17 @@ describe('rules on a server hit', () => {
       expect(rule(only, many(10)).note).toBeUndefined();
       expect(rule(only, many(11))).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked' });
     });
+
+    test('a plain exact count that no number of placed hits can meet stays a hard FAIL with more than 10 unlinked hits', () => {
+      const five = '  must:\n    - { vendor: meta-capi, in: epoch(denied), count: 5 }';
+      const direct = Array.from({ length: 6 }, (_, i) => browser(100 + i, { vendor: 'meta-capi' }));
+      const unlinked = Array.from({ length: 11 }, (_, i) => capi(500 + i, undefined));
+      expect(rule(five, direct)).toMatchObject({ pass: false });
+      const result = rule(five, [...direct, ...unlinked]);
+      expect(result.pass).toBe(false);
+      expect(result.note).toBeUndefined();
+      expect(result.severity).toBeUndefined();
+    });
   });
 
   describe('an exact count tries every placement of the probable links', () => {
