@@ -153,11 +153,17 @@ test('run: a refused key stops the run and the value is not printed', async () =
   expect(err.text()).not.toContain('FAKE-AUTH-VALUE');
 });
 
+async function usageMessage(run: Promise<number>): Promise<string> {
+  const error = await run.then(() => undefined, (e: unknown) => e);
+  expect(error).toBeInstanceOf(UsageError);
+  expect((error as UsageError).command).toBe('suite');
+  return (error as UsageError).message;
+}
+
 test('suite: --allow-test-payment needs --site or --stores on the command line, also when the config has a site', async () => {
   await writeFile(join(root, 'tagreeve/config.yml'), CONFIG);
   const err = capture();
-  expect(await suiteCommand({ ...suiteArgs, allowTestPayment: '127.0.0.1' }, err.io)).toBe(2);
-  expect(err.text()).toContain('--allow-test-payment needs --site or --stores');
+  expect(await usageMessage(suiteCommand({ ...suiteArgs, allowTestPayment: '127.0.0.1' }, err.io))).toContain('--allow-test-payment needs --site or --stores');
 });
 
 test('suite: a config site and a default stores.json ask for --site or --stores', async () => {
@@ -165,8 +171,7 @@ test('suite: a config site and a default stores.json ask for --site or --stores'
   await writeFile(join(root, 'tagreeve/stores.json'), '[]');
   await mkdir(join(root, 'tagreeve/scenarios'));
   const err = capture();
-  expect(await suiteCommand(suiteArgs, err.io)).toBe(2);
-  expect(err.text()).toContain('tagreeve/config.yml sets site and tagreeve/stores.json exists. Give --site or --stores');
+  expect(await usageMessage(suiteCommand(suiteArgs, err.io))).toContain('tagreeve/config.yml sets site and tagreeve/stores.json exists. Give --site or --stores');
 });
 
 test('suite: the config site stands in when there is no stores.json', async () => {

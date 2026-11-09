@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { parseScenario } from '@tagreeve/expect';
-import type { SuiteArgs } from './args.ts';
+import { UsageError, type SuiteArgs } from './args.ts';
 import type { RunOutcome, RunSpec } from './run.ts';
 import { suiteCommand } from './suite.ts';
 
@@ -25,6 +25,13 @@ const { executeRun } = await import('./run.ts');
 const VALID = 'start: /\nsteps:\n  - visit: /\nexpect:\n  must: []\n  mustNot: []\n';
 const PAYMENT = 'start: /\nsteps:\n  - payment: { provider: fixture, card: "4242424242424242" }\nexpect:\n  must: []\n  mustNot: []\n';
 const pass: RunOutcome = { code: 0, summary: { ok: true, pass: true } as RunOutcome['summary'] };
+
+async function usageMessage(run: Promise<number>): Promise<string> {
+  const error = await run.then(() => undefined, (e: unknown) => e);
+  expect(error).toBeInstanceOf(UsageError);
+  expect((error as UsageError).command).toBe('suite');
+  return (error as UsageError).message;
+}
 
 async function workDir(files: Record<string, string>): Promise<{ dir: string; out: string }> {
   const root = await mkdtemp(join(tmpdir(), 'pw-suite-pay-'));
@@ -109,9 +116,8 @@ test('a failed gate with --with-test-payment exits 2 before any run', async () =
   const fake = recorder();
   const c = capture();
   const a = args(dir, out, { withTestPayment: true, allowTestPayment: '127.0.0.1' });
-  expect(await withAllowlist(['localhost'], () => suiteCommand(a, c.io, fake))).toBe(2);
+  expect(await usageMessage(withAllowlist(['localhost'], () => suiteCommand(a, c.io, fake)))).toContain('must name the --site host');
   expect(fake.specs).toEqual([]);
-  expect(c.err()).toContain('must name the --site host');
 });
 
 const SEAM = 'TAGREEVE_TEST_LOOPBACK_IS_HOSTED';
