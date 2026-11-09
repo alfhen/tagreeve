@@ -183,7 +183,7 @@ describe('push kind', () => {
     expect(d.kindChanged).toEqual([{ epoch: 'undecided', event: 'purchase', frame: 'main', from: 'object', to: 'gtag', renamedFrom: 'checkout_completed' }]);
     expect(d.eventsRemoved).toEqual([]);
     expect(d.eventsAdded).toEqual([]);
-    expect(d.pathsRemoved.map((p) => p.path)).toEqual(['event']);
+    expect(d.pathsRemoved).toEqual([]);
     expect(d.pathsAdded.map((p) => p.path)).toEqual(['currency']);
   });
 

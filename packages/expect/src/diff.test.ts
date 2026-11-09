@@ -784,7 +784,50 @@ describe('push kind in diffRuns', () => {
     expect(result.warnings).toEqual(['push kind changed: purchase (renamed from checkout_completed)']);
     expect(result.dataLayer!.eventsRemoved).toEqual([]);
     expect(result.dataLayer!.eventsAdded).toEqual([]);
-    expect(result.dataLayer!.pathsRemoved.map((p) => p.path)).toEqual(['event']);
+    expect(result.dataLayer!.pathsRemoved).toEqual([]);
+  });
+
+  describe('the event name path in a kind-changed pair', () => {
+    const gtag = (body: Record<string, unknown>) => ['event', 'x', body];
+
+    test('the object form and the gtag form of one event differ only in kind', () => {
+      const a = makeRun();
+      const b = makeRun();
+      addPush(a, { event: 'x', a: 1 });
+      addPush(b, { event: 'x' }, { args: gtag({ a: 1 }) });
+      expect(pushGroups(a)[0]!.paths.map((p) => p.path)).toContain('event');
+      expect(pushGroups(b)[0]!.paths.map((p) => p.path)).not.toContain('event');
+      const d = diffRuns(a, b);
+      expect(d.dataLayer!.kindChanged).toHaveLength(1);
+      expect(d.warnings).toContain('push kind changed: x');
+      expect(d.dataLayer!.pathsRemoved).toEqual([]);
+      expect(d.dataLayer!.pathsAdded).toEqual([]);
+      expect(d.dataLayer!.typeChanges).toEqual([]);
+    });
+
+    test('a key the gtag form drops is still removed', () => {
+      const a = makeRun();
+      const b = makeRun();
+      addPush(a, { event: 'x', a: 1 });
+      addPush(b, { event: 'x' }, { args: gtag({}) });
+      expect(pushGroups(a)[0]!.paths.map((p) => p.path)).toContain('a');
+      const d = diffRuns(a, b);
+      expect(d.dataLayer!.kindChanged).toHaveLength(1);
+      expect(d.dataLayer!.pathsRemoved.map((p) => p.path)).toEqual(['a']);
+    });
+
+    test('the reverse direction adds no event path', () => {
+      const a = makeRun();
+      const b = makeRun();
+      addPush(a, { event: 'x' }, { args: gtag({ a: 1 }) });
+      addPush(b, { event: 'x', a: 1 });
+      expect(pushGroups(b)[0]!.paths.map((p) => p.path)).toContain('event');
+      expect(pushGroups(a)[0]!.paths.map((p) => p.path)).not.toContain('event');
+      const d = diffRuns(a, b);
+      expect(d.dataLayer!.kindChanged).toHaveLength(1);
+      expect(d.dataLayer!.pathsAdded).toEqual([]);
+      expect(d.dataLayer!.pathsRemoved).toEqual([]);
+    });
   });
 });
 
