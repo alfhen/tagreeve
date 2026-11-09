@@ -1,8 +1,10 @@
 import { newId, type ConsentEpoch, type Flag, type Hit, type Request, type RunRecords, type Step } from '@tagreeve/core';
+import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import type { DataLayerEvent } from '@tagreeve/core';
 import { parseEventMap, type EventMap } from './event-map.ts';
-import { diffPushes, diffRuns, diffShapes, hitShape, kindsMerged, neighbourEpochs, pairNames, pushGroups, type PushGroup, type ShapeKey, type ShapeTuple } from './diff.ts';
+import { diffPushes, diffRuns, diffShapes, hitShape, kindsMerged, neighbourEpochs, pairNames, pushGroups, type ShapeKey, type ShapeTuple } from './diff.ts';
+import type { PushGroup } from './push-shape.ts';
 
 const state = { analytics: 'denied', ads: 'denied', adUserData: 'denied', adPersonalization: 'denied' } as const;
 const consent = { ...state, raw: { gcs: 'G100' } };
@@ -863,6 +865,46 @@ describe('renamed pairs in diffPushes', () => {
     expect(d.moved).toEqual([{ event: 'purchase', kind: 'epoch', pushKind: 'object', frame: 'main', from: 'undecided', to: 'granted' }]);
   });
 
+  describe('every join that pairNames makes across epochs is a move to the epoch it chose', () => {
+    const ORDER5 = ['undecided', 'granted', 'denied', 'withdrawn', 'mixed'];
+    const joinNames = ['checkout_completed', 'order_done', 'purchase'];
+    const cells5 = ORDER5.flatMap((epoch) => joinNames.map((event) => ({ epoch, event })));
+    const sides5: { epoch: string; event: string }[][] = [];
+    for (let m = 0; m < 1 << cells5.length; m++) {
+      const picked = cells5.filter((_, i) => m & (1 << i));
+      if (picked.length <= 2) sides5.push(picked);
+    }
+
+    test('four distinct epoch labels, two aliased names', () => {
+      const a = [g('undecided', 'checkout_completed'), g('denied', 'order_done')];
+      const b = [g('granted', 'purchase'), g('withdrawn', 'purchase')];
+      const d = diffPushes(a, b, { epochOrder: ORDER5, eventMap: map });
+      expect(d.eventsRemoved).toEqual([]);
+      expect(d.eventsAdded).toEqual([]);
+      expect(d.moved.map((m) => [m.renamedFrom, m.from, m.kind === 'epoch' ? m.to : null]).sort()).toEqual([
+        ['checkout_completed', 'undecided', 'granted'],
+        ['order_done', 'denied', 'withdrawn'],
+      ]);
+    });
+
+    test('exhaustive', () => {
+      let joins = 0;
+      for (const sa of sides5) {
+        for (const sb of sides5) {
+          const a = sa.map((c) => g(c.epoch, c.event));
+          const b = sb.map((c) => g(c.epoch, c.event));
+          const d = diffPushes(a, b, { epochOrder: ORDER5, eventMap: map });
+          for (const n of pairNames(a, b, map, { epochOrder: ORDER5 })) {
+            if (n.renamedFrom === undefined || n.joinedTo === undefined || n.joinedTo === n.epoch) continue;
+            joins++;
+            expect(d.moved.some((m) => m.kind === 'epoch' && m.renamedFrom === n.renamedFrom && m.from === n.epoch && m.to === n.joinedTo), JSON.stringify([sa, sb])).toBe(true);
+          }
+        }
+      }
+      expect(joins).toBeGreaterThan(0);
+    }, 30_000);
+  });
+
   test('a frame move of a joined pair names the recorded name, and a kind-merged move has no pushKind', () => {
     const d = diffPushes([g('undecided', 'checkout_completed', { frame: 'embedded' })], [g('undecided', 'purchase')], { acrossFrames: true });
     expect(d.moved).toEqual([{ event: 'purchase', renamedFrom: 'checkout_completed', kind: 'frame', pushKind: 'object', epoch: 'undecided', from: 'embedded', to: 'main' }]);
@@ -1057,5 +1099,13 @@ describe('renamed pairs in diffRuns', () => {
     expect(d.warnings).toEqual([]);
     expect(d.dataLayer!.kindChanged).toEqual([]);
     expect(d.dataLayer!.eventsRemoved).toEqual([expect.objectContaining({ event: 'purchase', kind: 'object' })]);
+  });
+});
+
+describe('PushGroup has one home', () => {
+  test('diff.ts does not re-export it', () => {
+    const source = readFileSync(new URL('./diff.ts', import.meta.url), 'utf8');
+    expect(source).toContain("import { pushShapes, type PushGroup, type PushKind } from './push-shape.ts';");
+    expect(source).not.toMatch(/export\s+type\s*\{[^}]*\bPushGroup\b/);
   });
 });

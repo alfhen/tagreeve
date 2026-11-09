@@ -5,7 +5,6 @@ import { epochForHit, judgeIndex, judgedAt } from './evaluate.ts';
 import { builtInEventName, keepPushGroups, mappedEventName, normalizePushGroups, type EventMap } from './event-map.ts';
 import { pushShapes, type PushGroup, type PushKind } from './push-shape.ts';
 
-export type { PushGroup };
 
 export interface DiffOptions {
   /** Adds the page path to the match key, with the Shopify sandbox prefix stripped. */
@@ -248,9 +247,10 @@ interface PushNode {
   frames: string[];
   types: Map<string, string[]>;
   renamedFrom?: string;
+  joinedTo?: string;
 }
 
-export type NamedGroup = PushGroup & { renamedFrom?: string };
+export type NamedGroup = PushGroup & { renamedFrom?: string; joinedTo?: string };
 
 function pushNodes(groups: NamedGroup[], acrossFrames: boolean, mergeKinds: boolean): Map<string, PushNode> {
   const nodes = new Map<string, PushNode>();
@@ -258,7 +258,7 @@ function pushNodes(groups: NamedGroup[], acrossFrames: boolean, mergeKinds: bool
     const frame = acrossFrames ? 'any' : g.frame;
     const kind = mergeKinds ? undefined : g.kind;
     const id = JSON.stringify([g.epoch, g.event, kind ?? null, frame]);
-    const node: PushNode = nodes.get(id) ?? { epoch: g.epoch, event: g.event, ...(kind === undefined ? {} : { kind }), frame, frames: [], types: new Map(), ...(g.renamedFrom === undefined ? {} : { renamedFrom: g.renamedFrom }) };
+    const node: PushNode = nodes.get(id) ?? { epoch: g.epoch, event: g.event, ...(kind === undefined ? {} : { kind }), frame, frames: [], types: new Map(), ...(g.renamedFrom === undefined ? {} : { renamedFrom: g.renamedFrom }), ...(g.joinedTo === undefined ? {} : { joinedTo: g.joinedTo }) };
     if (!node.frames.includes(g.frame)) node.frames.push(g.frame);
     for (const p of g.paths) node.types.set(p.path, [...new Set([...(node.types.get(p.path) ?? []), ...p.types])].sort());
     nodes.set(id, node);
@@ -304,7 +304,7 @@ export function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap, co
     neighbourEpochs(context.epochOrder ?? [], from.epoch, to.epoch) && shapeOf(normalized, a, from.epoch, from.event) === shapeOf(b, b, to.epoch, to.event);
   const taken = new Set(inA);
   const claimed = new Set<string>();
-  const joined = new Map<string, string>();
+  const joined = new Map<string, PushGroup>();
   const pair = (sameEpoch: boolean): void => {
     for (const from of onlyA) {
       if (joined.has(epochEventId(from)) || (!sameEpoch && movedNames.has(from.event))) continue;
@@ -315,7 +315,7 @@ export function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap, co
       if (to === undefined) continue;
       claimed.add(epochEventId(to));
       taken.add(JSON.stringify([from.epoch, to.event]));
-      joined.set(epochEventId(from), to.event);
+      joined.set(epochEventId(from), to);
     }
   };
   pair(true);
@@ -324,7 +324,7 @@ export function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap, co
   return normalized.map((g, i) => {
     const recorded = a[i]!;
     const to = joined.get(epochEventId(recorded));
-    return to === undefined ? kept[i]! : { ...g, event: to, renamedFrom: recorded.event };
+    return to === undefined ? kept[i]! : { ...g, event: to.event, renamedFrom: recorded.event, joinedTo: to.epoch };
   });
 }
 function typesId(n: PushNode): string {
@@ -379,15 +379,23 @@ export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOpti
   }
 
   const taken = new Set<PushNode>();
-  for (const g of gone) {
+  const matches = new Map<PushNode, PushNode>();
+  const matchOf = (g: PushNode, inEpoch: (f: PushNode) => boolean): void => {
     const match = fresh.find(
-      (f) => !taken.has(f) && f.event === g.event && f.kind === g.kind && f.frame === g.frame && typesId(f) === typesId(g) && neighbourEpochs(order, g.epoch, f.epoch),
+      (f) => !taken.has(f) && inEpoch(f) && f.event === g.event && f.kind === g.kind && f.frame === g.frame && typesId(f) === typesId(g) && neighbourEpochs(order, g.epoch, f.epoch),
     );
+    if (!match) return;
+    taken.add(match);
+    matches.set(g, match);
+  };
+  for (const g of gone) if (g.joinedTo !== undefined) matchOf(g, (f) => f.epoch === g.joinedTo);
+  for (const g of gone) if (!matches.has(g)) matchOf(g, () => true);
+  for (const g of gone) {
+    const match = matches.get(g);
     if (!match) {
       result.eventsRemoved.push({ ...nodeRef({ ...g, renamedFrom: undefined }), event: g.renamedFrom ?? g.event });
       continue;
     }
-    taken.add(match);
     result.moved.push({ event: g.event, ...(g.renamedFrom === undefined ? {} : { renamedFrom: g.renamedFrom }), kind: 'epoch', ...(g.kind === undefined ? {} : { pushKind: g.kind }), frame: g.frame, from: g.epoch, to: match.epoch });
   }
   for (const f of fresh) if (!taken.has(f)) result.eventsAdded.push(nodeRef(f));
