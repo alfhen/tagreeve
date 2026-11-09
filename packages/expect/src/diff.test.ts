@@ -591,6 +591,23 @@ describe('diffPushes', () => {
     expect(diffPushes([group({ paths })], [group({ epoch: 'granted', paths: [] })], { epochOrder: order }).changed).toBe(true);
   });
 
+  test('a Shopify name is never merged into a purchase group recorded in its own epoch', () => {
+    const x = [{ path: 'event', types: ['string'] }];
+    const d = diffPushes(
+      [group({ event: 'checkout_completed', paths: [...x, { path: 'only_cc', types: ['string'] }] }), group({ event: 'purchase', paths: x })],
+      [group({ event: 'purchase', paths: x }), group({ epoch: 'granted', event: 'purchase', paths: x })],
+    );
+    expect(d.changed).toBe(true);
+    expect(JSON.stringify(d)).not.toContain('renamed from');
+    expect(d.eventsRemoved.map((r) => r.event)).toContain('checkout_completed');
+  });
+
+  test('a paths key named by the events target applies when the target is a Shopify name', () => {
+    const eventMap = parseEventMap(JSON.stringify({ events: { order_done: 'checkout_completed' }, paths: { checkout_completed: { total: 'value' } } }), 'm.json');
+    const d = diffPushes([group({ event: 'order_done', paths: [{ path: 'total', types: ['number'] }] })], [group({ event: 'checkout_completed', paths: [{ path: 'value', types: ['number'] }] })], { eventMap });
+    expect(d.changed).toBe(false);
+  });
+
   test('the built-in table makes a Shopify name and its GA4 name the same event', () => {
     const paths = [{ path: 'value', types: ['number'] }];
     const d = diffPushes([group({ event: 'checkout_completed', paths })], [group({ event: 'purchase', paths })]);

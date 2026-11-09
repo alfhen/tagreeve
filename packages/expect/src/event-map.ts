@@ -187,8 +187,8 @@ function userEventName(event: string, user: Record<string, string> | undefined):
 export function normalizePushGroups(groups: PushGroup[], userMap?: EventMap): PushGroup[] {
   const user = userMap?.events;
   const rename = (event: string): string => mappedEventName(event, userMap);
-  // In a swap or a chain, a recorded or user-renamed name can also be the name another group ends up with. Its paths entry then belongs to that group.
+  // In a swap or a chain, a recorded name can also be the name another group ends up with. Its paths entry then belongs to that group.
   const targets = new Set(user === undefined ? [] : Object.values(user));
-  const pathKeys = (recorded: string, final: string): string[] => [final, recorded, userEventName(recorded, user)].filter((k, i) => i === 0 || !targets.has(k));
+  const pathKeys = (recorded: string, final: string): string[] => [final, userEventName(recorded, user), recorded].filter((k, i) => i < 2 || !targets.has(k));
   return mapPushGroups(groups, rename, userMap?.paths, pathKeys);
 }
