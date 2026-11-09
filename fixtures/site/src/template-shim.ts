@@ -31,9 +31,9 @@ const API_PERMISSION = {
 const OPEN_APIS = ['makeString'];
 
 /** JavaScript that adds `pwContainer.reportTags(events)`. It runs the shipped template's sandboxed code once per event. */
-export function templateShim(config: ShimConfig): string {
-  const { sandboxedJs, permissions } = readTemplateSections(readFileSync(templatePath, 'utf8'));
-  const granted = Object.fromEntries(permissions.map((p) => [p.id, p.keys]));
+export function templateShim(config: ShimConfig, source = readFileSync(templatePath, 'utf8')): string {
+  const { sandboxedJs, permissions } = readTemplateSections(source);
+  const granted = Object.fromEntries(permissions.map((p) => [p.id, p.id === 'access_globals' ? p.entries.filter((e) => e.execute).map((e) => e.key) : p.keys]));
   const setup = { ...config, templateJs: sandboxedJs, granted, apiPermission: API_PERMISSION, openApis: OPEN_APIS };
   return `(function () {
   var cfg = ${JSON.stringify(setup)};

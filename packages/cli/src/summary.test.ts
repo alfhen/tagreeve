@@ -1,6 +1,6 @@
 import type { DataLayerEvent, Hit, Request, Result, RunRecords } from '@tagreeve/core';
 import type { PushShape } from '@tagreeve/expect';
-import { buildFlags, buildUnloadGapFlags } from '@tagreeve/recorder';
+import { buildDataLayerNotHookedFlag, buildDataLayerReassignedFlags, buildFlags, buildTallyFlags, buildUnloadGapFlags, PayloadCounts } from '@tagreeve/recorder';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -507,12 +507,22 @@ test('a possibleRealData detail is built from a request that holds a foreign ema
   expect(redactFlagDetail(flag.detail, 'possibleRealData')).toBe(flag.detail);
 });
 
+const dataLayerFlag = (kind: string, flags: { kind: string; detail: string }[]): string => {
+  expect(flags).toHaveLength(1);
+  expect(flags[0]!.kind).toBe(kind);
+  return flags[0]!.detail;
+};
+const runId = 'run_1' as never;
+const incomplete = dataLayerFlag('dataLayerIncomplete', buildTallyFlags(runId, [{ frame: 0, d: 'tok', arrays: [{ layer: 'dataLayer', a: 1, length: 3, posted: 0 }], untrapped: [] }], new PayloadCounts()));
+const notHooked = dataLayerFlag('dataLayerNotHooked', [buildDataLayerNotHookedFlag({ runId, loaders: [{ id: 'req_1' as never, name: 'x' }], hooked: [] })!]);
+const reassigned = dataLayerFlag('dataLayerReassigned', buildDataLayerReassignedFlags({ runId, reassigns: [{ n: 0, t: 2, doc: 'd' }], loaders: [{ t: 1, doc: 'd' }] }));
+
 test.each([
   ['netLogUnreadable', 'The net log could not be read, so requests sent while a frame unloads may be missing.'],
   ['serverContainerFailed', 'The server container did not run: timeout.'],
-  ['dataLayerReassigned', 'Frame 0 replaced window.dataLayer with a new array after a Google loader request. Pushes to the new array are still recorded.'],
-  ['dataLayerNotHooked', 'A Google loader names the data layer "x", which is not hooked, so pushes to it are not recorded. Add it to options.dataLayerNames.'],
-  ['dataLayerIncomplete', 'Frame 0: dataLayer holds 3 items, and 2 were recorded. A page script may have replaced dataLayer.push or the array.'],
+  ['dataLayerReassigned', reassigned],
+  ['dataLayerNotHooked', notHooked],
+  ['dataLayerIncomplete', incomplete],
 ])('redactFlagDetail keeps a %s detail whole', (kind, detail) => {
   expect(redactFlagDetail(detail, kind)).toBe(detail);
 });

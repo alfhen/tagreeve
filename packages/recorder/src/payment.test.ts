@@ -683,6 +683,14 @@ describe('the awaits before the fill end by the deadline and its grace', () => {
     const started = Date.now();
     const { error } = await play({ timeout: 100, contentFrameDelay: 400, counts: [2], inputs: [] });
     expect(error).toBeDefined();
-    expect(Date.now() - started).toBeLessThan(100 + 500 + 400 + 300);
+    expect(Date.now() - started).toBeLessThan(100 + 600);
+  });
+
+  test('the card fields share the step deadline, so slow answers in the fill phase do not restart it', async () => {
+    const started = Date.now();
+    const { error, log } = await play({ timeout: 500, contentFrameDelay: 150 });
+    expect(error?.message).toMatch(/^card field (expiry|cvc) could not be filled: the card frame could not be read$/);
+    expect(log.some((l) => l.startsWith('fill'))).toBe(true);
+    expect(Date.now() - started).toBeLessThan(500 + 600);
   });
 });

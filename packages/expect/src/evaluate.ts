@@ -870,6 +870,7 @@ const PLAIN_ADDRESS_PARAMS = new Set(['user_data.city', 'user_data.postal_code',
 // Only these vendors document plain city, postal code and country. The Conversions API requires them hashed.
 const PLAIN_ADDRESS_VENDORS = new Set(['sgtm']);
 export const HASH_REQUIRED_VENDORS: ReadonlySet<string> = new Set(['meta-capi']);
+const HASH_MESSAGE_VENDOR_LABELS: Record<string, string> = { 'meta-capi': 'the Conversions API' };
 const DIGEST_SHAPE = /^(?:[0-9a-f]{64}|[A-Za-z0-9+/_-]{43}=?)$/i;
 
 function allForms(h: HashForms): string[] {
@@ -944,6 +945,7 @@ function checkHashes(hits: Hit[], ctx: Context): { pass: boolean; evidence: stri
   const matchedFields = new Set<string>();
   const unhashedFields = new Set<string>();
   const plainRequiredFields = new Set<string>();
+  const plainRequiredVendors = new Set<string>();
   const plainAddressFields = new Set<string>();
   const uncheckedFields = new Set<string>();
   for (const hit of hits) {
@@ -984,7 +986,10 @@ function checkHashes(hits: Hit[], ctx: Context): { pass: boolean; evidence: stri
     if (seen) withHash.push(hit.id);
     if (bad) wrong.push(hit.id);
     if (raw) unhashed.push(hit.id);
-    if (plainHit) plainRequired.push(hit.id);
+    if (plainHit) {
+      plainRequired.push(hit.id);
+      plainRequiredVendors.add(HASH_MESSAGE_VENDOR_LABELS[hit.vendor] ?? hit.vendor);
+    }
   }
   const several = hits.length > 1;
   const they = several ? 'they' : 'it';
@@ -1001,11 +1006,12 @@ function checkHashes(hits: Hit[], ctx: Context): { pass: boolean; evidence: stri
     return { pass: false, evidence: wrong, headline: UNMATCHED_HEADLINE, message };
   }
   if (plainRequired.length) {
+    const who = joinLabels(plainRequiredVendors).replace(/^the /, 'The ');
     return {
       pass: false,
       evidence: plainRequired,
       headline: UNMATCHED_HEADLINE,
-      message: `${they} carried a plain ${joinLabels(plainRequiredFields)}, not a hash${of(plainRequired.length)}. This vendor takes these hashed.`,
+      message: `${they} carried a plain ${joinLabels(plainRequiredFields)}, not a hash${of(plainRequired.length)}. ${who} ${plainRequiredVendors.size > 1 ? 'take' : 'takes'} these hashed.`,
     };
   }
   if (!withHash.length && uncheckedFields.size) {

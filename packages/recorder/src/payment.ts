@@ -203,6 +203,7 @@ export async function runPayment(
   }
   const declared = testPayment.declaredProviders?.includes(provider.id) === true;
   const wait = Math.min(timeout, MARKER_TIMEOUT_MS);
+  const stepDeadline = Date.now() + timeout;
   const deadline = Date.now() + wait;
   const found: CardFrame[] = [];
   for (const field of runtime.fields) {
@@ -222,7 +223,7 @@ export async function runPayment(
   const typed = typedValues(provider, card, identity);
   for (const [index, field] of runtime.fields.entries()) {
     try {
-      await fillVerified(found[index]!.element, field, runtime.cardHost, valueOf(field.kind, provider, card, identity), timeout, typed);
+      await fillVerified(found[index]!.element, field, runtime.cardHost, valueOf(field.kind, provider, card, identity), stepDeadline, typed);
     } catch (error) {
       throw new Error(`card field ${field.kind} could not be filled: ${reasonOf(error, typed)}`);
     }
@@ -247,8 +248,7 @@ async function frameStillServed(element: ElementHandle, cardHost: string, field:
  * Locator.fill would resolve again in whatever document arrives, so it never types.
  * Each fill is a short try inside the poll loop, so one long wait cannot outlive the check.
  */
-async function fillVerified(element: ElementHandle, field: CardField, cardHost: string, value: string, timeout: number, typed: string[]): Promise<void> {
-  const deadline = Date.now() + timeout;
+async function fillVerified(element: ElementHandle, field: CardField, cardHost: string, value: string, deadline: number, typed: string[]): Promise<void> {
   const tryMs = (): number => Math.max(1, Math.min(FILL_TRY_MS, deadline - Date.now()));
   const readable = <T>(work: Promise<T>): Promise<T> =>
     withinDeadline(work, deadline).catch((error: unknown) => {

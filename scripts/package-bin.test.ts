@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, symlinkSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,6 +58,7 @@ test('the build refuses to empty a source folder or the repo root', () => {
   const fake = realpathSync(mkdtempSync(join(tmpdir(), 'tagreeve-decoy-')));
   mkdirSync(join(fake, 'scripts'), { recursive: true });
   mkdirSync(join(fake, 'packages/cli/src'), { recursive: true });
+  symlinkSync(join(root, 'node_modules'), join(fake, 'node_modules'));
   copyFileSync(join(root, 'scripts/build.ts'), join(fake, 'scripts/build.ts'));
   writeFileSync(join(fake, 'package.json'), JSON.stringify({ dependencies: {} }));
   for (const dir of ['packages/cli/src', 'scripts', '.']) {
@@ -69,6 +70,28 @@ test('the build refuses to empty a source folder or the repo root', () => {
     expect(existsSync(sentinel)).toBe(true);
   }
   rmSync(fake, { recursive: true, force: true });
+}, 60_000);
+
+test.each([
+  ['an unrelated folder', []],
+  ['a folder that holds only a cli.js', ['cli.js']],
+])('the build refuses to empty %s outside the repo', (_name, files) => {
+  const fake = realpathSync(mkdtempSync(join(tmpdir(), 'tagreeve-decoy-')));
+  const elsewhere = realpathSync(mkdtempSync(join(tmpdir(), 'tagreeve-elsewhere-')));
+  mkdirSync(join(fake, 'scripts'), { recursive: true });
+  mkdirSync(join(fake, 'packages'), { recursive: true });
+  symlinkSync(join(root, 'node_modules'), join(fake, 'node_modules'));
+  copyFileSync(join(root, 'scripts/build.ts'), join(fake, 'scripts/build.ts'));
+  writeFileSync(join(fake, 'package.json'), JSON.stringify({ dependencies: {} }));
+  const sentinel = join(elsewhere, 'SENTINEL');
+  writeFileSync(sentinel, 'keep');
+  for (const file of files) writeFileSync(join(elsewhere, file), 'x');
+  const result = spawnSync(process.execPath, ['--experimental-transform-types', join(fake, 'scripts/build.ts'), '--outdir', elsewhere], { encoding: 'utf8' });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain('--outdir must be empty, missing or a folder that holds a build');
+  expect(existsSync(sentinel)).toBe(true);
+  rmSync(fake, { recursive: true, force: true });
+  rmSync(elsewhere, { recursive: true, force: true });
 }, 60_000);
 
 test('building into a temp folder leaves dist/cli.js as it was', () => {

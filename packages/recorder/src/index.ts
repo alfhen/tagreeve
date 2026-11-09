@@ -20,3 +20,5 @@ export * from './server-container/forward-list.ts';
 export * from './server-container/image.ts';
 export * from './server-container/runner.ts';
 export * from './server-container/proxy.ts';
+export { buildDataLayerNotHookedFlag, buildDataLayerReassignedFlags } from './datalayer-names.ts';
+export { buildTallyFlags, PayloadCounts } from './datalayer-tally.ts';
