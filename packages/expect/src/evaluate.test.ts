@@ -284,7 +284,26 @@ test('a vendor added to the required-hash set fails a plain address field with n
     const after = ev();
     expect(after.pass).toBe(false);
     expect(after.message).toContain('a plain city, not a hash');
+    expect(after.message).toContain('ga4 takes these hashed.');
     expect(after.message).not.toContain('Conversions API');
+  } finally {
+    vendors.delete('ga4');
+  }
+});
+
+test('the plain-required message names each vendor that sent the plain field', () => {
+  const email = hashEmail(identity.email).hex;
+  const ga4 = hit({ vendor: 'ga4', params: { 'user_data.city': 'nowhere', 'user_data.email_address': email } });
+  const capi = hit({ vendor: 'meta-capi', params: { 'user_data.city': 'nowhere', 'user_data.email_address': email } });
+  const ev = () =>
+    evaluate([ga4.hit, ga4.req, capi.hit, capi.req], parseScenario('start: /\nexpect:\n  must:\n    - { identity.hashesMatch: true }'), { identity })[0]!;
+  const vendors = HASH_REQUIRED_VENDORS as Set<string>;
+  vendors.add('ga4');
+  try {
+    const result = ev();
+    expect(result.message).toContain('a plain city, not a hash');
+    expect(result.message).toContain('ga4 and the Conversions API take these hashed.');
+    expect(result.message).not.toContain('This vendor');
   } finally {
     vendors.delete('ga4');
   }

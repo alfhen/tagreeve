@@ -71,6 +71,22 @@ test('the build refuses to empty a source folder or the repo root', () => {
   rmSync(fake, { recursive: true, force: true });
 }, 60_000);
 
+test('the build refuses to empty a folder outside the repo that is not a build output', () => {
+  const fake = realpathSync(mkdtempSync(join(tmpdir(), 'tagreeve-decoy-')));
+  const elsewhere = realpathSync(mkdtempSync(join(tmpdir(), 'tagreeve-elsewhere-')));
+  mkdirSync(join(fake, 'scripts'), { recursive: true });
+  copyFileSync(join(root, 'scripts/build.ts'), join(fake, 'scripts/build.ts'));
+  writeFileSync(join(fake, 'package.json'), JSON.stringify({ dependencies: {} }));
+  const sentinel = join(elsewhere, 'SENTINEL');
+  writeFileSync(sentinel, 'keep');
+  const result = spawnSync(process.execPath, ['--experimental-transform-types', join(fake, 'scripts/build.ts'), '--outdir', elsewhere], { encoding: 'utf8' });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain('--outdir must be empty, missing or a folder that holds a build');
+  expect(existsSync(sentinel)).toBe(true);
+  rmSync(fake, { recursive: true, force: true });
+  rmSync(elsewhere, { recursive: true, force: true });
+}, 60_000);
+
 test('building into a temp folder leaves dist/cli.js as it was', () => {
   const after = existsSync(distCli) ? statSync(distCli).mtimeMs : null;
   expect(after).toBe(distMtime);

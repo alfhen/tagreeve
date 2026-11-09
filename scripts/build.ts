@@ -1,4 +1,4 @@
-import { chmodSync, cpSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -15,6 +15,9 @@ const inside = (dir: string) => !relative(path(dir), outdir).startsWith('..');
 const ownedByBuild = inside('dist') || inside('node_modules/.cache');
 if (inside('') && !ownedByBuild) throw new Error('--outdir must be outside the repo, or inside dist or node_modules/.cache.');
 if (!relative(outdir, path('')).startsWith('..')) throw new Error('--outdir must not be the repo root or a folder that holds it.');
+if (existsSync(outdir) && readdirSync(outdir).length > 0 && !existsSync(resolve(outdir, 'cli.js'))) {
+  throw new Error('--outdir must be empty, missing or a folder that holds a build (cli.js).');
+}
 
 const { build } = await import('esbuild');
 
