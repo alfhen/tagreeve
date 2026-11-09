@@ -594,3 +594,22 @@ test('the run identity own email in a push is not a finding, and no events means
   expect(findForeignData([], [], identity, [push([{ em: identity.email }])])).toEqual([]);
   expect(findForeignData([], [], identity)).toEqual([]);
 });
+
+const stableHash = 'ab12cd34'.repeat(8);
+const uidRequest = (id: string): Request => ({ ...rawRequest(`https://tracker.example.net/c?uid=${stableHash}`), id: id as Request['id'] });
+const requestFindings = (requests: Request[], events: DataLayerEvent[]) => findForeignData(requests, [], identity, events).filter((f) => f.source === 'request');
+
+test('a push never changes the request findings, whatever key holds the shared hash', () => {
+  const twoRequests = [uidRequest('req_A'), uidRequest('req_B')];
+  expect(requestFindings(twoRequests, [])).toEqual([]);
+  expect(requestFindings(twoRequests, [push([{ customer_hash: stableHash }])])).toEqual([]);
+  const oneRequest = [uidRequest('req_A')];
+  const before = requestFindings(oneRequest, []);
+  expect(before).toHaveLength(1);
+  expect(requestFindings(oneRequest, [push([{ user_id: stableHash }])])).toEqual(before);
+});
+
+test('a hash under user_id in two requests and unkeyed in a push is only a push finding', () => {
+  const found = findForeignData([uidRequest('req_A'), uidRequest('req_B')], [], identity, [push([stableHash])]);
+  expect(found.map((f) => f.source)).toEqual(['push']);
+});

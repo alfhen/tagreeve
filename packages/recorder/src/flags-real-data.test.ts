@@ -53,3 +53,17 @@ test('a push with a foreign email gives one possibleRealDataPush flag and no pos
   expect(flags[0]!.recordIds).toEqual([event.id, event.stepId]);
   expect(JSON.stringify(flags)).not.toContain(foreign);
 });
+
+test('a push does not change the possibleRealData request flags', () => {
+  const hash = 'ab12cd34'.repeat(8);
+  const requests = ['req_A', 'req_B'].map((id) => req(`https://tracker.example.net/c?uid=${hash}`, { id: id as Request['id'] }));
+  const event: DataLayerEvent = {
+    type: 'dataLayerEvent', id: 'dle_P1' as DataLayerEvent['id'], runId: newId('run'), stepId: 'stp_S1' as DataLayerEvent['stepId'], t: 1, event: null, gtmUniqueEventId: null,
+    args: [{ customer_hash: hash }], isConsentCommand: false,
+  };
+  const build = (dataLayerEvents: DataLayerEvent[]) =>
+    buildFlags({ runId: newId('run'), networkMode: 'stub', siteUrl: 'http://localhost:3000', requests, hits: [], identity, dataLayerEvents, routedRequestIds: new Set() });
+  const requestKinds = (flags: ReturnType<typeof build>) => flags.filter((f) => f.kind === 'possibleRealData');
+  expect(requestKinds(build([]))).toEqual([]);
+  expect(requestKinds(build([event]))).toEqual([]);
+});

@@ -1549,15 +1549,17 @@ export function findForeignData(requests: Iterable<Request>, hits: readonly Hit[
     entry.hitIds.push(hit.id);
     for (const [key, value] of Object.entries(hit.params)) entry.texts.push({ text: `${key}=${value}`, where: guardFieldName(key) });
   }
-  const stableHashes = findStableHashes(
-    [...byRequest].flatMap(([requestId, entry]) => entry.texts.map(({ text }) => ({ requestId, text }))),
-  );
+  const stableFrom = (entries: Iterable<[string, { texts: ScanText[] }]>) =>
+    findStableHashes([...entries].flatMap(([requestId, entry]) => entry.texts.map(({ text }) => ({ requestId, text }))));
+  // Request findings must not depend on pushes, so a push never changes the possibleRealData check or the exit code.
+  const requestStable = stableFrom([...byRequest].filter(([, entry]) => !entry.push));
+  const pushStable = stableFrom(byRequest);
   const out: ForeignData[] = [];
   for (const [requestId, entry] of byRequest) {
     const found = new Map<string, { kind: string; where: Map<string, number> }>();
     for (const { text, where, leaf, name } of entry.texts) {
       const tier = where === 'the URL' || where === 'the body' ? 2 : leaf ? 1 : 0;
-      for (const m of scan(text, identity, { stableHashes })) {
+      for (const m of scan(text, identity, { stableHashes: entry.push ? pushStable : requestStable })) {
         if (name && m.kind === 'phone') continue;
         const key = `${m.kind}:${m.value}`;
         const seen = found.get(key) ?? { kind: m.kind, where: new Map<string, number>() };
