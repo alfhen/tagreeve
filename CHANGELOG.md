@@ -14,7 +14,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 <!-- D10 -->
 
-- Test-only: the e2e helpers and script tests are stricter. `runCli` takes a cwd. The guide's redirect check finds `x>&file` and ignores a bare `tee < file`. The release workflow check opens local step actions and checks every nested file for secrets and token names.
+- Tests and cleanup: #1105, #1106, #1107, #1108, #1325, #1124, #1169, #1365, #954, #1380.
 
 <!-- I10 -->
 

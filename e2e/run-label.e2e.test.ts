@@ -18,7 +18,7 @@ const failure = (r: CliRun) => {
   } catch {
     // Not a JSON manifest.
   }
-  return `${r.stderr}\nfailed results: ${JSON.stringify(r.failed)}\nfailed cells: ${JSON.stringify(cells)}\nstdout: ${r.stdout.slice(0, 2000)}`;
+  return `${r.stderr}${r.failed.length ? `\nfailed results: ${JSON.stringify(r.failed)}` : ''}\nfailed cells: ${JSON.stringify(cells)}\nstdout: ${r.stdout.slice(0, 2000)}`;
 };
 
 const runArgs = (...extra: string[]) => ['run', scenario('run-label'), '--site', site.url, '--json', ...extra];

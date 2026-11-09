@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
 interface Action {
-  runs?: { steps?: { run?: string; uses?: string }[] };
+  runs?: { using?: string; steps?: { run?: string; uses?: string }[] };
 }
 
 interface Workflow {
@@ -75,7 +75,12 @@ function problemsOf(wf: Pick<Workflow, 'permissions' | 'jobs'>, source: string, 
         problems.push(`cannot check local action ${step.uses}`);
         continue;
       }
-      const steps = (parse(text) as Action | null)?.runs?.steps ?? [];
+      const runs = (parse(text) as Action | null)?.runs;
+      if (runs?.using !== 'composite') {
+        problems.push(`cannot check local action ${step.uses}`);
+        continue;
+      }
+      const steps = runs.steps ?? [];
       const nested = problemsOf({ jobs: { action: { steps } } }, text, readLocal, depth + 1);
       problems.push(...nested.map((problem) => `${step.uses}: ${problem}`));
     }
@@ -285,6 +290,8 @@ describe('workflow rules', () => {
     const clean = action('    - run: echo hi\n      shell: bash\n');
     expect(workflowProblems(wf, (rel) => (rel === '.github/actions/ship/action.yaml' ? clean : undefined))).toEqual([]);
     expect(workflowProblems(wf, () => undefined)).toEqual(['cannot check local action ./.github/actions/ship']);
+    const node = 'name: ship\nruns:\n  using: node20\n  main: index.js\n';
+    expect(workflowProblems(wf, () => node)).toEqual(['cannot check local action ./.github/actions/ship']);
     expect(workflowProblems(base(`${good}      - uses: ./../x\n`), () => clean)).toEqual(['cannot check local action ./../x']);
   });
 
@@ -295,7 +302,7 @@ describe('workflow rules', () => {
     const ctx = base(`${good}      - run: echo \${{ secrets.X }}\n`);
     expect(workflowProblems(wf, () => ctx)).toEqual(['./.github/workflows/build.yml: secrets context']);
     const step = base(`${good}      - uses: ./a\n`);
-    expect(workflowProblems(step, () => 'runs:\n  steps:\n    - run: echo $GH_TOKEN\n')).toEqual(['./a: token name']);
+    expect(workflowProblems(step, () => 'runs:\n  using: composite\n  steps:\n    - run: echo $GH_TOKEN\n')).toEqual(['./a: token name']);
   });
 
   it('fails gh release in a nested workflow', () => {

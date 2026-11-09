@@ -27,8 +27,8 @@ export function unsafeFileTargets(markdown: string): string[] {
   for (const snippet of snippets) {
     const text = snippet
       .replace(/\\\n/g, ' ')
-      .replace(/(?<==)<[A-Za-z][A-Za-z ]*>/g, ' ')
-      .replace(/\d*>&\s*(?:\d+|-)(?=[\s;|&)]|$)/g, ' ')
+      .replace(/(?<=[?&][\w-]+=)<[A-Za-z][A-Za-z ]*>(?=&|$)/g, ' ')
+      .replace(/\d*>&\s*(?:\d+|-)(?=[\s;|&)<>]|$)/g, ' ')
       .replace(/(?<!<)<(?!<)\s*[^\s;|&)<>]+/g, ' ');
     for (const m of text.matchAll(/(?:^|[^<>])>[>|]?\s*([^\s;|&)<>]+)/g)) targets.push(m[1]!);
     for (const m of text.matchAll(/(?:^|[^<>])>&\s*([^\s;|&)<>]+)/g)) targets.push(m[1]!);
@@ -126,6 +126,10 @@ test.each([
   ['a single-quoted $HOME target', "```bash\ncat > '$HOME/x'\n```", ["'$HOME/x'"]],
   ['a quoted tilde tee target', '```bash\ntee "~/sgtm-config.txt"\n```', ['"~/sgtm-config.txt"']],
   ['a quoted relative target', '```bash\ncat > "out.txt"\n```', ['out.txt']],
+  ['a redirect after 2>&1', '```bash\ncat 2>&1>out.txt\n```', ['out.txt']],
+  ['a safe target after 2>&1', '```bash\ncat 2>&1>~/a\n```', []],
+  ['a redirect after =<name>', '```bash\necho a=<in>out.txt\n```', ['out.txt']],
+  ['a spaced redirect after =<name>', '```bash\necho a=<in> out.txt\n```', ['out.txt']],
   ['home targets and stderr redirects', '```bash\ncat > ~/a 2>&1\nchmod 600 ~/a\n```', []],
 ])('the target check catches %s', (_name, markdown, expected) => {
   expect(unsafeFileTargets(markdown)).toEqual(expected);
