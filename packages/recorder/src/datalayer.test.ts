@@ -390,7 +390,10 @@ test('a push accessor the page defined is kept', async () => {
 });
 
 type FullTally = Tally & { untrapped: string[] };
-const tallyOf = (run: (code: string) => unknown): FullTally => JSON.parse(JSON.stringify(run(`${DATALAYER_TALLY}()`))) as FullTally;
+const tallyOf = (run: (code: string) => unknown): FullTally => {
+  const raw = JSON.parse(JSON.stringify(run(`${DATALAYER_TALLY}()`))) as Omit<FullTally, 'untrapped'> & { untrapped: string };
+  return { ...raw, untrapped: JSON.parse(raw.untrapped) as string[] };
+};
 
 test('one array under two names gives one tally entry, under the name it was hooked with', async () => {
   const page = pageWith('', ['myLayer']);
@@ -430,7 +433,13 @@ test('a page array with no marker and no hook in this realm keeps a: null', () =
 
 test('page code cannot change the untrapped list a later tally returns', () => {
   const page = pageWith(`Object.defineProperty(globalThis, 'status', { get() { return ''; }, set() {}, configurable: true });`, ['status', 'myLayer']);
-  page.run(`const t = ${DATALAYER_TALLY}(); t.untrapped.length = 0; t.untrapped.push('myLayer');`);
+  page.run(`const t = ${DATALAYER_TALLY}(); t.untrapped = ['myLayer'];`);
+  expect(tallyOf(page.run).untrapped).toEqual(['status']);
+});
+
+test('page code cannot change the untrapped list by replacing Array methods', () => {
+  const page = pageWith(`Object.defineProperty(globalThis, 'status', { get() { return ''; }, set() {}, configurable: true });`, ['status', 'myLayer']);
+  page.run(`Array.prototype.slice = () => ['myLayer', 'dataLayer']; Array.prototype[Symbol.iterator] = function* () {}; JSON.stringify = () => '[]';`);
   expect(tallyOf(page.run).untrapped).toEqual(['status']);
 });
 

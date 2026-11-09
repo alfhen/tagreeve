@@ -262,6 +262,8 @@ export function dataLayerInitScript(names: readonly string[] = []): string {
       },
     });
   }
+  // Text, so page code cannot change the answer by replacing an Array method.
+  const untrappedText = JSON.stringify(untrapped);
   Object.defineProperty(window, ${JSON.stringify(DATALAYER_TALLY)}, {
     value: () => {
       const arrays = [];
@@ -284,7 +286,7 @@ export function dataLayerInitScript(names: readonly string[] = []): string {
           arrays.push({ layer: state ? state.name : name, a: state ? state.info.a : null, length: layer.length, posted: state ? state.info.posted : 0 });
         } catch {}
       }
-      return { d: token, arrays, untrapped: untrapped.slice() };
+      return { d: token, arrays, untrapped: untrappedText };
     },
   });
 })();`;

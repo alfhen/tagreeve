@@ -132,8 +132,10 @@ test('postedAhead is true while fewer payloads arrived than the hook posted', ()
 });
 
 test('validateTally keeps an untrapped name only when it is a hooked name', () => {
-  const kept = validateTally(0, { d: 'tok', arrays: [], untrapped: ['myLayer', 'status', 'https://planted.example.test/x', 7, 'myLayer'] }, NAMES);
+  const text = JSON.stringify(['myLayer', 'status', 'dataLayer', 'https://planted.example.test/x', 7, 'myLayer']);
+  const kept = validateTally(0, { d: 'tok', arrays: [], untrapped: text }, NAMES);
   expect(kept?.untrapped).toEqual(['myLayer']);
   expect(validateTally(0, { d: 'tok', arrays: [], untrapped: 'myLayer' }, NAMES)?.untrapped).toEqual([]);
+  expect(validateTally(0, { d: 'tok', arrays: [], untrapped: ['myLayer'] }, NAMES)?.untrapped).toEqual([]);
   expect(validateTally(0, { d: 'tok', arrays: [] }, NAMES)?.untrapped).toEqual([]);
 });

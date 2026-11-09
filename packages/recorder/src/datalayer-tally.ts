@@ -1,4 +1,5 @@
 import { newId, type Flag, type Id } from '@tagreeve/core';
+import { DEFAULT_DATALAYER } from './datalayer.ts';
 
 export const MAX_TALLY_KEYS = 256;
 
@@ -52,6 +53,16 @@ export class PayloadCounts {
 
 const isCount = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 
+function parseNames(text: unknown): string[] {
+  if (typeof text !== 'string' || text.length > 4096) return [];
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed.filter((n): n is string => typeof n === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Keeps only the numbers and hooked names of a page's answer. Anything else is dropped. */
 export function validateTally(frame: number, value: unknown, names: readonly string[]): FrameTally | null {
   if (typeof value !== 'object' || value === null) return null;
@@ -65,7 +76,8 @@ export function validateTally(frame: number, value: unknown, names: readonly str
     if (!isCount(length) || !isCount(posted) || !(a === null || isCount(a))) continue;
     kept.push({ layer, a, length, posted });
   }
-  const untrappedKept = Array.isArray(untrapped) ? untrapped.filter((n): n is string => typeof n === 'string' && names.includes(n)) : [];
+  // The init script runs before page scripts, so the default name is always trapped.
+  const untrappedKept = parseNames(untrapped).filter((n) => n !== DEFAULT_DATALAYER && names.includes(n));
   return { frame, d, arrays: kept, untrapped: [...new Set(untrappedKept)] };
 }
 
