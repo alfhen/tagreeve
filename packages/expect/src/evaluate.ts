@@ -116,9 +116,11 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
       const passes = (c: Context) => evaluateRuleHits(rule, c).pass;
       const scoped = !rule.tag && isScoped(rule);
       const failureRests = scoped && !pass && failureRestsOnProbableLink(ctx, passes, rule);
-      const note = outcome.note ?? (pass && scoped && passRestsOnProbableLink(ctx, passes, rule) ? 'serverSendProbableLink' : undefined);
+      // A nested-name note is only a hint, so it must not hide that a placement of the probable hits would flip the verdict.
+      const ownNote = outcome.note === 'nestedNameOnly' ? undefined : outcome.note;
+      const note = ownNote ?? (pass && scoped && passRestsOnProbableLink(ctx, passes, rule) ? 'serverSendProbableLink' : outcome.note);
       // A count rule's evidence can hold exact browser hits next to the probable ones, so the leak gate in settleServerSends must not turn it into a hard FAIL.
-      const countRests = kind === 'must' && failureRests && !note;
+      const countRests = kind === 'must' && failureRests && !ownNote;
       add(`${kind}: ${rule.description}`, pass, evidence, message, countRests ? 'warn' : undefined, countRests ? 'serverSendProbableLink' : note, scoped && (pass || failureRests));
     }
 

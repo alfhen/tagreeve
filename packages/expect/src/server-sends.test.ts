@@ -318,6 +318,24 @@ describe('rules on a server hit', () => {
       expect(results).toMatchObject({ pass: true, note: 'serverSendProbableLink' });
     });
 
+    describe('a body.has name found only nested does not hide a probable placement', () => {
+      const has = (count: number) => `  must:\n    - { vendor: meta-capi, in: epoch(denied), count: ${count}, body.has: [email] }`;
+      const nested = { fields: ['user_data.email'], idFields: [] };
+      const top = { fields: ['email'], idFields: [] };
+      const runs = () => {
+        const viaX = browser(1200);
+        return [browser(100, { vendor: 'meta-capi', ...nested }), viaX, capi(600, link(viaX, 'probable'), top)];
+      };
+
+      test('a failing count that own-time placement would meet warns', () => {
+        expect(rule(has(1), runs())).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendProbableLink' });
+      });
+
+      test('a passing count that own-time placement would break carries the note', () => {
+        expect(rule(has(0), runs())).toMatchObject({ pass: true, note: 'serverSendProbableLink' });
+      });
+    });
+
     test('a count that every placement gives the same verdict for has no note', () => {
       const viaX = browser(500);
       const viaY = browser(600);
