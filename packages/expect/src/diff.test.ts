@@ -816,6 +816,20 @@ describe('push kind in diffRuns', () => {
       expect(d.dataLayer!.pathsRemoved.map((p) => p.path)).toEqual(['a']);
     });
 
+    test.each([['object to gtag'], ['gtag to object']])('a gtag body with its own event key compares as before, %s', (dir) => {
+      const a = makeRun();
+      const b = makeRun();
+      const [first, second] = dir === 'object to gtag' ? [a, b] : [b, a];
+      addPush(first, { event: 'x', a: 1 });
+      addPush(second, { event: 'x' }, { args: gtag({ event: 'x', a: 1 }) });
+      expect(pushGroups(second)[0]!.paths.map((p) => p.path)).toContain('event');
+      const d = diffRuns(a, b);
+      expect(d.dataLayer!.kindChanged).toHaveLength(1);
+      expect(d.dataLayer!.pathsAdded).toEqual([]);
+      expect(d.dataLayer!.pathsRemoved).toEqual([]);
+      expect(d.dataLayer!.typeChanges).toEqual([]);
+    });
+
     test('the reverse direction adds no event path', () => {
       const a = makeRun();
       const b = makeRun();
