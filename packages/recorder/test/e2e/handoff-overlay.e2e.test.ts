@@ -203,3 +203,38 @@ test('a long handoff text wraps in the label', async () => {
   await played;
   await recorder.close();
 }, 60_000);
+
+const LONG_TEXT = `Pay the test order ${'and then check the summary '.repeat(5)}`.trim().slice(0, 140);
+
+async function openLong(width: number) {
+  const recorder = await launchRecorder({ networkMode: 'stub', outDir, site: site.url, headed: false, handoffOverlay: true });
+  const scenario = parseScenario(`start: /handoff\nsteps:\n  - handoff: ${JSON.stringify(LONG_TEXT)}\n`);
+  const played = playScenario(recorder, scenario, { handoffResolver: terminal, print: () => {} });
+  played.catch(() => undefined);
+  await expect.poll(() => recorder.context.pages().length, { timeout: 20_000 }).toBe(1);
+  const page = recorder.context.pages()[0]!;
+  await page.waitForLoadState('load');
+  await page.setViewportSize({ width, height: 700 });
+  const box = await pillBox(page);
+  return { recorder, page, played, box };
+}
+
+test('a long label at a 320 px viewport keeps the pill inside the viewport minus 16 px', async () => {
+  const run = await openLong(320);
+  expect(await run.page.evaluate(() => innerWidth)).toBe(320);
+  expect(LONG_TEXT.length).toBeGreaterThan(100);
+  expect(run.box.x + run.box.width).toBeLessThanOrEqual(320 - 16);
+  expect(run.box.x).toBeGreaterThanOrEqual(16);
+  await run.page.mouse.click(run.box.x + run.box.width - 26, run.box.y + run.box.height / 2);
+  await run.played;
+  await run.recorder.close();
+}, 60_000);
+
+test('a long label at a 1280 px viewport fills the 420 px pill and is not cut at 300 px', async () => {
+  const run = await openLong(1280);
+  expect(run.box.width).toBeGreaterThan(400);
+  expect(run.box.width).toBeLessThanOrEqual(420);
+  await run.page.mouse.click(run.box.x + run.box.width - 26, run.box.y + run.box.height / 2);
+  await run.played;
+  await run.recorder.close();
+}, 60_000);

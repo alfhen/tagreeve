@@ -147,7 +147,8 @@ interface BlockingControl {
 }
 
 /** Runs in the page. Reads `validity` and attributes only, never a value, and never calls `checkValidity()` or `reportValidity()`. Clones nothing, so no page code runs and no image loads. Every control is named by `aria-label`, `name` or `id` and never by page text, so no error text can reach a name. */
-function readBlockingControls({ max, form }: { max: number; form: HTMLFormElement | null }): BlockingControl[] {
+export function readBlockingControls({ max, form: remembered }: { max: number; form: HTMLFormElement | null }): BlockingControl[] {
+  const form = remembered?.isConnected && remembered.ownerDocument === document ? remembered : null;
   const found: BlockingControl[] = [];
   const nameOf = (el: Element): string => el.getAttribute('aria-label')?.trim() || el.getAttribute('name') || el.id;
   for (const el of document.querySelectorAll('input, select, textarea, [aria-invalid="true"]')) {
@@ -169,11 +170,13 @@ function readBlockingControls({ max, form }: { max: number; form: HTMLFormElemen
 
 const DIAGNOSTIC_DEADLINE_MS = 3000;
 
+class DiagnosticTimeout extends Error {}
+
 /** Playwright's `evaluate` has no timeout, and a page that stopped responding would hold the original timeout error back. */
 function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error('diagnostic timed out')), ms);
+    timer = setTimeout(() => reject(new DiagnosticTimeout('diagnostic timed out')), ms);
   });
   return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
 }
@@ -183,7 +186,9 @@ export async function blockingControls(context: BrowserContext, form: JSHandle<H
   const listed: string[] = [];
   for (const page of context.pages()) {
     try {
-      const controls = await withDeadline(page.evaluate(readBlockingControls, { max: MAX_LISTED, form }), DIAGNOSTIC_DEADLINE_MS);
+      const read = (scope: JSHandle<HTMLFormElement> | null) => withDeadline(page.evaluate(readBlockingControls, { max: MAX_LISTED, form: scope }), DIAGNOSTIC_DEADLINE_MS);
+      // A form handle from a page that has gone throws here. The list then holds every control, as it does with no clicked form.
+      const controls = await read(form).catch((error: unknown) => (form && !(error instanceof DiagnosticTimeout) ? read(null) : Promise.reject(error)));
       for (const c of controls) {
         if (!BLOCK_REASONS.includes(c.reason)) continue;
         const kind = KINDS.includes(c.kind) ? c.kind : 'control';

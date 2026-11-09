@@ -93,6 +93,22 @@ function pathOf(url: string): string {
   }
 }
 
+const FILL_TRY_MS = 500;
+const UNREADABLE_FRAME = 'the card frame could not be read';
+const DEADLINE_GRACE_MS = 500;
+
+class Unresponsive extends Error {}
+
+/** Playwright has no timeout on `Locator.count()`, `ElementHandle.evaluate` or `contentFrame()`, so a frame that stopped responding would hold the fill past its deadline. */
+function withinDeadline<T>(work: Promise<T>, deadline: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Unresponsive()), Math.max(1, deadline + DEADLINE_GRACE_MS - Date.now()));
+  });
+  work.catch(() => undefined);
+  return Promise.race([work, late]).finally(() => clearTimeout(timer));
+}
+
 interface CardFrame {
   element: ElementHandle;
   frame: Frame;
@@ -106,21 +122,22 @@ async function cardFrameServed(page: Page, field: CardField, cardHost: string, d
       let hidden = false;
       let elsewhere = false;
       let otherPath: string | undefined;
-      for (const element of await page.locator(field.frame).elementHandles()) {
-        const frame = await element.contentFrame();
+      for (const element of await withinDeadline(page.locator(field.frame).elementHandles(), deadline)) {
+        const frame = await withinDeadline(element.contentFrame(), deadline);
         if (!frame) continue;
         if (hostOf(frame.url()) !== cardHost) {
           elsewhere = true;
         } else if (!field.path.test(pathOf(frame.url()))) {
           otherPath = pathOf(frame.url());
-        } else if (await element.isVisible()) {
+        } else if (await withinDeadline(element.isVisible(), deadline)) {
           return { element, frame };
         } else {
           hidden = true;
         }
       }
       reason = hidden ? 'not visible' : otherPath !== undefined ? `served from another path: ${otherPath}` : elsewhere ? 'served from another host' : 'not found';
-    } catch {
+    } catch (error) {
+      if (error instanceof Unresponsive) throw error;
       return reason;
     }
     if (Date.now() >= deadline) return reason;
@@ -134,16 +151,20 @@ async function cardFrameServed(page: Page, field: CardField, cardHost: string, d
  */
 async function markerInCardContainer(frames: ElementHandle[], marker: string, timeout: number): Promise<boolean> {
   try {
-    const container = await frames[0]!.evaluateHandle((first, all) => {
-      let node: Element | null = first.parentElement;
-      while (node && !all.every((f) => node!.contains(f))) node = node.parentElement;
-      return node;
-    }, frames);
+    const container = await withinDeadline(
+      frames[0]!.evaluateHandle((first, all) => {
+        let node: Element | null = first.parentElement;
+        while (node && !all.every((f) => node!.contains(f))) node = node.parentElement;
+        return node;
+      }, frames),
+      Date.now() + timeout,
+    );
     const element = container.asElement();
     if (!element) return false;
     await element.waitForSelector(marker, { state: 'visible', timeout });
     return true;
-  } catch {
+  } catch (error) {
+    if (error instanceof Unresponsive) throw error;
     return false;
   }
 }
@@ -185,11 +206,18 @@ export async function runPayment(
   const deadline = Date.now() + wait;
   const found: CardFrame[] = [];
   for (const field of runtime.fields) {
-    const result = await cardFrameServed(page, field, runtime.cardHost, deadline);
+    const result = await cardFrameServed(page, field, runtime.cardHost, deadline).catch((error: unknown) => {
+      throw error instanceof Unresponsive ? new Error(`card field ${field.kind} could not be filled: ${UNREADABLE_FRAME}`) : error;
+    });
     if (typeof result === 'string') throw new Error(`card frame not found (${field.kind}): ${result}`);
     found.push(result);
   }
-  if (!declared && !(await markerInCardContainer(found.map((f) => f.element), runtime.marker, wait))) throw new Error('test mode not detected');
+  if (!declared) {
+    const marked = await markerInCardContainer(found.map((f) => f.element), runtime.marker, wait).catch((error: unknown) => {
+      throw error instanceof Unresponsive ? new Error(`test mode could not be checked: ${UNREADABLE_FRAME}`) : error;
+    });
+    if (!marked) throw new Error('test mode not detected');
+  }
   recorder.holdRedaction();
   const typed = typedValues(provider, card, identity);
   for (const [index, field] of runtime.fields.entries()) {
@@ -210,22 +238,6 @@ async function frameStillServed(element: ElementHandle, cardHost: string, field:
     throw new OwnReason(GONE_FRAME);
   }
   return frame;
-}
-
-const FILL_TRY_MS = 500;
-const UNREADABLE_FRAME = 'the card frame could not be read';
-const DEADLINE_GRACE_MS = 500;
-
-class Unresponsive extends Error {}
-
-/** Playwright has no timeout on `Locator.count()`, `ElementHandle.evaluate` or `contentFrame()`, so a frame that stopped responding would hold the fill past its deadline. */
-function withinDeadline<T>(work: Promise<T>, deadline: number): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
-  const late = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Unresponsive()), Math.max(1, deadline - Date.now()) + DEADLINE_GRACE_MS);
-  });
-  work.catch(() => undefined);
-  return Promise.race([work, late]).finally(() => clearTimeout(timer));
 }
 
 /**

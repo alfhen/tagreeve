@@ -44,6 +44,23 @@ test('a wait timeout after Pay lists the controls of the Pay form and not the fo
   expect(error).not.toContain('newsletter-email');
 });
 
+test('a form that the page reloads is gone, so the wait timeout lists every control', async () => {
+  const recorder = await launchRecorder({ networkMode: 'stub', outDir, site: site.url });
+  try {
+    const scenario = parseScenario('start: /terms-reload\nsteps:\n  - click: { role: button, name: Pay now }\n  - wait: { url: "/thank-you*" }\n');
+    const error = await playScenario(recorder, scenario, { actionTimeoutMs: 2000 }).then(
+      () => '',
+      (e: Error) => e.message,
+    );
+    const page = recorder.context.pages()[0]!;
+    expect(page.url()).toContain('/terms-reload?retry=1');
+    expect(await page.locator('#terms').getAttribute('aria-invalid')).toBe('true');
+    expect(error).toContain('Blocking controls: checkbox "terms" (aria-invalid).');
+  } finally {
+    await recorder.close().catch(() => undefined);
+  }
+});
+
 test('with no click before the wait, every control is listed', async () => {
   const { error } = await failureOf('  - wait: 100\n');
   expect(error).toContain('checkbox "terms" (required, not ticked)');

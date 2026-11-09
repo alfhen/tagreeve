@@ -378,9 +378,9 @@ async function rememberClickedForm(recorder: Recorder, target: PlaywrightLocator
   try {
     const work = target.evaluateHandle(
       (el) => {
-        const control = el as HTMLButtonElement | HTMLInputElement;
+        const control = el.closest('button, input[type=submit], input[type=image]') as HTMLButtonElement | HTMLInputElement | null;
         const submits = (control instanceof HTMLButtonElement && control.type === 'submit') || (control instanceof HTMLInputElement && (control.type === 'submit' || control.type === 'image'));
-        return submits ? control.form : null;
+        return submits ? control!.form : null;
       },
       undefined,
       { timeout: REMEMBER_FORM_MS },

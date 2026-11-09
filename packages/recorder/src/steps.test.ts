@@ -373,6 +373,65 @@ describe('select and locator steps on a fake page', () => {
     expect(Date.now() - started).toBeLessThan(3000);
   });
 
+  describe('the form that a click remembers for the next wait', () => {
+    class FakeButton {
+      type = 'submit';
+      constructor(public form: unknown) {}
+    }
+    class FakeInput {}
+    const FORM = { fake: 'form' };
+    const SUBMIT_CONTROLS = 'button, input[type=submit], input[type=image]';
+
+    // The page's click targets run the real in-page function against a fake element; `inside` is what closest() finds.
+    const run = async (clicks: { inside: FakeButton | null }[]) => {
+      vi.stubGlobal('HTMLButtonElement', FakeButton);
+      vi.stubGlobal('HTMLInputElement', FakeInput);
+      const selectors: string[] = [];
+      const evaluated: unknown[] = [];
+      let index = 0;
+      const page = {
+        goto: () => Promise.resolve(),
+        url: () => 'https://shop.example.com/cart',
+        evaluate: (_fn: unknown, arg: { form: unknown }) => (evaluated.push(arg.form), Promise.resolve([])),
+        locator: () => ({
+          count: () => Promise.resolve(1),
+          first: () => {
+            const click = clicks[index++]!;
+            return {
+              evaluateHandle: (fn: (el: unknown) => unknown) => {
+                const result = fn({ closest: (selector: string) => (selectors.push(selector), click.inside) });
+                return Promise.resolve({ asElement: () => result, dispose: () => Promise.resolve(), form: result });
+              },
+              click: () => Promise.resolve(),
+            };
+          },
+        }),
+      };
+      const yaml = `start: /\nsteps:\n${clicks.map(() => '  - click: "#go"\n').join('')}  - wait: { url: "/thank-you" }\n`;
+      const error = await play(page, yaml, { context: { pages: () => [page] }, wait: (ms: number) => new Promise((r) => setTimeout(r, ms)) }, { actionTimeoutMs: 300 }).then(
+        () => '',
+        (e: Error) => e.message,
+      );
+      return { selectors, evaluated, error };
+    };
+
+    afterEach(() => vi.unstubAllGlobals());
+
+    test('a click inside a submit button remembers the form of the button', async () => {
+      const { selectors, evaluated, error } = await run([{ inside: new FakeButton(FORM) }]);
+      expect(error).toContain('page did not reach');
+      expect(selectors).toEqual([SUBMIT_CONTROLS]);
+      expect(evaluated).toHaveLength(1);
+      expect(evaluated[0]).toMatchObject({ form: FORM });
+    });
+
+    test('a click in no submit control after a submit click makes the next wait pass no form', async () => {
+      const { evaluated, error } = await run([{ inside: new FakeButton(FORM) }, { inside: null }]);
+      expect(error).toContain('page did not reach');
+      expect(evaluated).toEqual([null]);
+    });
+  });
+
   test('an any locator and the click after it share one step timeout', async () => {
     const started = Date.now();
     let clickTimeout = 0;

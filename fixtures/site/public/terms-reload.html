@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Terms reload</title>
+</head>
+<body>
+<h1>Pay</h1>
+<form id="pay-form" novalidate>
+  <label>Email <input id="email" name="email" type="email" value="pw-fixture@example.com"></label><br>
+  <label><input id="terms" name="terms" type="checkbox"> I agree to the terms and conditions</label><br>
+  <button id="pay" type="submit">Pay now</button>
+</form>
+<script>
+if (location.search === "?retry=1") document.getElementById("terms").setAttribute("aria-invalid", "true");
+document.getElementById("pay-form").addEventListener("submit", function (event) {
+  event.preventDefault();
+  location.assign("/terms-reload?retry=1");
+});
+</script>
+</body>
+</html>
