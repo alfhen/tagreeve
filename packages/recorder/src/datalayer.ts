@@ -16,8 +16,9 @@ export function hookedLayerNames(names: readonly string[] = []): string[] {
  * so its property is trapped and an existing array is hooked at once. `dataLayer` is always hooked,
  * then each of `names`.
  */
-export function dataLayerInitScript(names: readonly string[] = []): string {
+export function dataLayerInitScript(names: readonly string[] = [], nonce = ''): string {
   return `(() => {
+  const nonce = ${JSON.stringify(nonce)};
   const binding = ${JSON.stringify(DATALAYER_BINDING)};
   const names = ${JSON.stringify(hookedLayerNames(names))};
   const unsafe = ${JSON.stringify(NEVER_TRAPPED_NAMES)};
@@ -263,8 +264,8 @@ export function dataLayerInitScript(names: readonly string[] = []): string {
       },
     });
   }
-  // Sent here, before any page script runs. The recorder keeps only the first such message of a document, so page code cannot fake or hide it.
-  post({ t: clock(), args: '[]', untrapped: JSON.stringify(untrapped) });
+  // Sent here, before any page script runs. The recorder accepts it only with the per-run nonce, which no function page code can reach mentions by value.
+  post({ t: clock(), args: '[]', untrapped: JSON.stringify(untrapped), nonce });
   Object.defineProperty(window, ${JSON.stringify(DATALAYER_TALLY)}, {
     value: () => {
       const arrays = [];
@@ -312,6 +313,7 @@ export interface DataLayerPayload {
   reassigned?: true;
   /** The names the init script could not trap, as a JSON array. Sent once, at document start. */
   untrapped?: string;
+  nonce?: string;
 }
 
 export function isDataLayerName(name: unknown): name is string {
