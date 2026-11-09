@@ -8,6 +8,7 @@ interface PushRef {
   epoch: string;
   event: string;
   frame: string;
+  renamedFrom?: string;
 }
 
 interface PushDiff {
@@ -47,16 +48,22 @@ test('the built-in table makes checkout_completed and purchase the same event, a
   expect(d.eventsRemoved.map((e) => e.event)).toEqual(['legacy_promo']);
   expect(d.eventsAdded.map((e) => e.event)).toEqual(['promo_selected']);
   expect(d.pathsRemoved).toEqual([expect.objectContaining({ event: 'cart_update', path: 'cart.total' })]);
-  expect(d.pathsAdded).toEqual([expect.objectContaining({ event: 'cart_update', path: 'cart.amount' })]);
-  expect(plain.stdout).not.toContain('checkout_completed');
+  expect(d.pathsAdded).toHaveLength(2);
+  expect(d.pathsAdded).toContainEqual(expect.objectContaining({ event: 'cart_update', path: 'cart.amount' }));
+  expect(d.pathsAdded).toContainEqual(expect.objectContaining({ event: 'purchase', path: 'coupon', renamedFrom: 'checkout_completed' }));
 
   const mapped = await cli(['diff', a, b, '--event-map', mapFile, '--json']);
   expect(mapped.code).toBe(0);
   const m = (JSON.parse(mapped.stdout) as { dataLayer: PushDiff }).dataLayer;
-  expect(m.changed).toBe(false);
+  expect(m.changed).toBe(true);
+  expect(m.eventsAdded).toEqual([]);
+  expect(m.eventsRemoved).toEqual([]);
+  expect(m.pathsRemoved).toEqual([]);
+  expect(m.pathsAdded).toEqual([expect.objectContaining({ event: 'purchase', path: 'coupon', renamedFrom: 'checkout_completed' })]);
   const text = await cli(['diff', a, b, '--event-map', mapFile]);
   expect(text.code).toBe(0);
-  expect(text.stdout).not.toContain('dataLayer');
+  expect(text.stdout).toContain('in purchase (renamed from checkout_completed)');
+  expect(text.stdout).not.toContain('promo_selected');
 
   for (const out of [plain, mapped, text]) {
     expect(out.stdout + out.stderr).not.toContain('pw-secret-value');
@@ -70,7 +77,8 @@ test('an event map file error names the file and the key, never a value', async 
   const result = await cli(['diff', a, b, '--event-map', bad]);
   expect(result.code).toBe(2);
   expect(result.stderr).toContain(bad);
-  expect(result.stderr).toContain('events.legacy_promo');
+  expect(result.stderr).toContain('"events" key 1 must map to an event name');
+  expect(result.stderr).not.toContain('legacy_promo');
   expect(result.stderr).not.toContain('pw-secret-value');
 
   const missing = await cli(['diff', a, b, '--event-map', join(outDir, 'nope.json')]);

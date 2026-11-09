@@ -140,3 +140,21 @@ test('an arguments-like event name that looks like a value reads (other)', () =>
   const [group] = first(push({ 0: 'event', 1: 'fake.person@example.test' }));
   expect(group!.event).toBe('(other)');
 });
+
+test('an arguments-like consent push with a second item other than default or update reads gtag consent', () => {
+  const [group] = first(push({ 0: 'consent', 1: 'foo', 2: {} }));
+  expect(group!.event).toBe('gtag consent');
+});
+
+test('an arguments-like consent default keeps its label and signal names', () => {
+  const [group] = first(push({ 0: 'consent', 1: 'default', 2: { ad_storage: 'denied' } }));
+  expect(group!.event).toBe('consent default');
+  expect(group!.paths.map((p) => p.path)).toEqual(['ad_storage']);
+});
+
+test('an arguments-like gtm.* event has a count and no paths', () => {
+  const [group] = first(push({ 0: 'event', 1: 'gtm.dom', 2: { a: 1 } }));
+  expect(group!.event).toBe('gtm.dom');
+  expect(group!.count).toBe(1);
+  expect(group!.paths).toEqual([]);
+});

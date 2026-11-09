@@ -6,7 +6,9 @@ Not released yet. The newest release is 0.6.0, below.
 
 <!-- L09 -->
 
-<!-- E09 -->
+- `diff` names an event as the run pushed it, and a pair joined by the event table or an event map shows `renamedFrom` in `--json` and `(renamed from <name>)` in the text (#1246). `changed` is true when a push kind changed (#1370).
+- An event map error gives a key position and no key text, and positions follow the order written in the file. A swap or chain map applies each `paths` entry to one event (#1316, #1314, #1315).
+- An arguments-like `consent` push other than `default` or `update` reads `gtag consent`, and an arguments-like `gtm.*` event has no paths (#1373).
 
 <!-- G09 -->
 

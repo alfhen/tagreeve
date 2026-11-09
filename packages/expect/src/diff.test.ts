@@ -598,6 +598,54 @@ describe('diffPushes', () => {
     expect(diffPushes([group({ event: 'custom_a', paths })], [group({ event: 'custom_b', paths })]).changed).toBe(true);
   });
 
+  test('two runs that both push one recorded name report it as recorded', () => {
+    const d = diffPushes([group({ event: 'checkout_completed', paths: [] })], [group({ event: 'checkout_completed', paths: [{ path: 'x', types: ['string'] }] })]);
+    expect(d.pathsAdded).toEqual([{ epoch: 'undecided', event: 'checkout_completed', kind: 'object', frame: 'main', path: 'x', types: ['string'] }]);
+  });
+
+  test('a run with both names against a run with one reports one removed event', () => {
+    const d = diffPushes([group({ event: 'checkout_completed' }), group({ event: 'purchase' })], [group({ event: 'purchase' })]);
+    expect(d.eventsRemoved.map((e) => e.event)).toEqual(['checkout_completed']);
+    expect(d.eventsAdded).toEqual([]);
+    expect(d.changed).toBe(true);
+  });
+
+  test('a pair joined by the table is named as side b pushed it, with renamedFrom', () => {
+    const d = diffPushes([group({ event: 'checkout_completed' })], [group({ event: 'purchase', paths: [{ path: 'coupon', types: ['string'] }] })]);
+    expect(d.pathsAdded).toEqual([expect.objectContaining({ event: 'purchase', renamedFrom: 'checkout_completed', path: 'coupon' })]);
+    expect(JSON.stringify(d)).not.toMatch(/"event":"checkout_completed"/);
+    const same = diffPushes([group({ event: 'checkout_completed' })], [group({ event: 'purchase' })]);
+    expect(same.changed).toBe(false);
+  });
+
+  test('a removed event keeps side a name and an added event side b name', () => {
+    const d = diffPushes([group({ event: 'old_one' })], [group({ event: 'new_one' })]);
+    expect(d.eventsRemoved[0]).not.toHaveProperty('renamedFrom');
+    expect(d.eventsRemoved.map((e) => e.event)).toEqual(['old_one']);
+    expect(d.eventsAdded.map((e) => e.event)).toEqual(['new_one']);
+  });
+
+  test('two events of one run that map to one name stay two nodes', () => {
+    const eventMap = parseEventMap(JSON.stringify({ events: { custom_a: 'custom_c', custom_b: 'custom_c' } }), 'm.json');
+    const d = diffPushes([group({ event: 'custom_a' }), group({ event: 'custom_b' })], [group({ event: 'custom_c' })], { eventMap });
+    expect(d.eventsRemoved).toHaveLength(1);
+    expect(d.eventsRemoved[0]!.event).toBe('custom_b');
+    expect(d.eventsAdded).toEqual([]);
+  });
+
+  test('a kind change with equal paths is a change', () => {
+    const d = diffPushes([group({ kind: 'gtag', paths: [{ path: 'x', types: ['string'] }] })], [group({ kind: 'object', paths: [{ path: 'x', types: ['string'] }] })]);
+    expect(d.kindChanged).toHaveLength(1);
+    expect(d.changed).toBe(true);
+  });
+
+  test('a move alone is not a change', () => {
+    const paths = [{ path: 'x', types: ['string'] }];
+    const d = diffPushes([group({ paths })], [group({ epoch: 'granted', paths })], { epochOrder: ['undecided', 'granted'] });
+    expect(d.moved).toHaveLength(1);
+    expect(d.changed).toBe(false);
+  });
+
   test('a user map renames an event and a path of the first side', () => {
     const eventMap = parseEventMap(JSON.stringify({ events: { custom_a: 'custom_b' }, paths: { custom_b: { 'ecommerce.total': 'value' } } }), 'm.json');
     const a = [group({ event: 'custom_a', paths: [{ path: 'ecommerce.total', types: ['number'] }] })];

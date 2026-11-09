@@ -21,12 +21,12 @@ describe('parseEventMap', () => {
   test.each([
     ['not json {', 'm.json: the event map is not valid JSON.'],
     ['[]', 'must be a JSON object'],
-    ['{"rename":{}}', 'unknown key "rename"'],
-    ['{"events":{"a":3}}', 'events.a must be an event name'],
+    ['{"rename":{}}', 'top-level key 1 is not "events" or "paths"'],
+    ['{"events":{"a":3}}', '"events" key 1 must map to an event name'],
     ['{"events":[]}', '"events" must be an object'],
-    ['{"paths":{"b":{"x":"<script>"}}}', 'paths.b.x must be a key path'],
-    ['{"paths":{"b":"x"}}', 'paths.b must be an object'],
-    ['{"paths":{"b":{".":"e","value":"total"}}}', 'paths.b with the "." source key takes no other key'],
+    ['{"paths":{"b":{"x":"<script>"}}}', '"paths" key 1, key 1 must map to a key path'],
+    ['{"paths":{"b":"x"}}', '"paths" key 1 must be an object'],
+    ['{"paths":{"b":{".":"e","value":"total"}}}', '"paths" key 1 with the "." source key takes no other key'],
   ])('rejects %s', (text, message) => {
     expect(() => parseEventMap(text, 'm.json')).toThrow(message);
   });
@@ -43,6 +43,28 @@ describe('parseEventMap', () => {
     expect(() => parseEventMap('{"events":{"bad/name":"x"}}', 'm.json')).not.toThrow(/bad\/name/);
     expect(() => parseEventMap('{"paths":{"bad/name":{}}}', 'm.json')).toThrow('"paths" key 1 is not an event name');
     expect(() => parseEventMap('{"paths":{"bad/name":{}}}', 'm.json')).not.toThrow(/bad\/name/);
+  });
+
+  test('an unknown top-level key is named by position and never by text', () => {
+    const attempt = () => parseEventMap('{"zz<script>":1}', 'm.json');
+    expect(attempt).toThrow('m.json: top-level key 1 is not "events" or "paths"');
+    expect(attempt).not.toThrow(/zz<script>/);
+    expect(() => parseEventMap('{"events":{},"extra":1}', 'm.json')).toThrow('top-level key 2');
+  });
+
+  test('key positions follow the written order, integer-like keys included', () => {
+    expect(() => parseEventMap('{"events":{"bad/name":"x","5":"y"}}', 'm.json')).toThrow('"events" key 1 is not an event name');
+    expect(() => parseEventMap('{"events":{"ok":"x","5":"y","bad/name":"z"}}', 'm.json')).toThrow('"events" key 3');
+    expect(() => parseEventMap('{"events":{"ok":"x","5":3}}', 'm.json')).toThrow('"events" key 2 must map to an event name');
+    expect(() => parseEventMap('{"paths":{"a":{"x":"y"},"b":{"ok":"y","bad key":"z"}}}', 'm.json')).toThrow('"paths" key 2, key 2 is not a key path');
+    expect(() => parseEventMap('{"paths":{"a":{"ok":"y","bad key":"z"}}}', 'm.json')).not.toThrow(/bad key|"a"/);
+  });
+
+  test('keys with escapes, nested values and a repeated key are read in order', () => {
+    const text = '{ "paths" : { "a" : { "x\\"y" : "z" } , "b" : [1,{"k":"]"}] }, "events":{"c":"d"}}';
+    expect(() => parseEventMap(text, 'm.json')).toThrow('"paths" key 1, key 1 is not a key path');
+    expect(() => parseEventMap('{"events":{"a":"b","a":"c","d":"e e"}}', 'm.json')).not.toThrow();
+    expect(() => parseEventMap('{"events":{"a":"b","a":"c","d/":"e"}}', 'm.json')).toThrow('"events" key 3');
   });
 
   test('a prototype key does not reach the result', () => {
@@ -76,6 +98,18 @@ describe('normalizePushGroups', () => {
       const [mapped] = normalizePushGroups([group('checkout_completed', ['ecommerce.value'])], map);
       expect(mapped!.paths.map((p) => p.path), key).toEqual(['data.value']);
     }
+  });
+
+  test('a swap map applies each paths entry to one group only', () => {
+    const map = parseEventMap('{"events":{"a":"b","b":"a"},"paths":{"b":{"x":"one"}}}', 'm.json');
+    const out = normalizePushGroups([group('a', ['x']), group('b', ['x'])], map);
+    expect(out.map((g) => [g.event, g.paths.map((p) => p.path)])).toEqual([['b', ['one']], ['a', ['x']]]);
+  });
+
+  test('a chain map applies each paths entry to one group only', () => {
+    const map = parseEventMap('{"events":{"a":"b","b":"c"},"paths":{"b":{"x":"one"}}}', 'm.json');
+    const out = normalizePushGroups([group('a', ['x']), group('b', ['x'])], map);
+    expect(out.map((g) => [g.event, g.paths.map((p) => p.path)])).toEqual([['b', ['one']], ['c', ['x']]]);
   });
 
   test('a user entry for a Shopify name wins over the built-in pairing', () => {
@@ -114,7 +148,7 @@ describe('normalizePushGroups', () => {
   });
 
   test('a root to root rename is rejected', () => {
-    expect(() => parseEventMap('{"paths":{"purchase":{".":"."}}}', 'm.json')).toThrow('paths.purchase');
+    expect(() => parseEventMap('{"paths":{"purchase":{".":"."}}}', 'm.json')).toThrow('"paths" key 1, key 1 must name a key path');
   });
 });
 

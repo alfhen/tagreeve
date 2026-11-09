@@ -16,7 +16,70 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Parses the text of an event map file. An error names the file and the key, and never a value. */
+interface KeyEntry {
+  key: string;
+  start: number;
+  end: number;
+}
+
+// Reads the keys of the JSON object that starts at `from`, in the order written. The text has already passed JSON.parse, so it is well formed.
+function objectEntries(text: string, from: number): KeyEntry[] {
+  let i = from;
+  const skipSpace = (): void => {
+    while (i < text.length && /\s/.test(text[i]!)) i++;
+  };
+  const readString = (): string => {
+    const begin = i++;
+    while (text[i] !== '"') i += text[i] === '\\' ? 2 : 1;
+    i++;
+    return JSON.parse(text.slice(begin, i)) as string;
+  };
+  const skipValue = (): void => {
+    skipSpace();
+    const c = text[i];
+    if (c === '"') {
+      readString();
+    } else if (c === '{' || c === '[') {
+      const close = c === '{' ? '}' : ']';
+      i++;
+      skipSpace();
+      while (text[i] !== close) {
+        if (c === '{') {
+          readString();
+          skipSpace();
+          i++;
+        }
+        skipValue();
+        skipSpace();
+        if (text[i] === ',') i++;
+        skipSpace();
+      }
+      i++;
+    } else {
+      while (i < text.length && !/[\s,}\]]/.test(text[i]!)) i++;
+    }
+  };
+  const entries: KeyEntry[] = [];
+  i++;
+  skipSpace();
+  while (text[i] !== '}') {
+    const key = readString();
+    skipSpace();
+    i++;
+    skipSpace();
+    const start = i;
+    skipValue();
+    entries.push({ key, start, end: i });
+    skipSpace();
+    if (text[i] === ',') i++;
+    skipSpace();
+  }
+  return entries;
+}
+
+const valueOf = (text: string, e: KeyEntry): unknown => JSON.parse(text.slice(e.start, e.end));
+
+/** Parses the text of an event map file. An error names the file and a key position, and never key or value text. */
 export function parseEventMap(text: string, file: string): EventMap {
   let json: unknown;
   try {
@@ -25,30 +88,40 @@ export function parseEventMap(text: string, file: string): EventMap {
     throw new Error(`${file}: the event map is not valid JSON.`);
   }
   if (!isRecord(json)) throw new Error(`${file}: the event map must be a JSON object.`);
-  for (const key of Object.keys(json)) if (!TOP_KEYS.has(key)) throw new Error(`${file}: unknown key "${key}". Use "events" and "paths".`);
+  const top = objectEntries(text, text.indexOf('{'));
+  top.forEach((e, i) => {
+    if (!TOP_KEYS.has(e.key)) throw new Error(`${file}: top-level key ${i + 1} is not "events" or "paths".`);
+  });
   const map: EventMap = { events: Object.create(null) as Record<string, string>, paths: Object.create(null) as Record<string, Record<string, string>> };
   const events = json.events ?? {};
   if (!isRecord(events)) throw new Error(`${file}: "events" must be an object.`);
-  for (const [position, [from, to]] of Object.entries(events).map((e, i) => [i + 1, e] as const)) {
-    if (!EVENT_NAME.test(from)) throw new Error(`${file}: "events" key ${position} is not an event name.`);
-    if (typeof to !== 'string' || !EVENT_NAME.test(to)) throw new Error(`${file}: events.${from} must be an event name.`);
-    map.events[from] = to;
-  }
+  const eventsEntry = top.findLast((e) => e.key === 'events');
+  (eventsEntry === undefined ? [] : objectEntries(text, eventsEntry.start)).forEach((e, i) => {
+    const to = valueOf(text, e);
+    if (!EVENT_NAME.test(e.key)) throw new Error(`${file}: "events" key ${i + 1} is not an event name.`);
+    if (typeof to !== 'string' || !EVENT_NAME.test(to)) throw new Error(`${file}: "events" key ${i + 1} must map to an event name.`);
+    map.events[e.key] = to;
+  });
   const paths = json.paths ?? {};
   if (!isRecord(paths)) throw new Error(`${file}: "paths" must be an object.`);
-  for (const [position, [event, renames]] of Object.entries(paths).map((e, i) => [i + 1, e] as const)) {
-    if (!EVENT_NAME.test(event)) throw new Error(`${file}: "paths" key ${position} is not an event name.`);
-    if (!isRecord(renames)) throw new Error(`${file}: paths.${event} must be an object.`);
+  const pathsEntry = top.findLast((e) => e.key === 'paths');
+  (pathsEntry === undefined ? [] : objectEntries(text, pathsEntry.start)).forEach((e, i) => {
+    const at = `"paths" key ${i + 1}`;
+    const renames = valueOf(text, e);
+    if (!EVENT_NAME.test(e.key)) throw new Error(`${file}: ${at} is not an event name.`);
+    if (!isRecord(renames)) throw new Error(`${file}: ${at} must be an object.`);
     const out: Record<string, string> = Object.create(null) as Record<string, string>;
-    if (Object.hasOwn(renames, ROOT) && Object.keys(renames).length > 1) throw new Error(`${file}: paths.${event} with the "${ROOT}" source key takes no other key.`);
-    for (const [from, to] of Object.entries(renames)) {
-      if (!PATH_NAME.test(from)) throw new Error(`${file}: paths.${event} has a key that is not a key path.`);
-      if (typeof to !== 'string' || (to !== ROOT && !PATH_NAME.test(to))) throw new Error(`${file}: paths.${event}.${from} must be a key path.`);
-      if (from === ROOT && to === ROOT) throw new Error(`${file}: paths.${event}.${from} must name a key path to move the root under.`);
-      out[from] = to;
-    }
-    map.paths[event] = out;
-  }
+    const inner = objectEntries(text, e.start);
+    if (inner.some((p) => p.key === ROOT) && inner.length > 1) throw new Error(`${file}: ${at} with the "${ROOT}" source key takes no other key.`);
+    inner.forEach((p, j) => {
+      const to = valueOf(text, p);
+      if (!PATH_NAME.test(p.key)) throw new Error(`${file}: ${at}, key ${j + 1} is not a key path.`);
+      if (typeof to !== 'string' || (to !== ROOT && !PATH_NAME.test(to))) throw new Error(`${file}: ${at}, key ${j + 1} must map to a key path.`);
+      if (p.key === ROOT && to === ROOT) throw new Error(`${file}: ${at}, key ${j + 1} must name a key path to move the root under.`);
+      out[p.key] = to;
+    });
+    map.paths[e.key] = out;
+  });
   return map;
 }
 
@@ -108,6 +181,8 @@ export function normalizePushGroups(groups: PushGroup[], userMap?: EventMap): Pu
     return user !== undefined && Object.hasOwn(user, event) ? user[event]! : user !== undefined && Object.hasOwn(user, named) ? user[named]! : named;
   };
   const rename = (event: string): string => builtInEventName(userName(event));
-  const pathKeys = (recorded: string, final: string): string[] => [final, recorded, userName(recorded)];
+  // In a swap or a chain, a recorded or user-renamed name can also be the name another group ends up with. Its paths entry then belongs to that group.
+  const targets = new Set(user === undefined ? [] : Object.values(user));
+  const pathKeys = (recorded: string, final: string): string[] => [final, recorded, userName(recorded)].filter((k, i) => i === 0 || !targets.has(k));
   return mapPushGroups(groups, rename, userMap?.paths, pathKeys);
 }
