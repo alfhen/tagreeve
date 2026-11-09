@@ -7,7 +7,7 @@ npm i -g tagreeve
 tagreeve install-browser
 ```
 
-`npm i -g tagreeve` installs the newest release, `0.6.0`. The first Tagreeve release was 0.4.0-rc.1. Versions up to 0.3.0 were published under the old name, as the README explains. Tagreeve needs Node 22.18 or later.
+`npm i -g tagreeve` installs the newest release, `0.6.1`. The first Tagreeve release was 0.4.0-rc.1. Versions up to 0.3.0 were published under the old name, as the README explains. Tagreeve needs Node 22.18 or later.
 
 You can also install a release from its git tag:
 

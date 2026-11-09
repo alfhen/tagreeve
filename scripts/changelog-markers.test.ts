@@ -124,6 +124,15 @@ describe('CHANGELOG.md', () => {
     expect(markerProblems(text, pkg.version)).toEqual([]);
   });
 
+  it('leaves no marker and no "Not released yet" line in the newest section', () => {
+    const start = text.indexOf('\n## ') + 1;
+    const next = text.indexOf('\n## ', start);
+    const section = text.slice(start, next === -1 ? undefined : next);
+    expect(section.startsWith(`## ${pkg.version}\n`)).toBe(true);
+    expect(section).not.toMatch(/<!--/);
+    expect(section).not.toContain('Not released yet');
+  });
+
   describe.each(['0.6.0-rc.3', '0.6.0-rc.2'])('released section %s', (version) => {
     const section = (() => {
       const start = text.indexOf(`## ${version}\n`);
