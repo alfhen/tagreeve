@@ -35,7 +35,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 <!-- B10 -->
 
-<!-- C10 -->
+- Docs for 0.6.2: the handoff label width and radius, the `wait` timeout for a gone form, the exact count placements, unload sends in the container link rule, `renamedFrom` and `pushKind` in `diff --json`, the `in the push` label and the card frame reason. `init` creates nothing when a target is refused (#1455), and `diff` does not report the event path when a push changes kind (#1456). The docs-text test fails when a heading or a line it reads is missing. Three lines of 0.6.1 are corrected (#1395, #1397, #1413, #1435, #1436, #1437, #1445, #1446, #1447, #1438, #1439).
 
 <!-- X08 -->
 
@@ -52,7 +52,7 @@ Not released yet. The newest release is 0.6.1, below.
 - `diff` names an event as the run pushed it. A pair joined by the event table or an event map shows `renamedFrom` in `--json` and `(renamed from <name>)` in the text (#1246). `changed` is true when a push kind changed (#1370).
 - An event map error gives a key position and no key text, and positions follow the order written in the file. A swap or chain map applies each `paths` entry to one event (#1316, #1314, #1315).
 - An arguments-like `consent` push other than `default` or `update` reads `gtag consent`, and an arguments-like `gtm.*` event has no paths (#1373).
-- `consentModeSetup` names a hit with no tag ID by its vendor, lists letter sets with an `l` first and counts the tag IDs it leaves out. A page parameter can no longer set the Google Ads conversion ID (#1385).
+- `consentModeSetup` names a hit with no tag ID by its vendor, lists letter sets with an `l` first and counts the tag IDs it leaves out. A page parameter can no longer set the Google Ads conversion ID (#1306, #1308, #1309, #1385).
 - A baseline whose `dataLayer` push groups are partly kinded is refused as an invalid `dataLayer` section (#1374). The warning for a baseline with no `dataLayer` section says `saved before 0.6.0-rc.2`.
 - `tagreeve init` exits 2 with `tagreeve/config.yml is not a file` when a folder is at that path, instead of skipping it (#1329).
 - A `wait` timeout after a click on a form's submit control lists only the blocking controls of that form (#990).
@@ -67,12 +67,13 @@ Not released yet. The newest release is 0.6.1, below.
 
 ### Upgrading from 0.6.0
 
-- **Pushes are scanned for data not from the run identity.** A finding is a `possibleRealDataPush` warning. It never changes the exit code. Records from 0.6.0 or earlier that you check again get no push findings.
+- **Pushes are scanned for data not from the run identity.** A finding is a `possibleRealDataPush` warning. It never changes the exit code. A record from 0.6.0 or earlier has no push flags. Nothing adds them to a stored record.
 - **`diff` names events as recorded.** A pair joined by the event table or an event map has `renamedFrom`. `changed` counts a change of push kind.
 - **A baseline with mixed push kinds exits 2.** Only a hand edit makes one. Save the baseline again.
 - **A folder at `tagreeve/config.yml` exits 2** in `tagreeve init`.
 - **A `wait` timeout lists only the clicked form's controls,** not every blocking control on the page.
 - **The handoff label wraps.** It shows at most four lines, and the full text is in its `title`.
+- **A `must` rule with an exact `count` can warn with `serverSendUnlinked`** when some subset of the unlinked server hits in scope could change its verdict, where 0.6.0 gave PASS or FAIL.
 - **A new rule 2 miss reason, `concurrentRequest`,** in the hit's link miss and in `serverContainer.notExact.clientId`. A call with a concurrent request no longer links `exact`.
 - **The record stays at version 5.** A 0.6.0 record reads as before.
 

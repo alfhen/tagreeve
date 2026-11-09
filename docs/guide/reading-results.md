@@ -96,6 +96,7 @@ Built-in checks run on every run. You do not write them:
 - `earlyIdentifiers` warns if a hit sent before the first consent answer carries an identifier and its consent signal is unknown. It reads hit fields only, so an identifier that goes out only in a `Cookie` header is left to the cookie rules. It does not change the exit code unless you set it to `fail`. See [earlyIdentifiers](../cli.md#earlyidentifiers).
 - `consentModeSetup` warns if a Google hit shows a Consent Mode signal that was never set, for example a default without `ad_user_data` and `ad_personalization`. It reads the `gcd` value of the hit. See [consentModeSetup](../cli.md#consentmodesetup).
 - `possibleRealData` fails if the record holds an email address, a phone number or a hash that does not belong to the fake identity. A hash is a fixed code made from a value, such as an email address.
+- `possibleRealDataPush` is a flag, not a check. A `dataLayer` push that holds an email, a phone number or a hash that is not from the fake identity gets it. It is a warning and never fails a run: the `possibleRealData` check does not count it and the exit code does not change.
 
 The [CLI page](../cli.md) lists the options that change these checks. One of them, `options.builtins`, sets a check to `warn`. The summary then shows `WARN` for it and the exit code stays 0.
 
