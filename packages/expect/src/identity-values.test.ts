@@ -460,6 +460,7 @@ test('possibleRealData reports a form-encoded +cc+nn phone once, in its field', 
 
 test.each([
   ['a JSON newline escape', JSON.stringify({ e: 'line\nvisitor@other-person.example' }), 'e'],
+  ['a JSON escape inside a longer domain', '{"e":"visitor@other-person.example\\u002ecom"}', 'e'],
   ['a JSON unicode escape', '{"e":"\\u00e9visitor@other-person.example"}', 'e'],
   ['a tab escape in an NDJSON line', '{"a":"x\\tvisitor@other-person.example"}\n{"b":1}', 'a'],
   ['a [] joined into the name', 'x[]visitor@other-person.example=1', '(other)'],

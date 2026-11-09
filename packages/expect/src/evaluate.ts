@@ -1523,25 +1523,53 @@ function bodyTexts(headers: Record<string, string>, body: string): ScanText[] {
   return isBinaryText(body) ? [] : [{ text: body, where: 'the body' }, ...leafTexts(body)];
 }
 
+const JSON_ESCAPES: Record<string, string> = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', '"': '"', '\\': '\\', '/': '/' };
+
+function jsonUnescaped(text: string): string {
+  return text.replace(/\\(?:u([0-9a-f]{4})|(.))/gi, (m, hex?: string, ch?: string) => (hex ? String.fromCharCode(parseInt(hex, 16)) : (JSON_ESCAPES[ch!] ?? m)));
+}
+
+function percentLayers(text: string): string[] {
+  const layers = [text];
+  for (let i = 0; i < 4; i++) {
+    const next = text.replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
+      try {
+        return decodeURIComponent(run);
+      } catch {
+        return run;
+      }
+    });
+    if (next === text) break;
+    layers.push((text = next));
+  }
+  return layers;
+}
+
 // The base reads raw characters and a leaf decoded ones, so a JSON escape or a joined name shifts a value's edge. Such a twin is
 // merged into the field's finding, never dropped, so nothing a whole-body scan finds is lost. Only a reading from the body itself
-// merges. A shorter value that only ever appears inside a longer one in the raw body is merged into it, even when the two are
-// different values. A different value in the URL, or a longer value elsewhere, keeps its own finding.
+// merges. A different value in the URL, or a longer value elsewhere, keeps its own finding.
+// Rule: the short value merges into the long one when the long value occurs in some reading, and no reading holds the short
+// value outside it. A text form (the body, its percent layers, their JSON-unescaped forms) that lacks the long value says nothing.
+// A base64-decoded reading holds a value the text forms do not show, so it counts whether or not it holds the long value.
 function isEdgeShift(a: string, b: string, bodies: string[]): boolean {
   const [short, long] = a.length <= b.length ? [a, b] : [b, a];
   if (!long.includes(short)) return false;
   let sawLong = false;
-  const ok = bodies.every((raw) =>
-    readings(raw.replace(/\[\]|%5B%5D/gi, '')).every((text) => {
+  const ok = bodies.every((raw) => {
+    const stripped = raw.replace(/\[\]|%5B%5D/gi, '');
+    const textForms = new Set(percentLayers(stripped).flatMap((layer) => [layer, jsonUnescaped(layer)]));
+    const decoded = [...textForms].flatMap((form) => readings(form)).filter((form) => !textForms.has(form));
+    return [...textForms, ...decoded].every((text) => {
       if (text.includes(long)) sawLong = true;
+      else if (textForms.has(text)) return true;
       const covered: [number, number][] = [];
       for (let i = text.indexOf(long); i >= 0; i = text.indexOf(long, i + 1)) covered.push([i, i + long.length]);
       for (let i = text.indexOf(short); i >= 0; i = text.indexOf(short, i + 1)) {
         if (!covered.some(([from, to]) => i >= from && i + short.length <= to)) return false;
       }
       return true;
-    }),
-  );
+    });
+  });
   return ok && sawLong;
 }
 
