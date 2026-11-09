@@ -115,8 +115,11 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
       const { pass, evidence, message } = outcome;
       const passes = (c: Context) => evaluateRuleHits(rule, c).pass;
       const scoped = !rule.tag && isScoped(rule);
+      const failureRests = scoped && !pass && failureRestsOnProbableLink(ctx, passes, rule);
       const note = outcome.note ?? (pass && scoped && passRestsOnProbableLink(ctx, passes, rule) ? 'serverSendProbableLink' : undefined);
-      add(`${kind}: ${rule.description}`, pass, evidence, message, undefined, note, scoped && (pass || failureRestsOnProbableLink(ctx, passes, rule)));
+      // A count rule's evidence can hold exact browser hits next to the probable ones, so the leak gate in settleServerSends must not turn it into a hard FAIL.
+      const countRests = kind === 'must' && failureRests && !note;
+      add(`${kind}: ${rule.description}`, pass, evidence, message, countRests ? 'warn' : undefined, countRests ? 'serverSendProbableLink' : note, scoped && (pass || failureRests));
     }
 
   builtInChecks(records, scenario, ctx, add);
@@ -139,16 +142,35 @@ function ruleWindowStart(rule: Rule, ctx: Context): { at: number; text: string }
   return rule.from ? { at: step.startedAt, text: `from ${label}` } : { at: step.endedAt ?? step.startedAt, text: `after ${label}` };
 }
 
-/** Most hits whose placements are all tried. Above this a rule that placements could change warns without a search. */
-const MAX_SEARCHED_HITS = 10;
+/** Most placements tried for one rule: each unlinked hit is placed or not, each probable hit keeps its link, takes its own time or is left out. Above this a rule warns without a search. */
+const MAX_PLACEMENTS = 1024;
 
 /** A count of matching hits alone is decided by how many hits are placed. With an exact count, `body` or `hashesMatch`, which ones matter too. */
 const dependsOnWhichHits = (rule: Rule) => rule.count?.op === '=' || Boolean(rule.body || rule.hashesMatch);
 
-function nonEmptySubsets<T>(items: readonly T[]): T[][] {
-  const out: T[][] = [];
-  for (let mask = 1; mask < 2 ** items.length; mask++) out.push(items.filter((_, i) => mask & (2 ** i)));
-  return out;
+/** True when some placement of `unlinked` (placed anywhere or not) and `probable` (by link, by own time or left out) gives a pass other than `base`, or when there are too many placements to try. */
+function placementsChange(ctx: Context, rule: Rule, unlinked: readonly Hit[], probable: readonly Hit[], base: boolean): boolean {
+  if (unlinked.length + probable.length === 0) return false;
+  const unlinkedStates = 2 ** unlinked.length;
+  const probableStates = 3 ** probable.length;
+  if (unlinkedStates * probableStates > MAX_PLACEMENTS) return true;
+  for (let u = 0; u < unlinkedStates; u++) {
+    const placed = unlinked.filter((_, i) => u & (2 ** i));
+    for (let code = 0; code < probableStates; code++) {
+      if (u === 0 && code === 0) continue;
+      const own: Hit[] = [];
+      const out = new Set<string>();
+      probable.forEach((h, i) => {
+        const state = Math.floor(code / 3 ** i) % 3;
+        if (state === 1) own.push(h);
+        else if (state === 2) out.add(h.id);
+      });
+      const moved = asBrowserHits(ctx, own);
+      const placedCtx = { ...moved, hits: moved.hits.filter((h) => !out.has(h.id)), anywhere: new Set(placed.map((h) => h.id)) };
+      if (evaluateRuleHits(rule, placedCtx).pass !== base) return true;
+    }
+  }
+  return false;
 }
 
 function evaluateRule(rule: Rule, ctx: Context): RuleOutcome {
@@ -159,12 +181,17 @@ function evaluateRule(rule: Rule, ctx: Context): RuleOutcome {
   if (rule.kind === 'mustNot') {
     if (!outcome.pass) return outcome;
   } else {
-    // A hard verdict needs every placement of the unlinked hits to give it. At least and at most counts are monotone, so all or none is enough.
+    // A hard verdict needs every placement of the unlinked and probable hits to give it. At least and at most counts are monotone, so all or none is enough.
     const placed = (hits: readonly Hit[]) => evaluateRuleHits(rule, { ...ctx, anywhere: new Set(hits.map((h) => h.id)) }).pass;
     let changes: boolean;
     if (!dependsOnWhichHits(rule)) changes = placed(unjudged) !== outcome.pass;
     else if (rule.count?.op === '=' && !rule.body && !rule.hashesMatch) changes = unjudged.some((_, i) => placed(unjudged.slice(0, i + 1)) !== outcome.pass);
-    else changes = unjudged.length > MAX_SEARCHED_HITS || nonEmptySubsets(unjudged).some((subset) => placed(subset) !== outcome.pass);
+    else changes = placementsChange(ctx, rule, unjudged, [], outcome.pass);
+    if (!changes && dependsOnWhichHits(rule)) {
+      const probable = probableHits(ctx, rule);
+      // Probable hits alone are noted by the caller. Only a placement of both kinds together is settled here.
+      changes = probable.length > 0 && !placementsChange(ctx, rule, [], probable, outcome.pass) && placementsChange(ctx, rule, unjudged, probable, outcome.pass);
+    }
     if (!changes) return outcome;
   }
   return {
@@ -196,13 +223,13 @@ function probableHits(ctx: Context, rule: Rule | undefined): Hit[] {
 
 /**
  * True when the verdict `passes` gives would change if the probable-linked server hits were placed by their own time. With a `rule`
- * that depends on which hits count, every choice of link or own time is tried, up to MAX_SEARCHED_HITS hits, and more hits always rest.
+ * that depends on which hits count, every choice of link, own time or left out is tried, up to MAX_PLACEMENTS placements, and more always rest.
  */
 function passRestsOnProbableLink(ctx: Context, passes: (ctx: Context) => boolean, rule?: Rule): boolean {
   const probable = probableHits(ctx, rule);
   if (probable.length === 0) return false;
   if (!rule || !dependsOnWhichHits(rule)) return !passes(asBrowserHits(ctx, probable));
-  return probable.length > MAX_SEARCHED_HITS || nonEmptySubsets(probable).some((subset) => !passes(asBrowserHits(ctx, subset)));
+  return placementsChange(ctx, rule, [], probable, true);
 }
 
 /** True when the failing verdict `passes` gives would change if the probable-linked server hits were placed by their own time or left out. Searches as `passRestsOnProbableLink` does. */
@@ -212,7 +239,7 @@ function failureRestsOnProbableLink(ctx: Context, passes: (ctx: Context) => bool
   const ids = new Set(probable.map((h) => h.id));
   const leftOut = () => passes({ ...ctx, hits: ctx.hits.filter((h) => !ids.has(h.id)) });
   if (!rule || !dependsOnWhichHits(rule)) return passes(asBrowserHits(ctx, probable)) || leftOut();
-  return probable.length > MAX_SEARCHED_HITS || nonEmptySubsets(probable).some((subset) => passes(asBrowserHits(ctx, subset))) || leftOut();
+  return placementsChange(ctx, rule, [], probable, false);
 }
 
 function evaluateRuleHits(rule: Rule, ctx: Context): RuleOutcome {

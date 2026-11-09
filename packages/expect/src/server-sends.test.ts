@@ -321,9 +321,46 @@ describe('rules on a server hit', () => {
     test('a count that every placement gives the same verdict for has no note', () => {
       const viaX = browser(500);
       const viaY = browser(600);
-      const results = rule(exact, [viaX, viaY, capi(100, link(viaX, 'probable')), capi(200, link(viaY, 'probable'))]);
+      const three = '  must:\n    - { vendor: meta-capi, in: epoch(denied), count: 3 }';
+      const results = rule(three, [viaX, viaY, capi(100, link(viaX, 'probable')), capi(200, link(viaY, 'probable'))]);
       expect(results.pass).toBe(false);
       expect(results.note).toBeUndefined();
+    });
+
+    test('a count that leaving out one of two probable hits would meet warns', () => {
+      const viaX = browser(500);
+      const viaY = browser(600);
+      const results = rule(exact, [viaX, viaY, capi(100, link(viaX, 'probable')), capi(200, link(viaY, 'probable'))]);
+      expect(results).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendProbableLink' });
+    });
+
+    test('a failing count with a direct browser hit next to a probable hit warns when moving it would meet the count', () => {
+      const direct = browser(100, { vendor: 'meta-capi' });
+      const viaX = browser(500);
+      const results = rule(exact, [direct, viaX, capi(1500, link(viaX, 'probable'))]);
+      expect(results).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendProbableLink' });
+    });
+
+    test('with more than 6 probable hits and a direct hit in scope a failing count warns', () => {
+      const direct = browser(100, { vendor: 'meta-capi' });
+      const vias = Array.from({ length: 7 }, (_, i) => browser(500 + i));
+      const results = rule(exact, [direct, ...vias, ...vias.map((v, i) => capi(1500 + i, link(v, 'probable')))]);
+      expect(results).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendProbableLink' });
+    });
+
+    test('probable hits outside the rule scope do not make a failing count warn', () => {
+      const vias = Array.from({ length: 7 }, (_, i) => browser(500 + i));
+      const other = vias.map((v, i) => capi(1500 + i, link(v, 'probable'), { vendor: 'ga4' }));
+      const results = rule(exact, [...vias, ...other]);
+      expect(results.pass).toBe(false);
+      expect(results.note).toBeUndefined();
+    });
+
+    test('a count that only an unlinked and a probable hit placed together would meet warns', () => {
+      const via = browser(1200, { vendor: 'ga4' });
+      const two = '  must:\n    - { vendor: meta-capi, in: epoch(denied), count: 2 }';
+      const results = rule(two, [via, capi(500, link(via, 'probable')), capi(600, undefined)]);
+      expect(results).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked' });
     });
   });
 
