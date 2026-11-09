@@ -2,14 +2,14 @@
 
 ## 0.6.2
 
-`npm i -g tagreeve` installs this release. 0.6.2 fixes the issues found in the review of 0.6.1 and clears the `review-minor` backlog. It has no new command and no new option. The record stays at schema version 5. 0.6.1 was field-tested on a Shopify store with a real GTM web container.
+`npm i -g tagreeve` installs this release. 0.6.2 fixes the issues found in the review of 0.6.1. It has no new command and no new option. The record stays at schema version 5. 0.6.1 was field-tested on a Shopify store with a real GTM web container.
 
 ### What 0.6.2 fixes
 
 - A test payment ends by its deadline when a card frame stops answering before the fill. The reason reads `the card frame could not be read`. The grace after the deadline no longer restarts at each await, and the card fields share the step deadline (#1404, #1418).
 - A click inside a submit button remembers the button's form for the next `wait` timeout. When that form is gone, the timeout lists every blocking control (#1419, #1415).
 - The handoff label uses the room up to the pill's width limit, and the pill has a 14 px radius, so four lines are not cut at the corners (#1428, #1411).
-- An exact count with `body` or `identity.hashesMatch` tries every placement of the unlinked and probable server hits in scope, up to 10 hits. A probable hit is placed by its link, by its own time or left out. The rule warns when a placement could change the verdict, and always above 10 hits. At-least and at-most counts try the same placements.
+- A scoped `must` rule tries every placement of the unlinked and probable server hits in scope. A probable hit is placed by its link, by its own time or left out. The rule warns when a placement could change the verdict. A rule with `body` or `identity.hashesMatch` tries every subset up to 10 such hits and always warns above 10. A plain exact count is searched by number with no cap. At-least and at-most counts try the same placements.
 - An unload send no longer breaks a client ID link between a server hit and its browser hit.
 - `diff`: a move or a kind change of a joined pair names the recorded event with `renamedFrom`, and a move has an optional `pushKind` in `--json`. A cross-epoch join forms only when it can become a move. The `push kind changed` warning says `(renamed from <name>)` for a joined pair. Also, a kind change of a joined pair does not report the `event` key path (#1456).
 - A dataLayer push finding with no field path reads `in the push`, not `in the body`.
@@ -25,7 +25,7 @@ Tests and cleanup: one rule or one owner for the folder names and the `Defaults:
 
 ### Upgrading from 0.6.1
 
-- **An exact count rule can warn where 0.6.1 failed.** A rule with an exact `count` that is judged with `body` or `identity.hashesMatch` now warns with `serverSendUnlinked` or `serverSendProbableLink` when some placement of the server hits in scope gives another verdict. A run that exited 1 in 0.6.1 can exit 0. A rule that gave PASS can warn too.
+- **A `must` rule can warn where 0.6.1 failed.** With `--server-container`, a scoped rule now warns with `serverSendUnlinked` or `serverSendProbableLink` when some placement of the unlinked or probable-linked server hits in scope gives another verdict. With an exact count this is true even when browser hits are in the evidence. A run that exited 1 in 0.6.1 can exit 0, and a rule that gave PASS can warn.
 - **A call with an unload send keeps its client ID link.** A send from `pagehide` or `visibilitychange` no longer gives `concurrentRequest`.
 - **The handoff label is wider on a wide window** and still fits a narrow one.
 - **A `wait` timeout lists every control** when the clicked form is gone from the page.
@@ -64,7 +64,7 @@ Issues still open that you can meet:
 - `consentModeSetup` reads the `gcd` letters, whose format is documented only by the community.
 - Hits and pushes are not joined per frame (#931, #932).
 - A blocking control with no `aria-label`, `name` or `id` has no name in a `wait` timeout message.
-- Eight other `review-minor` issues are open. They are test gaps, wording, build edge cases and a vendor name table.
+- Other `review-minor` issues are open. They are test gaps, wording, build edge cases and a vendor name table.
 
 ## 0.6.1
 
