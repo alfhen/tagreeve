@@ -495,3 +495,23 @@ test('a gtag purchase against an object purchase baseline pairs and warns', () =
   expect(warnings).toContain('dataLayer push kind changed: purchase');
   expect(warnings.some((w) => w.startsWith('dataLayer new event') || w.startsWith('dataLayer removed event'))).toBe(false);
 });
+
+test('a baseline with one kinded and one unkinded push group is refused', () => {
+  const saved = makeRun(['page_view']);
+  pushTo(saved, { event: 'purchase', value: 1 }, 'dle_1');
+  pushTo(saved, { event: 'signup', value: 1 }, 'dle_2');
+  const file = buildBaseline(saved, false);
+  const [first, ...rest] = file.dataLayer!;
+  expect(rest.length).toBeGreaterThan(0);
+  const unkinded = { epoch: first!.epoch, event: first!.event, frame: first!.frame, paths: first!.paths };
+  const mixed = { ...file, dataLayer: [unkinded, ...rest] };
+  expect(() => parseBaseline(JSON.stringify(mixed), 'b.json')).toThrow(/^b\.json has an invalid dataLayer section$/);
+});
+
+test('a baseline with no dataLayer section warns it was saved before 0.6.0-rc.2', () => {
+  const old = { baselineSchemaVersion: 1, scenario: 's.yml', site: 'localhost', byPage: false, keys: buildBaseline(makeRun(['page_view']), false).keys };
+  const summary = compareBaseline(parseBaseline(JSON.stringify(old), 'old.json'), makeRun(['page_view']));
+  const warning = summary.warnings.find((w) => w.startsWith('dataLayer pushes not compared'))!;
+  expect(warning).toContain('saved before 0.6.0-rc.2');
+  expect(warning).not.toContain('rc.1');
+});

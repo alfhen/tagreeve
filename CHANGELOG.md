@@ -10,7 +10,8 @@ Not released yet. The newest release is 0.6.0, below.
 
 <!-- G09 -->
 
-<!-- B09 -->
+- A baseline whose `dataLayer` push groups are partly kinded is refused as an invalid `dataLayer` section (#1374). The warning for a baseline with no `dataLayer` section says `saved before 0.6.0-rc.2`.
+- `tagreeve init` exits 2 with `tagreeve/config.yml is not a file` when a folder is at that path, instead of skipping it (#1329).
 
 <!-- U09 -->
 

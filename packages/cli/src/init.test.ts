@@ -128,3 +128,14 @@ test('a .gitignore with only *.jsonl still gets the runs line', async () => {
   expect(await init()).toContain('Added /tagreeve/runs/ to .gitignore');
   expect(await read('.gitignore')).toBe('*.jsonl\n/tagreeve/runs/\n');
 });
+
+test('a folder at tagreeve/config.yml exits 2, says it is not a file and lists no skipped config', async () => {
+  await mkdir(join(dir, 'tagreeve/config.yml'), { recursive: true });
+  let out = '';
+  let err = '';
+  const code = await initCommand({ stdout: (t) => (out += t), stderr: (t) => (err += t) }, true, dir);
+  expect(code).toBe(2);
+  expect(err).toBe('tagreeve/config.yml is not a file\n');
+  const items = (JSON.parse(out) as { items: Array<{ path: string; action: string }> }).items;
+  expect(items.map((i) => i.path)).toEqual(['tagreeve/scenarios/', 'tagreeve/baselines/']);
+});
