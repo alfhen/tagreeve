@@ -6,10 +6,9 @@ import { diffRuns, mergeOptions, parseScenario, ScenarioError, type Scenario, ty
 import { GtmOverrideError, hasHandoff, hasPayment, normalizeHost, parseTestGtmOrigin, TEST_GTM_ORIGIN_ENV, type GtmOverrideInput, type TestPayment } from '@tagreeve/recorder';
 import { UsageError, usageHint, type Network, type SuiteArgs } from './args.ts';
 import { baselineFileName, BaselineError, compareBaseline, readBaseline, type BaselineFile } from './baseline.ts';
-import { DEFAULT_BASELINES, DEFAULT_STORES, defaultScenarioDir, defaultStores, resolveAutoconsentRules, resolveTrackerList, type DefaultUsed } from './defaults.ts';
+import { DEFAULT_BASELINES, DEFAULT_STORES, defaultScenarioDir, defaultStores, resolveAutoconsentRules, resolveTrackerList, formatDefaultsLine, type DefaultUsed } from './defaults.ts';
 import { warnIfNotIgnored } from './git-ignore.ts';
-import { oldRunsNotice, resolveOutDir } from './out-dir.ts';
-import { formatDefaults, type DefaultEntry } from './project-config.ts';
+import { resolveRunFolder } from './out-dir.ts';
 import { readStores, StoresError, type Store } from './stores.ts';
 import { checkTestPaymentGates } from './test-payment-hosts.ts';
 import { executeRun, loadConfigOrReport, prepareServerContainer, readGtmOverride, readTrackerList, resolveNetwork, warnTestGtmOrigin, warnTestLoopbackHosted, type Io, type RunOutcome, type RunSpec } from './run.ts';
@@ -71,7 +70,7 @@ export interface SuiteManifest {
   diffs: SuiteDiff[];
   exitCode: 0 | 1 | 2;
   /** Files used because their flag was not given. Absent when none. */
-  defaults?: DefaultEntry[];
+  defaults?: DefaultUsed[];
 }
 
 export interface SuiteDeps {
@@ -155,7 +154,7 @@ export function formatSuiteTable(manifest: SuiteManifest, dir: string): string {
   const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i]!.length)));
   const line = (cols: string[]) => cols.map((c, i) => (i === cols.length - 1 ? c : c.padEnd(widths[i]! + 3))).join('').trimEnd();
   const out = [line(header), ...rows.map(line)];
-  const defaultsLine = formatDefaults(manifest.defaults);
+  const defaultsLine = formatDefaultsLine(manifest.defaults);
   if (defaultsLine) out.push('', defaultsLine);
   const records = manifest.cells.filter((c) => c.record);
   if (records.length) out.push('', 'Records', ...records.map((c) => `  ${cellName(c)}: ${join(dir, c.record!)}`));
@@ -425,11 +424,8 @@ async function runSuite(args: SuiteArgs, io: Io, deps: SuiteDeps): Promise<numbe
   }
 
   const id = `suite_${ulid()}`;
-  const outFolder = resolveOutDir({ out: args.out, now: new Date(), label: args.label, base: loaded?.config.out });
-  if (args.out === undefined && loaded?.config.out === undefined) {
-    const notice = await oldRunsNotice(process.cwd(), outFolder);
-    if (notice) io.stderr(notice);
-  }
+  const { folder: outFolder, notice } = await resolveRunFolder({ out: args.out, now: new Date(), label: args.label, base: loaded?.config.out });
+  if (notice) io.stderr(notice);
   await warnIfNotIgnored(outFolder, io.stderr);
   const dir = join(outFolder, id);
   await mkdir(dir, { recursive: true });
@@ -500,7 +496,7 @@ async function runSuite(args: SuiteArgs, io: Io, deps: SuiteDeps): Promise<numbe
     (scenarios.findIndex((s) => s.name === c.scenario) * Math.max(storeNames.length, 1) + Math.max(storeNames.indexOf(c.labels.store ?? ''), 0)) * variants.length + variants.indexOf(c.variant);
   cells.sort((a, b) => position(a) - position(b));
 
-  const listed: DefaultEntry[] = [...(loaded?.defaultUsed ? [loaded.defaultUsed] : []), ...defaults];
+  const listed: DefaultUsed[] = [...(loaded?.defaultUsed ? [loaded.defaultUsed] : []), ...defaults];
   const manifest: SuiteManifest = {
     suiteSchemaVersion: 3,
     id,

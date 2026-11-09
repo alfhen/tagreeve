@@ -103,6 +103,7 @@ test.each(['tagreeve/scenarios', 'tagreeve/baselines'])('a file at %s exits 2 an
   const code = await initCommand({ stdout: (t) => (out += t), stderr: (t) => (err += t) }, false, dir);
   expect(code).toBe(2);
   expect(err).toBe(`${path} is not a folder\n`);
+  expect(err).not.toContain('not a file');
   expect(out).not.toContain('Skipped');
 });
 

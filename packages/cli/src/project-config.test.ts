@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { parseScenario, mergeOptions } from '@tagreeve/expect';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { UsageError } from './args.ts';
-import { formatDefaults, loadProjectConfig, ProjectConfigLoadError, siteMissingMessage } from './project-config.ts';
+import { loadProjectConfig, ProjectConfigLoadError, siteMissingMessage } from './project-config.ts';
 import { resolveNetwork, runCommand, type RunOutcome, type RunSpec } from './run.ts';
 import { suiteCommand } from './suite.ts';
 
@@ -92,13 +92,6 @@ test('an invalid file is an error with the file, the key and the line, and no va
   expect(error).toBeInstanceOf(ProjectConfigLoadError);
   expect((error as Error).message).toContain('tagreeve/config.yml: line 2, gtmOverride');
   expect((error as Error).message).not.toContain('FAKE-AUTH-VALUE');
-});
-
-test('formatDefaults names the config first', () => {
-  expect(formatDefaults(undefined)).toBeUndefined();
-  expect(formatDefaults([{ setting: 'stores', path: 'tagreeve/stores.json' }, { setting: 'config', path: 'tagreeve/config.yml' }])).toBe(
-    'Defaults: tagreeve/config.yml (project config), tagreeve/stores.json (stores)',
-  );
 });
 
 test('the site message names the config path only when one was read', async () => {

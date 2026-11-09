@@ -88,5 +88,9 @@ test('init writes a starter config that a run reads, and --json prints items', a
 
   const bogus = await tagreeve(cwd, ['init', '--bogus']);
   expect(bogus.code).toBe(2);
+
+  const withSite = await tagreeve(cwd, ['init', '--site', 'http://x.example']);
+  expect(withSite.code).toBe(2);
+  expect(withSite.stderr).toContain('init does not take --site');
   await rm(cwd, { recursive: true, force: true });
 }, 180_000);
