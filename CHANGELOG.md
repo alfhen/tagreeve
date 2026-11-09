@@ -2,7 +2,7 @@
 
 ## 0.6.2
 
-`npm i -g tagreeve` installs this release. 0.6.2 fixes the issues found in the review of 0.6.1. It has no new command and no new option. The record stays at schema version 5. 0.6.1 was field-tested on a Shopify store with a real GTM web container.
+`npm i -g tagreeve` installs this release. 0.6.2 fixes many of the issues found in the review of 0.6.1. The rest are listed under Known in 0.6.2. It has no new command and no new option. The record stays at schema version 5. After its release, 0.6.1 was field-tested on a Shopify store with a real GTM web container.
 
 ### What 0.6.2 fixes
 
