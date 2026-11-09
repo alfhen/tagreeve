@@ -685,18 +685,18 @@ describe('diffPushes', () => {
     expect(diffPushes(a, b, { eventMap }).changed).toBe(false);
   });
 
-  test('a removed event keeps its side a name when its pair joins across epochs that are not next to each other', () => {
-    const a = [group({ epoch: 'undecided', event: 'checkout_completed' })];
-    const b = [group({ epoch: 'denied', event: 'purchase' })];
-    const d = diffPushes(a, b, { epochOrder: ['undecided', 'granted', 'denied'] });
+  test('a removed event keeps its side a name when its pair joins in one epoch and cannot match', () => {
+    const a = [group({ event: 'checkout_completed' })];
+    const b = [group({ event: 'purchase', frame: 'embedded' })];
+    const d = diffPushes(a, b);
     expect(d.eventsRemoved).toEqual([{ epoch: 'undecided', event: 'checkout_completed', kind: 'object', frame: 'main' }]);
-    expect(d.eventsAdded).toEqual([{ epoch: 'denied', event: 'purchase', kind: 'object', frame: 'main' }]);
+    expect(d.eventsAdded).toEqual([{ epoch: 'undecided', event: 'purchase', kind: 'object', frame: 'embedded' }]);
   });
 });
 
 describe('pairNames', () => {
   const NAMES = ['checkout_completed', 'order_done', 'purchase'];
-  const EPOCHS = ['undecided', 'granted'];
+  const EPOCHS = ['undecided', 'granted', 'denied'];
   const eventMap = parseEventMap(JSON.stringify({ events: { checkout_completed: 'purchase', order_done: 'purchase' } }), 'm.json');
   const keyOf = (g: { epoch: string; event: string }): string => JSON.stringify([g.epoch, g.event]);
   const cells = EPOCHS.flatMap((epoch) => NAMES.map((event) => ({ epoch, event })));
@@ -705,10 +705,11 @@ describe('pairNames', () => {
     const picked = cells.filter((_, i) => m & (1 << i));
     if (picked.length <= 2) sides.push(picked);
   }
-  const toGroups = (cs: { epoch: string; event: string }[], tag: string): PushGroup[] => cs.map((c) => ({ ...c, kind: 'object', frame: 'main', paths: [{ path: `${tag}.${c.epoch}.${c.event}`, types: ['string'] }] }));
+  const toGroups = (cs: { epoch: string; event: string }[], tag: string | null): PushGroup[] =>
+    cs.map((c) => ({ ...c, kind: 'object', frame: 'main', paths: [{ path: tag === null ? 'x' : `${tag}.${c.epoch}.${c.event}`, types: ['string'] }] }));
 
   const assertInvariants = (a: PushGroup[], b: PushGroup[]): void => {
-    const out = pairNames(a, b, eventMap);
+    const out = pairNames(a, b, eventMap, { epochOrder: EPOCHS });
     expect(out).toHaveLength(a.length);
     const outKeys = out.map(keyOf);
     expect(new Set(outKeys).size).toBe(new Set(a.map(keyOf)).size);
@@ -743,23 +744,26 @@ describe('pairNames', () => {
 
   test('every first-side group has one output, no two first-side names share a node, renamedFrom is the joined group, recorded names pair first', () => {
     let n = 0;
-    for (const sa of sides) {
-      for (const sb of sides) {
-        assertInvariants(toGroups(sa, 'a'), toGroups(sb, 'b'));
-        n++;
+    for (const [ta, tb] of [['a', 'b'], [null, null]] as const) {
+      for (const sa of sides) {
+        for (const sb of sides) {
+          assertInvariants(toGroups(sa, ta), toGroups(sb, tb));
+          n++;
+        }
       }
     }
-    expect(n).toBe(sides.length ** 2);
+    expect(n).toBe(2 * sides.length ** 2);
   });
 
   test('a join across epochs never gives two first-side events one name', () => {
-    const a = toGroups([{ epoch: 'undecided', event: 'checkout_completed' }, { epoch: 'undecided', event: 'order_done' }], 'a');
-    const b = toGroups([{ epoch: 'undecided', event: 'purchase' }, { epoch: 'granted', event: 'purchase' }], 'b');
-    const out = pairNames(a, b, eventMap);
+    const order = ['undecided', 'granted', 'denied'];
+    const a = toGroups([{ epoch: 'granted', event: 'checkout_completed' }, { epoch: 'granted', event: 'order_done' }], null);
+    const b = toGroups([{ epoch: 'undecided', event: 'purchase' }, { epoch: 'denied', event: 'purchase' }], null);
+    const out = pairNames(a, b, eventMap, { epochOrder: order });
     expect(out.map((o) => o.event)).toEqual(['purchase', 'order_done']);
-    const d = diffPushes(a, b, { eventMap, epochOrder: ['undecided', 'granted'] });
+    const d = diffPushes(a, b, { eventMap, epochOrder: order });
+    expect(d.moved).toHaveLength(1);
     expect(d.eventsRemoved.map((e) => e.event)).toEqual(['order_done']);
-    expect(d.eventsAdded.map((e) => e.event)).toEqual(['purchase']);
   });
 });
 
@@ -850,35 +854,46 @@ describe('renamed pairs in diffPushes', () => {
   const sides: { epoch: string; event: string }[][] = [];
   for (let m = 0; m < 1 << cells.length; m++) {
     const picked = cells.filter((_, i) => m & (1 << i));
-    if (picked.length <= 3) sides.push(picked);
+    if (picked.length <= 2) sides.push(picked);
   }
+  const variant = (c: { epoch: string; event: string }, v: number): PushGroup =>
+    g(c.epoch, c.event, v === 1 && c.event === 'purchase' ? { kind: 'gtag' } : v === 1 && c.event === 'order_done' ? { paths: other } : {});
 
-  test('every dataLayer entry names the event as one run pushed it, and a joined pair has renamedFrom', () => {
+  test('every dataLayer entry names the event as one run pushed it, and renamedFrom is there exactly when a pair joined', () => {
     let checked = 0;
-    for (const sa of sides) {
-      for (const sb of sides) {
-        const a = sa.map((c) => g(c.epoch, c.event));
-        const b = sb.map((c) => g(c.epoch, c.event, c.event === 'order_done' ? { paths: other } : {}));
-        const d = diffPushes(a, b, { epochOrder: ORDER, eventMap: map });
-        const aNames = new Set(a.map((x) => x.event));
-        const bNames = new Set(b.map((x) => x.event));
-        const joined = (e: { event: string; renamedFrom?: string }): void => {
-          expect(bNames.has(e.event)).toBe(true);
-          if (e.renamedFrom === undefined) return;
-          expect(aNames.has(e.renamedFrom)).toBe(true);
-          expect(e.renamedFrom).not.toBe(e.event);
-        };
-        for (const list of [d.pathsAdded, d.pathsRemoved, d.typeChanges, d.kindChanged, d.moved, d.eventsAdded]) list.forEach(joined);
-        for (const e of [...d.pathsRemoved, ...d.eventsRemoved]) expect(aNames.has('renamedFrom' in e && e.renamedFrom ? e.renamedFrom : e.event)).toBe(true);
-        for (const m of d.moved) {
-          const from = m.kind === 'epoch' ? m.from : m.epoch;
-          const recorded = m.renamedFrom ?? m.event;
-          expect(a.some((x) => x.event === recorded && (m.kind === 'frame' ? x.epoch === from : x.epoch === from))).toBe(true);
+    for (const va of [0, 1]) {
+      for (const vb of [0, 1]) {
+        for (const sa of sides) {
+          for (const sb of sides) {
+            const a = sa.map((c) => variant(c, va));
+            const b = sb.map((c) => variant(c, vb));
+            const d = diffPushes(a, b, { epochOrder: ORDER, eventMap: map });
+            const inA = (epoch: string, event: string): boolean => a.some((x) => x.epoch === epoch && x.event === event);
+            const aNames = new Set(a.map((x) => x.event));
+            const bNames = new Set(b.map((x) => x.event));
+            const inNodeEpoch = (e: { epoch: string; event: string; renamedFrom?: string }): void => {
+              expect(bNames.has(e.event) || aNames.has(e.event)).toBe(true);
+              expect(e.renamedFrom !== undefined).toBe(!inA(e.epoch, e.event));
+              if (e.renamedFrom !== undefined) {
+                expect(inA(e.epoch, e.renamedFrom)).toBe(true);
+                expect(bNames.has(e.event)).toBe(true);
+              }
+            };
+            for (const list of [d.pathsAdded, d.pathsRemoved, d.typeChanges, d.kindChanged]) list.forEach(inNodeEpoch);
+            for (const e of d.eventsRemoved) expect(inA(e.epoch, e.event)).toBe(true);
+            expect(new Set(d.eventsRemoved.map((e) => JSON.stringify([e.epoch, e.event]))).size).toBe(d.eventsRemoved.length);
+            for (const e of d.eventsAdded) expect(b.some((x) => x.epoch === e.epoch && x.event === e.event)).toBe(true);
+            for (const m of d.moved) {
+              const from = (m.kind === 'epoch' ? m.from : m.epoch) ?? '';
+              expect(inA(from, m.renamedFrom ?? m.event)).toBe(true);
+              expect(m.renamedFrom !== undefined).toBe(!inA(from, m.event));
+            }
+            checked++;
+          }
         }
-        checked++;
       }
     }
-    expect(checked).toBe(sides.length ** 2);
+    expect(checked).toBe(4 * sides.length ** 2);
   });
 
   test('the rule for next-door epochs', () => {
