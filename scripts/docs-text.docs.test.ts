@@ -173,6 +173,7 @@ test('0.6.2 docs text: cli.md', () => {
   expect(diff).toContain('`pushKind` (`gtag` or `object`)');
   expect(diff).toContain('`kind` stays the move type');
   expect(diff).toContain('`push kind changed: purchase (renamed from checkout_completed)`');
+  expect(diff).toContain('adds no `pathsAdded` or `pathsRemoved` entry for `event`');
   expect(diff).toContain('only when the epochs are neighbours');
 });
 
@@ -181,6 +182,7 @@ test('0.6.2 docs text: design.md, guides and records.ts', () => {
   expect(design).not.toContain('(0.6.0-rc.1) loads');
   expect(design).toContain('saved before 0.6.0-rc.2, loads and warns that pushes are not compared');
   expect(design).toContain('`moved` or `kindChanged` entry of a joined pair has `renamedFrom` too');
+  expect(design).toContain('adds no `pathsAdded` or `pathsRemoved` entry for `event`');
   expect(design).toContain('A send from `pagehide` or `visibilitychange` is answered in the page and never reaches the container');
   expect(design).toContain('tries every placement of up to 10 such hits');
   expect(design).toContain('reads `in the push`');
