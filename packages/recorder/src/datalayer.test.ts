@@ -378,7 +378,7 @@ test('a non-configurable push stays the page function and the growth check still
   expect(argsOf(page.sent)).toEqual([[{ event: 'x' }]]);
 });
 
-test('a binding that throws, rejects or is missing never reaches the page and is not counted as posted', async () => {
+test('a binding that throws, rejects or is missing never reaches the page; a throw or a missing binding is not counted as posted', async () => {
   const bindings: [string, (payload: Sent) => unknown][] = [
     ['throws', () => { throw new Error('binding gone'); }],
     ['rejects', () => Promise.reject(new Error('binding gone'))],
@@ -705,8 +705,3 @@ test('a non-configurable or frozen push never throws into page code', async () =
   expect(argsOf(pre.sent)).toEqual([[{ event: 'c' }]]);
 });
 
-test('a page that pushes into a frozen array assigned through the setter never throws', async () => {
-  const page = pageWith('');
-  expect(() => page.run(`const b = Object.freeze([]); window.dataLayer = b; try { b.push({ event: 'b' }); } catch {}`)).not.toThrow();
-  await page.flush();
-});

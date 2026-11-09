@@ -112,12 +112,15 @@ test('a baseline of build a and a run of build b exit 0 with push warnings, and 
   expect(text.stdout).toContain('dataLayer missing path ecommerce.value');
   expectNoLeaks(text.stdout, text.stderr);
 
-  const rc1 = { baselineSchemaVersion: 1, scenario: 'datalayer-build-a.yml', site: 'localhost', byPage: false, keys: [] };
+  const rc1Key = { key: { epoch: 'undecided', vendor: 'ga4', event: 'page_view' }, tuples: [{ consent: {}, ids: ['G-PWTEST0001'], count: 1 }] };
+  const rc1 = { baselineSchemaVersion: 1, scenario: 'datalayer-build-a.yml', site: 'localhost', byPage: false, keys: [rc1Key] };
   const rc1Path = join(outDir, 'datalayer-baseline-rc1.json');
   await writeFile(rc1Path, JSON.stringify(rc1));
   const old = await run('datalayer-build-b', ['--baseline', rc1Path]);
-  expect(old.code).toBe(0);
+  expect(old.code, old.stderr).toBe(1);
   const oldSummary = JSON.parse(old.stdout) as JsonSummary;
+  expect(old.stderr).not.toContain('not a valid baseline');
+  expect(oldSummary.baseline?.removed).toBe(1);
   expect(oldSummary.baseline?.warnings.some((w) => w.startsWith('dataLayer pushes not compared'))).toBe(true);
   expect(oldSummary.baseline?.warnings.some((w) => w.startsWith('dataLayer missing path'))).toBe(false);
 }, 240_000);
