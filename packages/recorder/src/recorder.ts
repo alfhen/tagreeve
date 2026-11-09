@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -218,7 +217,7 @@ export class Recorder {
   private readonly dataLayerReassigns: Array<{ n: number; t: number; doc: string }> = [];
   private readonly payloadCounts = new PayloadCounts();
   private untrappedLayerNames: string[] = [];
-  private readonly dataLayerNonce = randomUUID();
+  private untrappedDocuments = new Set<string>();
   private readonly eventFrames = new Map<string, FrameRef>();
   private readonly frameNumbers = new WeakMap<Frame, number>();
   private readonly frameNavigations = new WeakMap<Frame, number>();
@@ -355,8 +354,10 @@ export class Recorder {
     await context.exposeBinding(DATALAYER_BINDING, (source, payload: DataLayerPayload) => {
       const isMain = source.frame === source.page.mainFrame();
       if (typeof payload?.untrapped === 'string') {
-        // Only the init script knows the nonce; a message without it is page code.
-        if (isMain && payload.nonce === this.dataLayerNonce) {
+        // Only the first message of a main-frame document is the init script's; later ones are page code.
+        const doc = this.frameDocumentId(source.frame);
+        if (isMain && !this.untrappedDocuments.has(doc)) {
+          this.untrappedDocuments.add(doc);
           for (const name of parseUntrapped(payload.untrapped, hookedLayerNames(this.options.dataLayerNames))) if (!this.untrappedLayerNames.includes(name)) this.untrappedLayerNames.push(name);
         }
         return;
@@ -374,7 +375,7 @@ export class Recorder {
       this.dataLayerEvents.splice(at, 0, { ...event, stepId: this.currentStepId });
       if (!isMain) this.eventFrames.set(event.id, { id: this.frameDocumentId(source.frame), url: source.frame.url() });
     });
-    await context.addInitScript(dataLayerInitScript(this.options.dataLayerNames, this.dataLayerNonce));
+    await context.addInitScript(dataLayerInitScript(this.options.dataLayerNames));
     this.consent = await installConsent(context, this.options.autoconsent);
     await context.exposeBinding(TAG_REPORT_BINDING, (source, payload: unknown) => this.recordTagReport(source.frame, payload));
     if (this.options.networkMode !== 'live') {

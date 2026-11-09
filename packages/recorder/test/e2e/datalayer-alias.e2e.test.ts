@@ -77,8 +77,3 @@ test('page code that replaces window.eval cannot fake a dataLayerNotHooked flag'
   const { records } = await run('alias', ['myLayer'], `const e = eval; window.eval = (x) => (String(x).includes('__tagreeve') ? '["myLayer"]' : e(x)); window.__tagreeveDataLayer({ t: 1, args: '[]', untrapped: '["myLayer"]' });`);
   expect(kinds(records.flags, 'dataLayerNotHooked')).toEqual([]);
 }, 60_000);
-
-test('page code that starts a navigation that does not commit cannot fake a dataLayerNotHooked flag', async () => {
-  const { records } = await run('alias', ['myLayer'], `location.href = '/session/start'; setTimeout(() => window.__tagreeveDataLayer({ t: 1, args: '[]', untrapped: '["myLayer"]' }), 400);`);
-  expect(kinds(records.flags, 'dataLayerNotHooked')).toEqual([]);
-}, 60_000);

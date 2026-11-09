@@ -14,7 +14,6 @@ interface Sent {
   uid?: number;
   reassigned?: true;
   untrapped?: string;
-  nonce?: string;
 }
 
 function pageWith(setup: string, names: string[] = []): { sent: Sent[]; initial: Sent[]; run: (code: string) => unknown; flush: () => Promise<void> } {
@@ -436,19 +435,6 @@ test('the init script sends the untrapped list once, before any page script', ()
   page.run(`Array.prototype.slice = () => ['myLayer']; Array.prototype[Symbol.iterator] = function* () {}; JSON.stringify = () => '[]'; window.Set = null;`);
   expect(page.initial).toHaveLength(1);
   expect(untrappedOf(page)).toEqual(['status']);
-});
-
-test('the nonce is sent with the untrapped list and is in no function the page can reach', () => {
-  const page = pageWith('', ['myLayer']);
-  expect(page.initial[0]?.nonce).toBe('');
-  const nonce = 'n-0123456789';
-  const sent: Sent[] = [];
-  const sandbox: Record<string, unknown> = { performance: { timeOrigin: 1000, now: () => 5 }, Node: class {}, queueMicrotask, addEventListener: () => {}, [DATALAYER_BINDING]: (p: Sent) => { sent.push(p); return Promise.resolve(); } };
-  sandbox.window = sandbox;
-  runInNewContext(dataLayerInitScript([], nonce), sandbox);
-  expect(sent[0]?.nonce).toBe(nonce);
-  const reachable = [String(sandbox[DATALAYER_TALLY]), String(runInNewContext('window.dataLayer = []; window.dataLayer.push', sandbox))].join('');
-  expect(reachable).not.toContain(nonce);
 });
 
 test('a name the page defined as an accessor is untrapped and not replaced', () => {
