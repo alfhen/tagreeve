@@ -28,7 +28,7 @@ export function unsafeFileTargets(markdown: string): string[] {
     const text = snippet
       .replace(/\\\n/g, ' ')
       .replace(/(?<=[?&][\w-]+=)<[A-Za-z][A-Za-z ]*>(?=&|$)/g, ' ')
-      .replace(/\d*>&\s*(?:\d+|-)(?=[\s;|&)<>]|$)/g, ' ')
+      .replace(/\d*>&\s*(?:\d+|-)(?=[\s;|&)<>"'`]|$)/g, ' ')
       .replace(/(?<!<)<(?!<)\s*[^\s;|&)<>]+/g, ' ');
     for (const m of text.matchAll(/(?:^|[^<>])>[>|]?\s*([^\s;|&)<>]+)/g)) targets.push(m[1]!);
     for (const m of text.matchAll(/(?:^|[^<>])>&\s*([^\s;|&)<>]+)/g)) targets.push(m[1]!);
@@ -127,6 +127,8 @@ test.each([
   ['a quoted tilde tee target', '```bash\ntee "~/sgtm-config.txt"\n```', ['"~/sgtm-config.txt"']],
   ['a quoted relative target', '```bash\ncat > "out.txt"\n```', ['out.txt']],
   ['a redirect after 2>&1', '```bash\ncat 2>&1>out.txt\n```', ['out.txt']],
+  ['2>&1 before a closing double quote', '```bash\nsh -c "cat 2>&1"\n```', []],
+  ['2>&1 before a closing single quote', "```bash\nsh -c 'cat 2>&1'\n```", []],
   ['a safe target after 2>&1', '```bash\ncat 2>&1>~/a\n```', []],
   ['a redirect after =<name>', '```bash\necho a=<in>out.txt\n```', ['out.txt']],
   ['a spaced redirect after =<name>', '```bash\necho a=<in> out.txt\n```', ['out.txt']],
