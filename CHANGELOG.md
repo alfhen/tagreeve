@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.6.2
+
+Not released yet. The newest release is 0.6.1, below.
+
+<!-- U10 -->
+
+<!-- E10 -->
+
+<!-- V10 -->
+
+<!-- F10 -->
+
+<!-- D10 -->
+
+<!-- Z10 -->
+
+<!-- I10 -->
+
+<!-- K10 -->
+
+<!-- J10 -->
+
+<!-- G10 -->
+
+<!-- W10 -->
+
+<!-- T10 -->
+
+<!-- B10 -->
+
+<!-- C10 -->
+
+<!-- X08 -->
+
+<!-- R16 -->
+
 ## 0.6.1
 
 `npm i -g tagreeve` installs this release. 0.6.1 fixes three leaks and a set of smaller bugs found after 0.6.0. It has no new command and no new option. The record stays at schema version 5.
