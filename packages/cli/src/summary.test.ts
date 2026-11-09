@@ -1,4 +1,5 @@
 import type { DataLayerEvent, Hit, Result, RunRecords } from '@tagreeve/core';
+import type { PushShape } from '@tagreeve/expect';
 import { buildUnloadGapFlags } from '@tagreeve/recorder';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -6,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { newId } from '@tagreeve/core';
-import { applyBaseline, buildSummary, redactFlagDetail, countHits, exitCodeFor, formatDuration, formatSummary, type Summary } from './summary.ts';
+import { applyBaseline, buildSummary, dataLayerLabelRank, redactFlagDetail, countHits, exitCodeFor, formatDuration, formatSummary, type Summary } from './summary.ts';
 import { main } from './main.ts';
 import { runCommand } from './run.ts';
 import { readVersion } from './version.ts';
@@ -633,6 +634,16 @@ test('the dataLayer line lists page events before consent, gtag and gtm labels',
   ];
   const records = { run: { id: 'run_1' }, hits: [], consentEpochs: [], flags: [], steps: [], dataLayerEvents } as unknown as RunRecords;
   expect(formatSummary(buildSummary(records, [result(true)], 'p'))).toContain('dataLayer: 4 pushes, 4 events (purchase, consent default, gtag config, …); shapes in --json');
+});
+
+test('dataLayerLabelRank ranks a command label only for a gtag push', () => {
+  const shape = (event: string, kind: PushShape['kind']): PushShape => ({ event, kind, frame: 'main', count: 1, paths: [], ids: [] });
+  expect(dataLayerLabelRank(shape('consent update', 'gtag'))).toBe(1);
+  expect(dataLayerLabelRank(shape('gtag config', 'gtag'))).toBe(2);
+  expect(dataLayerLabelRank(shape('consent x', 'object'))).toBe(0);
+  expect(dataLayerLabelRank(shape('gtag config', 'object'))).toBe(0);
+  expect(dataLayerLabelRank(shape('purchase', 'gtag'))).toBe(0);
+  expect(dataLayerLabelRank(shape('gtm.js', 'object'))).toBe(3);
 });
 
 test('possibleRealDataPush flags collapse into one counted line', () => {

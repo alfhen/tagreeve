@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
 import { readRun, type RunRecords } from '@tagreeve/core';
-import { diffPushes, diffShapes, hitShape, kindChangeWarning, kindsMerged, pushGroups, type DiffKey, type PushGroup, type ShapeDiff, type ShapeKey, type ShapeMove } from '@tagreeve/expect';
+import { diffPushes, diffShapes, hitShape, kindChangeWarning, kindsMerged, PUSH_FRAME_KINDS, pushGroups, type DiffKey, type PushGroup, type ShapeDiff, type ShapeKey, type ShapeMove } from '@tagreeve/expect';
 import { PUBLISHED_VARIANT, type BaselineArgs } from './args.ts';
 import { describePushDiff } from './diff.ts';
 import { DEFAULT_BASELINES } from './defaults.ts';
@@ -68,8 +68,6 @@ function validKey(k: unknown): k is ShapeKey {
   );
 }
 
-const FRAME_KINDS = new Set(['main', 'embedded', 'unknown']);
-
 function validPushGroup(g: unknown): g is PushGroup {
   return (
     isRecord(g) &&
@@ -77,7 +75,7 @@ function validPushGroup(g: unknown): g is PushGroup {
     typeof g.event === 'string' &&
     (g.kind === undefined || g.kind === 'gtag' || g.kind === 'object') &&
     typeof g.frame === 'string' &&
-    FRAME_KINDS.has(g.frame) &&
+    (PUSH_FRAME_KINDS as readonly string[]).includes(g.frame) &&
     Array.isArray(g.paths) &&
     g.paths.every((p) => isRecord(p) && typeof p.path === 'string' && isStringArray(p.types))
   );
