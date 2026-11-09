@@ -46,6 +46,7 @@ Issues still open that you can meet:
 - Sends from `pagehide` or `visibilitychange` are answered in the page, also to your `serverHosts`, so the container never gets them.
 - The Meta Conversions API, Pinterest and Criteo template tags are not yet proven to reach the recording proxy.
 - The `payment` step is not confirmed on a real Shopify checkout. The test-mode marker on the page, the expiry format and the card frame paths are inferred. If one does not match, the step fails closed and the error names the frame path and the inputs' attributes. It checks the card host before each short fill try, which narrows the window in which typing could go to another host but cannot close it.
+- The Shopify platform-host list holds only hosts that a Shopify docs page names. Other Shopify hosts stay `unknownDestination`.
 - Playwright's request interception sometimes misses a redirect hop. The `possibleRedirectHop` flag marks a likely miss in `stub` and `server` mode. `live` mode has no such flag.
 - With `--net-log`, requests seen only in the net log are labelled by timing, and an early `srcdoc` iframe request can still read `unload`.
 - `--viewport` takes `<W>x<H>` only. A `mobile` preset is not built.
