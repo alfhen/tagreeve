@@ -340,6 +340,14 @@ function typesId(n: PushNode): string {
   return JSON.stringify([...n.types].sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)));
 }
 
+/** The object form holds the event name under `event`; the gtag form holds it in its arguments, so the path is no content difference in a kind-changed pair. A gtag body that has its own `event` key keeps the path on both sides. */
+function withoutEventName(n: PushNode, other: PushNode): PushNode {
+  if (n.kind !== 'object' || !n.types.has('event') || other.types.has('event')) return n;
+  const types = new Map(n.types);
+  types.delete('event');
+  return { ...n, types };
+}
+
 /** Compares push shapes. Nothing here is drift: the caller reports the changes as warnings. */
 export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOptions = {}): PushDiff {
   const result: PushDiff = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], typeChanges: [], moved: [], kindChanged: [], changed: false };
@@ -376,7 +384,7 @@ export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOpti
     gone.splice(gone.indexOf(g), 1);
     fresh.splice(fresh.indexOf(f), 1);
     result.kindChanged.push({ epoch: g.epoch, event: g.event, frame: g.frame, from: g.kind!, to: f.kind!, ...(g.renamedFrom === undefined ? {} : { renamedFrom: g.renamedFrom }) });
-    compare(g, f);
+    compare(withoutEventName(g, f), withoutEventName(f, g));
   }
 
   const taken = new Set<PushNode>();

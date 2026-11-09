@@ -1,10 +1,10 @@
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { DiffResult } from '@tagreeve/expect';
+import { diffPushes, type DiffResult, type PushGroup } from '@tagreeve/expect';
 import { describe, expect, test } from 'vitest';
 import { parseCli, UsageError } from './args.ts';
-import { flagChangeLabel, formatDiff } from './diff.ts';
+import { describePushDiff, flagChangeLabel, formatDiff } from './diff.ts';
 import { main } from './main.ts';
 
 const empty: DiffResult = { warnings: [], added: [], removed: [], changed: [], countMismatches: [], flags: [] };
@@ -178,6 +178,15 @@ describe('dataLayer lines', () => {
         '',
       ].join('\n'),
     );
+  });
+
+  test('a kind change of one event prints no path lines', () => {
+    const group = (kind: 'object' | 'gtag', paths: string[]): PushGroup => ({ epoch: 'undecided', event: 'x', kind, frame: 'main', paths: paths.map((path) => ({ path, types: ['number'] })) });
+    const a = [group('object', ['event', 'a'])];
+    expect(a[0]!.paths.map((p) => p.path)).toContain('event');
+    const d = diffPushes(a, [group('gtag', ['a'])]);
+    expect(d.kindChanged).toHaveLength(1);
+    expect(describePushDiff(d)).toEqual([]);
   });
 
   test('a pair the table joined reads renamed from in a path line', () => {
