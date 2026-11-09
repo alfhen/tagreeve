@@ -10,7 +10,8 @@ Not released yet. The newest release is 0.6.0, below.
 
 - `consentModeSetup` names a hit with no tag ID by its vendor, lists letter sets with an `l` first and counts the tag IDs it leaves out. A page parameter can no longer set the Google Ads conversion ID.
 
-<!-- B09 -->
+- A baseline whose `dataLayer` push groups are partly kinded is refused as an invalid `dataLayer` section (#1374). The warning for a baseline with no `dataLayer` section says `saved before 0.6.0-rc.2`.
+- `tagreeve init` exits 2 with `tagreeve/config.yml is not a file` when a folder is at that path, instead of skipping it (#1329).
 
 <!-- U09 -->
 
