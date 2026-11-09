@@ -31,8 +31,6 @@ Not released yet. The newest release is 0.6.1, below.
 
 - Site: the agent callout on a guide follows the first paragraph (#750). The finished demo hit list scrolls and keeps every hit (#837). The run panel shows its Result line (#838). The commands panel keeps its indent when copied and does not split `--site` (#835). The docs theme fade covers the header and the sidebar (#857). The demo reply check allows only the numbers a reply can state (#759). Internal: #760, #729, #866.
 
-<!-- W10 -->
-
 <!-- T10 -->
 
 <!-- B10 -->

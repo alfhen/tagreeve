@@ -261,7 +261,7 @@ export default function AgentDemo({ storyHost, userPrompt, scenarios }: Props) {
               <span>Hits will land here as the visitor browses.</span>
             </div>
           )}
-          <div class="ad-hit-list" tabIndex={0} role="region" aria-label="Captured hits" data-demo="hit-list">
+          <div class="ad-hit-list" tabIndex={f.hits.length ? 0 : -1} role="region" aria-label="Captured hits" data-demo="hit-list">
             {f.hits.map((h) => (
               <div key={h.id} class="ad-hit" data-demo="hit" data-fail={h.fail || undefined}>
                 <span style={{ color: 'var(--muted)' }}>{(h.at / 1000).toFixed(1)}s</span>

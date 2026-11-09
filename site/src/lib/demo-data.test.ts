@@ -5,7 +5,7 @@ import { describe, expect, test } from 'vitest';
 import { createIdentity, hashEmail, hashPhone, readRun, type TagreeveRecord } from '../../../packages/core/src/index.ts';
 import { demoDir, demoLeaks, demoScenarios, demoSeeds, rewriteHosts, scrubRecords } from '../../../scripts/record-site-demo.ts';
 import { PRESS_MS } from '../components/demo/timeline.ts';
-import { ANSWER_AT, checkReply, demoHits, failedResults, HIT_WINDOW, loadDemo, parseReply, recordedExitCode } from './demo-data.ts';
+import { ANSWER_AT, checkReply, demoHits, failedResults, HIT_WINDOW, loadDemo, parseReply, recordNumbers, recordedExitCode } from './demo-data.ts';
 
 const dir = fileURLToPath(new URL('../../demo/', import.meta.url));
 const records = (s: string) => readRun(join(dir, `${s}.jsonl`));
@@ -96,6 +96,17 @@ describe('checkReply', () => {
     expect(text).toContain('(2 hits)');
     expect(() => parseAndCheck(text, reject)).not.toThrow();
     expect(() => parseAndCheck(text.replace('(2 hits)', '(6 hits)'), reject)).toThrow(/number 6 /);
+  });
+
+  test.each([
+    { key: 'reject', exitCode: 1, allowed: ['1', '2'], refused: ['16', '8', '7'] },
+    { key: 'undecided', exitCode: 0, allowed: ['0', '1', '5'], refused: ['14', '8', '6', '2'] },
+    { key: 'accept', exitCode: 0, allowed: ['0', '1', '2'], refused: ['26', '8', '17'] },
+  ])('the numbers a reply may state for $key are exactly the exit code, the failed-rule count and failed-rule counts', async ({ key, exitCode, allowed, refused }) => {
+    const run = await records(key);
+    expect(recordNumbers(run, exitCode)).toEqual(new Set(allowed));
+    for (const n of allowed) expect(() => checkReply(`${n} hits.`, run, exitCode, key)).not.toThrow();
+    for (const n of refused) expect(() => checkReply(`${n} hits.`, run, exitCode, key), n).toThrow(new RegExp(`number ${n} `));
   });
 
   test('accepts the IDs and numbers of the record, list markers and words with digits', async () => {

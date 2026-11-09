@@ -156,7 +156,10 @@ test('at 1440 px the sidebar starts under the logo and the article 56 px past th
 test('on each guide the agent callout comes after the first paragraph and before the first heading', async () => {
   const context = await newDocsContext(browser!);
   const page = await context.newPage();
-  for (const path of guides) {
+  const config = readFileSync(join(root, 'site/astro.config.mjs'), 'utf8');
+  const everyGuide = [...config.matchAll(/link: '(\/docs\/guide\/[^']+)'/g)].map((m) => m[1]!);
+  expect(everyGuide.length).toBeGreaterThanOrEqual(6);
+  for (const path of everyGuide) {
     await page.goto(`${docsUrl}${path}`);
     const order = await page.evaluate(() => {
       const children = [...document.querySelector('.sl-markdown-content')!.children];

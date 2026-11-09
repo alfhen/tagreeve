@@ -108,6 +108,9 @@ test('the agent demo island gets only the story host, the prompt and the scenari
   const props = await page.locator('astro-island[component-url*="AgentDemo"]').getAttribute('props');
   expect(props).not.toBeNull();
   expect(Object.keys(JSON.parse(props!) as object).sort()).toEqual(['scenarios', 'storyHost', 'userPrompt']);
-  for (const output of ['Manifest: ', 'Diff ', '"expectation"']) expect(props, output).not.toContain(output);
+  for (const [panel, output] of [['suite', 'Manifest: '], ['diff', 'Diff '], ['json', '"expectation"']] as const) {
+    expect(await page.locator(`[data-command-panel="${panel}"]`).textContent(), output).toContain(output);
+    expect(props, output).not.toContain(output);
+  }
   await context.close();
 });
