@@ -339,6 +339,12 @@ describe('duplicate frames and inputs', () => {
     expect(error?.message).toBe('card field number could not be filled: the card frame is gone or not served from the card host');
   });
 
+  test('another accepted card document is filled', async () => {
+    const { error, log } = await play({ frameUrl: 'http://127.0.0.1:4000/card-frame-extra-input' });
+    expect(error).toBeUndefined();
+    expect(fills(log)).toHaveLength(3);
+  });
+
   test('a frame that moves to another accepted document during the input read gives the gone-frame reason', async () => {
     const { error } = await play({
       counts: [2],
@@ -659,6 +665,13 @@ describe('the awaits before the fill end by the deadline and its grace', () => {
     expect(error?.message).toBe(message);
     expect(Date.now() - started).toBeLessThan(LIMIT);
     expect(log.filter((l) => l.startsWith('fill') || l === 'hold')).toEqual([]);
+  });
+
+  test('a hung evaluateHandle after slow frame lookups still ends by the step deadline and its grace', async () => {
+    const started = Date.now();
+    const { error } = await play({ timeout: 1000, contentFrameDelay: 300, hangEvaluateHandle: true });
+    expect(error?.message).toBe('test mode could not be checked: the card frame could not be read');
+    expect(Date.now() - started).toBeLessThan(1000 + 500 + 400);
   });
 
   test('a hung evaluateHandle does not matter when the provider is declared', async () => {

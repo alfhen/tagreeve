@@ -258,11 +258,25 @@ describe('readBlockingControls on a small DOM', () => {
 describe('blockingControls with a form that is gone', () => {
   const rows = [{ kind: 'text', name: 'City', reason: 'invalid' }];
 
-  test('retries with no form when the evaluate with the form throws', async () => {
-    const evaluate = vi.fn((_fn: unknown, arg: { form: unknown }) => (arg.form ? Promise.reject(new Error('handle from another context')) : Promise.resolve(rows)));
-    expect(await blockingControls({ pages: () => [{ evaluate }] } as never, { fake: 'form' } as never)).toEqual(['text "City" (invalid)']);
-    expect(evaluate).toHaveBeenCalledTimes(2);
-    expect(evaluate).toHaveBeenLastCalledWith(expect.any(Function), { max: 10, form: null });
+  const formWith = (connected: boolean | Error) => ({ evaluate: () => (connected instanceof Error ? Promise.reject(connected) : Promise.resolve(connected)) }) as never;
+
+  test('lists every control when the form is not connected', async () => {
+    const evaluate = vi.fn(() => Promise.resolve(rows));
+    expect(await blockingControls({ pages: () => [{ evaluate }] } as never, formWith(false))).toEqual(['text "City" (invalid)']);
+    expect(evaluate).toHaveBeenCalledWith(expect.any(Function), { max: 10, form: null });
+  });
+
+  test('lists every control when the page of the form has gone', async () => {
+    const evaluate = vi.fn(() => Promise.resolve(rows));
+    await blockingControls({ pages: () => [{ evaluate }] } as never, formWith(new Error('Target closed')));
+    expect(evaluate).toHaveBeenCalledWith(expect.any(Function), { max: 10, form: null });
+  });
+
+  test('with a live form, a page that throws is skipped and not listed in full', async () => {
+    const mine = vi.fn(() => Promise.resolve(rows));
+    const other = vi.fn((_fn: unknown, arg: { form: unknown }) => (arg.form ? Promise.reject(new Error('handle from another page')) : Promise.resolve([{ kind: 'text', name: 'otherpage', reason: 'invalid' }])));
+    expect(await blockingControls({ pages: () => [{ evaluate: other }, { evaluate: mine }] } as never, formWith(true))).toEqual(['text "City" (invalid)']);
+    expect(other).toHaveBeenCalledTimes(1);
   });
 
   test('does not retry when there was no form', async () => {
@@ -310,7 +324,7 @@ describe('blockingControls', () => {
 
   test('passes the clicked form to the page, and none by default', async () => {
     const evaluate = vi.fn(() => Promise.resolve([]));
-    const form = { fake: 'form' } as never;
+    const form = { fake: 'form', evaluate: () => Promise.resolve(true) } as never;
     await blockingControls({ pages: () => [{ evaluate }] } as never, form);
     expect(evaluate).toHaveBeenLastCalledWith(expect.any(Function), { max: 10, form });
     await blockingControls({ pages: () => [{ evaluate }] } as never);

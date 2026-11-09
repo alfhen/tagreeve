@@ -400,7 +400,7 @@ describe('select and locator steps on a fake page', () => {
             return {
               evaluateHandle: (fn: (el: unknown) => unknown) => {
                 const result = fn({ closest: (selector: string) => (selectors.push(selector), click.inside) });
-                return Promise.resolve({ asElement: () => result, dispose: () => Promise.resolve(), form: result });
+                return Promise.resolve({ asElement: () => result, dispose: () => Promise.resolve(), evaluate: () => Promise.resolve(true), form: result });
               },
               click: () => Promise.resolve(),
             };

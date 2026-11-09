@@ -149,7 +149,7 @@ async function cardFrameServed(page: Page, field: CardField, cardHost: string, d
  * The marker must sit inside the nearest element that holds every card frame, so merchant copy elsewhere on the page cannot pass.
  * The container starts at the first frame's parent: a frame's own document is not page text.
  */
-async function markerInCardContainer(frames: ElementHandle[], marker: string, timeout: number): Promise<boolean> {
+async function markerInCardContainer(frames: ElementHandle[], marker: string, deadline: number): Promise<boolean> {
   try {
     const container = await withinDeadline(
       frames[0]!.evaluateHandle((first, all) => {
@@ -157,11 +157,11 @@ async function markerInCardContainer(frames: ElementHandle[], marker: string, ti
         while (node && !all.every((f) => node!.contains(f))) node = node.parentElement;
         return node;
       }, frames),
-      Date.now() + timeout,
+      deadline,
     );
     const element = container.asElement();
     if (!element) return false;
-    await element.waitForSelector(marker, { state: 'visible', timeout });
+    await element.waitForSelector(marker, { state: 'visible', timeout: Math.max(1, deadline + DEADLINE_GRACE_MS - Date.now()) });
     return true;
   } catch (error) {
     if (error instanceof Unresponsive) throw error;
@@ -213,7 +213,7 @@ export async function runPayment(
     found.push(result);
   }
   if (!declared) {
-    const marked = await markerInCardContainer(found.map((f) => f.element), runtime.marker, wait).catch((error: unknown) => {
+    const marked = await markerInCardContainer(found.map((f) => f.element), runtime.marker, deadline).catch((error: unknown) => {
       throw error instanceof Unresponsive ? new Error(`test mode could not be checked: ${UNREADABLE_FRAME}`) : error;
     });
     if (!marked) throw new Error('test mode not detected');

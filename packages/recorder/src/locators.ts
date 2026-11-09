@@ -184,11 +184,12 @@ function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
 /** Controls on the top-level document of each open page that block a form from submitting: kind, name and reason. With `form`, only the controls of that form. Never a value, a placeholder or an error text, and never a frame. */
 export async function blockingControls(context: BrowserContext, form: JSHandle<HTMLFormElement> | null = null): Promise<string[]> {
   const listed: string[] = [];
+  // Decided once for every page: a form that is gone falls back to every control, a live form never leaks the controls of another page.
+  const live = form ? await withDeadline(form.evaluate((f) => f.isConnected), DIAGNOSTIC_DEADLINE_MS).catch(() => false) : false;
+  const scope = live ? form : null;
   for (const page of context.pages()) {
     try {
-      const read = (scope: JSHandle<HTMLFormElement> | null) => withDeadline(page.evaluate(readBlockingControls, { max: MAX_LISTED, form: scope }), DIAGNOSTIC_DEADLINE_MS);
-      // A form handle from a page that has gone throws here. The list then holds every control, as it does with no clicked form.
-      const controls = await read(form).catch((error: unknown) => (form && !(error instanceof DiagnosticTimeout) ? read(null) : Promise.reject(error)));
+      const controls = await withDeadline(page.evaluate(readBlockingControls, { max: MAX_LISTED, form: scope }), DIAGNOSTIC_DEADLINE_MS);
       for (const c of controls) {
         if (!BLOCK_REASONS.includes(c.reason)) continue;
         const kind = KINDS.includes(c.kind) ? c.kind : 'control';
