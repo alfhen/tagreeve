@@ -4,6 +4,7 @@ import {
   hashEmail,
   hashPhone,
   isLibraryLoadPath,
+  readings,
   scan,
   sha256,
   newId,
@@ -869,13 +870,14 @@ function joinLabels(labels: Set<string>): string {
 const PLAIN_ADDRESS_PARAMS = new Set(['user_data.city', 'user_data.postal_code', 'user_data.country']);
 // Only these vendors document plain city, postal code and country. The Conversions API requires them hashed.
 const PLAIN_ADDRESS_VENDORS = new Set(['sgtm']);
+export const HASH_REQUIRED_VENDORS: ReadonlySet<string> = new Set(['meta-capi']);
 const DIGEST_SHAPE = /^(?:[0-9a-f]{64}|[A-Za-z0-9+/_-]{43}=?)$/i;
 
 function allForms(h: HashForms): string[] {
   return [h.hex, h.base64, h.base64url];
 }
 
-type HashVerdict = 'plain' | 'match' | 'unhashed' | 'wrong';
+type HashVerdict = 'plain' | 'plainRequired' | 'match' | 'unhashed' | 'wrong';
 
 /** The field a param belongs to. The Conversions API indexes further values (`user_data.city.1`); every check uses the base. */
 function identityParamName(vendor: string, name: string): string {
@@ -907,7 +909,7 @@ function hashJudge(identity: Identity): (vendor: string, name: string, value: st
     if (known.has(value)) return 'match';
     const typed = value.trim().toLowerCase();
     if (plain.has(typed) || accepted.some((v) => v.trim().toLowerCase() === typed)) return 'unhashed';
-    return PLAIN_ADDRESS_PARAMS.has(name) && vendor === 'meta-capi' && !DIGEST_SHAPE.test(value) ? 'plain' : 'wrong';
+    return PLAIN_ADDRESS_PARAMS.has(name) && HASH_REQUIRED_VENDORS.has(vendor) && !DIGEST_SHAPE.test(value) ? 'plainRequired' : 'wrong';
   };
 }
 
@@ -937,12 +939,12 @@ function checkHashes(hits: Hit[], ctx: Context): { pass: boolean; evidence: stri
   const withHash: string[] = [];
   const wrong: string[] = [];
   const unhashed: string[] = [];
-  const plainCapi: string[] = [];
+  const plainRequired: string[] = [];
   const wrongFields = new Set<string>();
   const wrongParams = new Set<string>();
   const matchedFields = new Set<string>();
   const unhashedFields = new Set<string>();
-  const plainCapiFields = new Set<string>();
+  const plainRequiredFields = new Set<string>();
   const plainAddressFields = new Set<string>();
   const uncheckedFields = new Set<string>();
   for (const hit of hits) {
@@ -958,10 +960,12 @@ function checkHashes(hits: Hit[], ctx: Context): { pass: boolean; evidence: stri
       if (!verdict) continue;
       const label = fieldLabel(identityParamName(hit.vendor, name));
       if (verdict === 'plain') {
-        if (hit.vendor === 'meta-capi') {
-          plainCapiFields.add(label);
-          plainHit = true;
-        } else plainAddressFields.add(label);
+        plainAddressFields.add(label);
+        continue;
+      }
+      if (verdict === 'plainRequired') {
+        plainRequiredFields.add(label);
+        plainHit = true;
         continue;
       }
       seen = true;
@@ -981,7 +985,7 @@ function checkHashes(hits: Hit[], ctx: Context): { pass: boolean; evidence: stri
     if (seen) withHash.push(hit.id);
     if (bad) wrong.push(hit.id);
     if (raw) unhashed.push(hit.id);
-    if (plainHit) plainCapi.push(hit.id);
+    if (plainHit) plainRequired.push(hit.id);
   }
   const several = hits.length > 1;
   const they = several ? 'they' : 'it';
@@ -997,12 +1001,12 @@ function checkHashes(hits: Hit[], ctx: Context): { pass: boolean; evidence: stri
       (matching.size ? ` Matching: ${joinLabels(matching)}.` : '');
     return { pass: false, evidence: wrong, headline: UNMATCHED_HEADLINE, message };
   }
-  if (plainCapi.length) {
+  if (plainRequired.length) {
     return {
       pass: false,
-      evidence: plainCapi,
+      evidence: plainRequired,
       headline: UNMATCHED_HEADLINE,
-      message: `${they} carried a plain ${joinLabels(plainCapiFields)}, not a hash${of(plainCapi.length)}. The Conversions API takes these hashed.`,
+      message: `${they} carried a plain ${joinLabels(plainRequiredFields)}, not a hash${of(plainRequired.length)}. This vendor takes these hashed.`,
     };
   }
   if (!withHash.length && uncheckedFields.size) {
@@ -1519,73 +1523,76 @@ function bodyTexts(headers: Record<string, string>, body: string): ScanText[] {
   return isBinaryText(body) ? [] : [{ text: body, where: 'the body' }, ...leafTexts(body)];
 }
 
+const JSON_ESCAPES: Record<string, string> = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', '"': '"', '\\': '\\', '/': '/' };
+
+function jsonUnescaped(text: string): string {
+  return text.replace(/\\(?:u([0-9a-f]{4})|(.))/gi, (m, hex?: string, ch?: string) => (hex ? String.fromCharCode(parseInt(hex, 16)) : (JSON_ESCAPES[ch!] ?? m)));
+}
+
+function percentLayers(text: string): string[] {
+  const layers = [text];
+  for (let i = 0; i < 4; i++) {
+    const next = text.replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
+      try {
+        return decodeURIComponent(run);
+      } catch {
+        return run;
+      }
+    });
+    if (next === text) break;
+    layers.push((text = next));
+  }
+  return layers;
+}
+
 // The base reads raw characters and a leaf decoded ones, so a JSON escape or a joined name shifts a value's edge. Such a twin is
 // merged into the field's finding, never dropped, so nothing a whole-body scan finds is lost. Only a reading from the body itself
-// merges. A shorter value that only ever appears inside a longer one in the raw body is merged into it, even when the two are
-// different values. A different value in the URL, or a longer value elsewhere, keeps its own finding.
-function isEdgeShift(a: string, b: string, bodies: string[]): boolean {
+// merges. A different value in the URL, or a longer value elsewhere, keeps its own finding.
+// Rule: the short value merges when some text form (the body, its percent layers, their JSON-unescaped forms) holds the long value,
+// every text form that holds the long value has the short value only inside it, and no base64-decoded reading holds the short
+// value outside the long one. A text form without the long value says nothing. At least one text form must hold the long value
+// (sawLong); a long value that only a base64-decoded reading holds is not an edge-shifted twin.
+interface BodyForms {
+  textForms: Set<string>;
+  decoded: string[];
+}
+
+function bodyForms(raw: string): BodyForms {
+  const stripped = raw.replace(/\[\]|%5B%5D/gi, '');
+  const textForms = new Set(percentLayers(stripped).flatMap((layer) => [layer, jsonUnescaped(layer)]));
+  const decoded = [...textForms].flatMap((form) => readings(form)).filter((form) => !textForms.has(form));
+  return { textForms, decoded };
+}
+
+function isEdgeShift(a: string, b: string, bodies: readonly BodyForms[]): boolean {
   const [short, long] = a.length <= b.length ? [a, b] : [b, a];
   if (!long.includes(short)) return false;
   let sawLong = false;
-  const ok = bodies.every((raw) =>
-    readingForms(raw.replace(/\[\]|%5B%5D/gi, '')).every((text) => {
-      if (!text.includes(long)) return true;
-      sawLong = true;
+  const ok = bodies.every(({ textForms, decoded }) => {
+    return [...textForms, ...decoded].every((text) => {
+      if (text.includes(long)) {
+        if (textForms.has(text)) sawLong = true;
+      } else if (textForms.has(text)) return true;
       const covered: [number, number][] = [];
       for (let i = text.indexOf(long); i >= 0; i = text.indexOf(long, i + 1)) covered.push([i, i + long.length]);
       for (let i = text.indexOf(short); i >= 0; i = text.indexOf(short, i + 1)) {
         if (!covered.some(([from, to]) => i >= from && i + short.length <= to)) return false;
       }
       return true;
-    }),
-  );
+    });
+  });
   return ok && sawLong;
-}
-
-const JSON_ESCAPES: Record<string, string> = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', '"': '"', '\\': '\\', '/': '/' };
-
-function percentDecoded(text: string): string {
-  return text.replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
-    try {
-      return decodeURIComponent(run);
-    } catch {
-      return run;
-    }
-  });
-}
-
-function base64InPlace(text: string): string {
-  return text.replace(/[A-Za-z0-9+/_-]{12,}={0,2}/g, (token) => {
-    const decoded = Buffer.from(token, 'base64').toString('utf8');
-    return decoded.includes('\uFFFD') ? token : decoded;
-  });
-}
-
-// A form that does not hold the long value says nothing about the shift. The forms scan() reads: percent-decoded until
-// nothing changes, JSON-unescaped, and base64 tokens decoded in place, so two values in one body share one form.
-function readingForms(text: string): string[] {
-  const forms = new Set([text]);
-  let layer = text;
-  for (let i = 0; i < 4; i++) {
-    const next = percentDecoded(layer);
-    if (next === layer) break;
-    forms.add((layer = next));
-  }
-  for (const form of [...forms]) {
-    forms.add(form.replace(/\\(?:u([0-9a-f]{4})|(.))/gi, (m, hex?: string, ch?: string) => (hex ? String.fromCharCode(parseInt(hex, 16)) : (JSON_ESCAPES[ch!] ?? m))));
-  }
-  for (const form of [...forms]) forms.add(base64InPlace(form));
-  return [...forms];
 }
 
 function mergeEdgeReadings(found: Map<string, { kind: string; where: Map<string, number> }>, bodies: string[]): void {
   const best = (f: { where: Map<string, number> }) => Math.min(...f.where.values());
   const valueOf = (key: string, kind: string) => key.slice(kind.length + 1);
   const fields = [...found].filter(([, f]) => best(f) < 2);
+  let forms: BodyForms[] | undefined;
   for (const [key, f] of [...found]) {
     if (best(f) < 2 || [...f.where.keys()].some((w) => w !== 'the body')) continue;
     const value = valueOf(key, f.kind);
-    const twin = fields.find(([k, other]) => other.kind === f.kind && isEdgeShift(valueOf(k, other.kind), value, bodies));
+    const twin = fields.find(([k, other]) => other.kind === f.kind && isEdgeShift(valueOf(k, other.kind), value, (forms ??= bodies.map(bodyForms))));
     if (!twin) continue;
     for (const [w, tier] of f.where) twin[1].where.set(w, Math.min(tier, twin[1].where.get(w) ?? tier));
     found.delete(key);

@@ -8,6 +8,7 @@ import {
   hashPhone,
   normalizeEmail,
   normalizePhone,
+  readings,
   scan,
   sha256,
 } from './identity.ts';
@@ -669,5 +670,28 @@ describe('base64 decode threshold', () => {
 
   it('ignores junk in the first and last four characters', () => {
     expect(found(`\u0001\u0001\u0001\u0001${inner('')}\u0001\u0001\u0001\u0001`)).toBe(true);
+  });
+});
+
+describe('readings', () => {
+  const email = 'ann@shop.example';
+  const edged = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(` ${email} `)]).toString('base64');
+
+  it('starts with the text and adds each percent-decoded layer', () => {
+    expect(readings('a%2540b')).toEqual(['a%2540b', 'a%40b', 'a@b']);
+  });
+
+  it.each([
+    ['a plain base64 token', b64(`xx ${email} xx`)],
+    ['a binary-edged token', edged],
+    ['a glued token', `_${b64(`xx ${email} xx`)}`],
+  ])('has the text of %s', (_n, token) => {
+    expect(readings(`t=${token}`).some((r) => r.includes(email))).toBe(true);
+    expect(scan(`t=${token}`, id).map((m) => m.value)).toContain(email);
+  });
+
+  it('adds nothing for a token that does not decode', () => {
+    const token = 'Z'.repeat(20);
+    expect(readings(`t=${token}`)).toEqual([`t=${token}`]);
   });
 });

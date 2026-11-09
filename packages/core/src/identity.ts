@@ -352,6 +352,11 @@ function* variants(text: string, depth = 0, seen = new Set<string>()): Generator
   for (const decoded of base64Decodes(text)) yield* variants(decoded, depth + 1, seen);
 }
 
+/** The forms of a text that `scan()` reads: the text, its percent-decoded layers and its base64 decodes, with glued edges. */
+export function readings(text: string): string[] {
+  return [...variants(text)];
+}
+
 /** Hex, base64 and base64url forms of the SHA-256 of a value, trimmed and lower case, with and without punctuation. */
 export function fieldHashes(...values: string[]): Set<string> {
   const hashes = new Set<string>();

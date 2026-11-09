@@ -12,7 +12,7 @@ import {
 } from '@tagreeve/core';
 import { expect, test } from 'vitest';
 import { decodeRequest } from '@tagreeve/decoders';
-import { effectiveConsentAt, epochForHit, evaluate, placeHitsInEpochs, type EvalEpoch } from './evaluate.ts';
+import { HASH_REQUIRED_VENDORS, effectiveConsentAt, epochForHit, evaluate, placeHitsInEpochs, type EvalEpoch } from './evaluate.ts';
 import { parseScenario } from './scenario.ts';
 import { README_SCENARIO } from './readme-scenario.ts';
 
@@ -270,6 +270,24 @@ test('from: judges an unlinked server hit as cannot evaluate', () => {
   const unlinked = rule(q, [step, server()]);
   expect(unlinked).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked' });
   expect(unlinked.message).toContain('Cannot evaluate');
+});
+
+test('a vendor added to the required-hash set fails a plain address field with no other change', () => {
+  const city = hit({ vendor: 'ga4', params: { 'user_data.city': 'nowhere', 'user_data.email_address': hashEmail(identity.email).hex } });
+  const ev = () =>
+    evaluate([city.hit, city.req], parseScenario('start: /\nexpect:\n  must:\n    - { vendor: ga4, identity.hashesMatch: true }'), { identity })[0]!;
+  const before = ev();
+  expect(before.message).not.toContain('plain city, not a hash');
+  const vendors = HASH_REQUIRED_VENDORS as Set<string>;
+  vendors.add('ga4');
+  try {
+    const after = ev();
+    expect(after.pass).toBe(false);
+    expect(after.message).toContain('a plain city, not a hash');
+    expect(after.message).not.toContain('Conversions API');
+  } finally {
+    vendors.delete('ga4');
+  }
 });
 
 test('identity.hashesMatch', () => {
