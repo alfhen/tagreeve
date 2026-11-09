@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -143,4 +143,22 @@ test('a folder at tagreeve/config.yml exits 2, says it is not a file and creates
   expect(err).toBe('tagreeve/config.yml is not a file\n');
   expect(JSON.parse(out)).toEqual({ items: [] });
   expect(await listing()).toEqual(before);
+});
+
+test.each([
+  ['tagreeve/config.yml', 'tagreeve/config.yml is not a file\n'],
+  ['tagreeve/baselines', 'tagreeve/baselines is not a folder\n'],
+  ['tagreeve/scenarios', 'tagreeve/scenarios is not a folder\n'],
+  ['.gitignore', 'Could not write .gitignore: a file or folder is in the way\n'],
+])('a dangling symlink at %s exits 2 and creates nothing', async (target, message) => {
+  await mkdir(join(dir, 'tagreeve'));
+  await symlink(join(dir, 'missing-target'), join(dir, target));
+  const before = await listing();
+  let out = '';
+  let err = '';
+  expect(await initCommand({ stdout: (t) => (out += t), stderr: (t) => (err += t) }, true, dir)).toBe(2);
+  expect(err).toBe(message);
+  expect(JSON.parse(out)).toEqual({ items: [] });
+  expect(await listing()).toEqual(before);
+  await expect(stat(join(dir, 'missing-target'))).rejects.toThrow();
 });
