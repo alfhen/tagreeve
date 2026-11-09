@@ -216,6 +216,7 @@ export class Recorder {
   private readonly dataLayerEvents: DataLayerEvent[] = [];
   private readonly dataLayerReassigns: Array<{ n: number; t: number; doc: string }> = [];
   private readonly payloadCounts = new PayloadCounts();
+  private untrappedLayerNames: string[] = [];
   private readonly eventFrames = new Map<string, FrameRef>();
   private readonly frameNumbers = new WeakMap<Frame, number>();
   private readonly frameNavigations = new WeakMap<Frame, number>();
@@ -1069,6 +1070,7 @@ export class Recorder {
 
   private async tallyDataLayers(): Promise<Flag[]> {
     const tallies = await this.collectTallies();
+    this.untrappedLayerNames = [...new Set(tallies.flatMap((t) => t.untrapped))];
     const start = Date.now();
     while (postedAhead(tallies, this.payloadCounts) && Date.now() - start < TALLY_POSTED_WAIT_MS) await this.wait(20);
     return buildTallyFlags(this.runId, tallies, this.payloadCounts);
@@ -1161,7 +1163,7 @@ export class Recorder {
       flags.push({ type: 'flag', id: newId('flag'), runId: this.runId, kind: 'netLogUnreadable', recordIds: [], detail: 'The net log could not be read, so requests sent while a frame unloads may be missing.' });
     }
     flags.push(...this.dataLayerReassignedFlags(requests));
-    const notHooked = buildDataLayerNotHookedFlag({ runId: this.runId, loaders: this.loaderLayers, hooked: this.options.dataLayerNames ?? [] });
+    const notHooked = buildDataLayerNotHookedFlag({ runId: this.runId, loaders: this.loaderLayers, hooked: this.options.dataLayerNames ?? [], untrapped: this.untrappedLayerNames });
     if (notHooked) flags.push(notHooked);
     flags.push(...tallyFlags);
     this.recordServerContainer(requests, hits, containerCounts, flags);

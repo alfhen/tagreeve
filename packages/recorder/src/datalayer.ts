@@ -187,7 +187,7 @@ export function dataLayerInitScript(names: readonly string[] = []): string {
       }
     };
     let assigned = own && 'value' in own ? own.value : record;
-    const state = { info, sync, schedule };
+    const state = { info, name: layerName, sync, schedule };
     hooks.set(layer, state);
     // A push accessor the page defined stays in place; the growth check still records.
     const foreign = own && !('value' in own);
@@ -228,8 +228,12 @@ export function dataLayerInitScript(names: readonly string[] = []): string {
     if (!found) return !(name in window);
     return found.configurable === true && 'value' in found && Array.isArray(found.value);
   };
+  const untrapped = [];
   for (const name of names) {
-    if (!trappable(name)) continue;
+    if (!trappable(name)) {
+      untrapped.push(name);
+      continue;
+    }
     current[name] = window[name];
     try {
       hook(current[name], name);
@@ -261,6 +265,7 @@ export function dataLayerInitScript(names: readonly string[] = []): string {
   Object.defineProperty(window, ${JSON.stringify(DATALAYER_TALLY)}, {
     value: () => {
       const arrays = [];
+      const seen = new Set();
       for (const name of names) {
         try {
           let layer;
@@ -270,13 +275,16 @@ export function dataLayerInitScript(names: readonly string[] = []): string {
           } finally {
             reading = false;
           }
-          if (!Array.isArray(layer)) continue;
+          if (!Array.isArray(layer) || seen.has(layer)) continue;
+          seen.add(layer);
           const state = hooks.get(layer);
+          // Another frame's hook owns it and that frame counts it.
+          if (!state && Object.prototype.hasOwnProperty.call(layer, '__tagreeveHooked')) continue;
           if (state) state.sync();
-          arrays.push({ layer: name, a: state ? state.info.a : null, length: layer.length, posted: state ? state.info.posted : 0 });
+          arrays.push({ layer: state ? state.name : name, a: state ? state.info.a : null, length: layer.length, posted: state ? state.info.posted : 0 });
         } catch {}
       }
-      return { d: token, arrays };
+      return { d: token, arrays, untrapped };
     },
   });
 })();`;

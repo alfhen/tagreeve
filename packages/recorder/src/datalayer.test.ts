@@ -388,3 +388,48 @@ test('a push accessor the page defined is kept', async () => {
   expect(page.run(`calls`)).toBe(1);
   expect(argsOf(page.sent)).toEqual([[{ event: 'x' }]]);
 });
+
+type FullTally = Tally & { untrapped: string[] };
+const tallyOf = (run: (code: string) => unknown): FullTally => JSON.parse(JSON.stringify(run(`${DATALAYER_TALLY}()`))) as FullTally;
+
+test('one array under two names gives one tally entry, under the name it was hooked with', async () => {
+  const page = pageWith('', ['myLayer']);
+  page.run(`window.dataLayer = []; window.myLayer = window.dataLayer; dataLayer.push({ event: 'a' }, { event: 'b' }, { event: 'c' });`);
+  await page.flush();
+  const tally = tallyOf(page.run);
+  expect(tally.arrays).toEqual([{ layer: 'dataLayer', a: 1, length: 3, posted: 3 }]);
+  expect(page.sent.every((s) => s.layer === undefined)).toBe(true);
+});
+
+test('an array hooked under the second name is counted once, under that name', async () => {
+  const page = pageWith('', ['myLayer']);
+  page.run(`window.myLayer = []; window.dataLayer = window.myLayer; myLayer.push({ event: 'a' });`);
+  await page.flush();
+  const tally = tallyOf(page.run);
+  expect(tally.arrays).toEqual([{ layer: 'myLayer', a: 1, length: 1, posted: 1 }]);
+  expect(page.sent.map((s) => s.layer)).toEqual(['myLayer']);
+});
+
+test('a second realm that adopts a marked array gives no tally entry', async () => {
+  const sent: Sent[] = [];
+  const parent = realm(sent, 'parent');
+  const child = realm(sent, 'child');
+  runInNewContext(`window.dataLayer = []; dataLayer.push({ event: 'a' });`, parent);
+  child.parentLayer = parent.dataLayer;
+  runInNewContext(`window.dataLayer = parentLayer; dataLayer.push({ event: 'b' });`, child);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(tallyOf((code) => runInNewContext(code, child)).arrays).toEqual([]);
+  expect(tallyOf((code) => runInNewContext(code, parent)).arrays).toEqual([{ layer: 'dataLayer', a: 1, length: 2, posted: 2 }]);
+});
+
+test('a page array with no marker and no hook in this realm keeps a: null', () => {
+  const page = pageWith('', []);
+  page.run(`Object.defineProperty(window, 'dataLayer', { value: [{ event: 'a' }], configurable: true, enumerable: true, writable: true });`);
+  expect(tallyOf(page.run).arrays).toEqual([{ layer: 'dataLayer', a: null, length: 1, posted: 0 }]);
+});
+
+test('a name the page defined as an accessor is untrapped and not replaced', () => {
+  const page = pageWith(`Object.defineProperty(globalThis, 'status', { get() { return ''; }, set() {}, configurable: true });`, ['status', 'myLayer']);
+  expect(tallyOf(page.run).untrapped).toEqual(['status']);
+  expect(page.run(`'value' in Object.getOwnPropertyDescriptor(window, 'status')`)).toBe(false);
+});

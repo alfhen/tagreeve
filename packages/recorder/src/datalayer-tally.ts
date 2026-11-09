@@ -13,6 +13,8 @@ export interface FrameTally {
   frame: number;
   d: string;
   arrays: TallyArray[];
+  /** Hooked names the page defined in a way the hook cannot trap. */
+  untrapped: string[];
 }
 
 /** Counts of the push payloads the binding received, by frame number, document token, layer and array number. */
@@ -53,7 +55,7 @@ const isCount = (value: unknown): value is number => Number.isSafeInteger(value)
 /** Keeps only the numbers and hooked names of a page's answer. Anything else is dropped. */
 export function validateTally(frame: number, value: unknown, names: readonly string[]): FrameTally | null {
   if (typeof value !== 'object' || value === null) return null;
-  const { d, arrays } = value as { d?: unknown; arrays?: unknown };
+  const { d, arrays, untrapped } = value as { d?: unknown; arrays?: unknown; untrapped?: unknown };
   if (typeof d !== 'string' || d.length > 64 || !Array.isArray(arrays)) return null;
   const kept: TallyArray[] = [];
   for (const entry of arrays) {
@@ -63,7 +65,8 @@ export function validateTally(frame: number, value: unknown, names: readonly str
     if (!isCount(length) || !isCount(posted) || !(a === null || isCount(a))) continue;
     kept.push({ layer, a, length, posted });
   }
-  return { frame, d, arrays: kept };
+  const untrappedKept = Array.isArray(untrapped) ? untrapped.filter((n): n is string => typeof n === 'string' && names.includes(n)) : [];
+  return { frame, d, arrays: kept, untrapped: [...new Set(untrappedKept)] };
 }
 
 /** True while the binding has received fewer payloads than a tally says the hook posted. */

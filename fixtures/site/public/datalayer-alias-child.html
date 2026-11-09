@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DataLayer alias child</title>
+</head>
+<body>
+<p>Takes the parent's <code>dataLayer</code> and pushes two items to it.</p>
+<script>
+window.dataLayer = parent.dataLayer;
+window.dataLayer.push({ event: 'child_one' });
+window.dataLayer.push({ event: 'child_two' });
+</script>
+</body>
+</html>
