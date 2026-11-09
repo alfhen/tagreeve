@@ -1054,7 +1054,7 @@ export class Recorder {
     const asking = frames.map(async (frame) => {
       try {
         const tally = validateTally(this.frameNumber(frame), await frame.evaluate(script), names);
-        if (tally) tallies.push(tally);
+        if (tally) tallies.push(frame.parentFrame() === null ? tally : { ...tally, untrapped: [] });
       } catch {
         // a frame that fails or detaches gets no flag
       }

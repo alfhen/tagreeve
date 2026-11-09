@@ -428,6 +428,12 @@ test('a page array with no marker and no hook in this realm keeps a: null', () =
   expect(tallyOf(page.run).arrays).toEqual([{ layer: 'dataLayer', a: null, length: 1, posted: 0 }]);
 });
 
+test('page code cannot change the untrapped list a later tally returns', () => {
+  const page = pageWith(`Object.defineProperty(globalThis, 'status', { get() { return ''; }, set() {}, configurable: true });`, ['status', 'myLayer']);
+  page.run(`const t = ${DATALAYER_TALLY}(); t.untrapped.length = 0; t.untrapped.push('myLayer');`);
+  expect(tallyOf(page.run).untrapped).toEqual(['status']);
+});
+
 test('a name the page defined as an accessor is untrapped and not replaced', () => {
   const page = pageWith(`Object.defineProperty(globalThis, 'status', { get() { return ''; }, set() {}, configurable: true });`, ['status', 'myLayer']);
   expect(tallyOf(page.run).untrapped).toEqual(['status']);

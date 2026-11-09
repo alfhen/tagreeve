@@ -86,7 +86,7 @@ describe('Recorder.close and the dataLayer tally', () => {
 
   function build(frames: { evaluate: () => Promise<unknown> }[], networkMode = 'stub') {
     const browser = { close: vi.fn().mockRejectedValue(new Error('stop here')) };
-    const context = { pages: () => [{ frames: () => frames }] };
+    const context = { pages: () => [{ frames: () => frames.map((f) => ({ ...f, parentFrame: () => null })) }] };
     const Ctor = Recorder as unknown as new (...args: unknown[]) => Recorder;
     const recorder = new Ctor({ networkMode }, browser, context, undefined, undefined, undefined, undefined);
     return { browser, recorder, inner: recorder as unknown as Inner };

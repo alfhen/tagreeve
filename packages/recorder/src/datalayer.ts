@@ -284,7 +284,7 @@ export function dataLayerInitScript(names: readonly string[] = []): string {
           arrays.push({ layer: state ? state.name : name, a: state ? state.info.a : null, length: layer.length, posted: state ? state.info.posted : 0 });
         } catch {}
       }
-      return { d: token, arrays, untrapped };
+      return { d: token, arrays, untrapped: untrapped.slice() };
     },
   });
 })();`;
