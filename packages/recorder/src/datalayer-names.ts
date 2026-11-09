@@ -30,8 +30,9 @@ export function loaderLayerName(req: Request): string | undefined {
 const MAX_LISTED_NAMES = 5;
 
 /** One flag when a loader names a layer that is not hooked. A name from a URL is never hooked. */
-export function buildDataLayerNotHookedFlag(input: { runId: Id<'run'>; loaders: readonly { id: Id<'req'>; name: string }[]; hooked: readonly string[] }): Flag | undefined {
-  const hooked = new Set([DEFAULT_DATALAYER, ...input.hooked]);
+export function buildDataLayerNotHookedFlag(input: { runId: Id<'run'>; loaders: readonly { id: Id<'req'>; name: string }[]; hooked: readonly string[]; untrapped?: readonly string[] }): Flag | undefined {
+  const untrapped = new Set(input.untrapped ?? []);
+  const hooked = new Set([DEFAULT_DATALAYER, ...input.hooked].filter((name) => !untrapped.has(name)));
   const misses = input.loaders.filter((l) => !hooked.has(l.name));
   if (misses.length === 0) return undefined;
   const names = [...new Set(misses.map((m) => (isDataLayerName(m.name) && !isValueSegment(m.name) ? `"${m.name}"` : '(other)')))];
@@ -39,6 +40,9 @@ export function buildDataLayerNotHookedFlag(input: { runId: Id<'run'>; loaders: 
   const rest = names.length - MAX_LISTED_NAMES;
   const shown = rest > 0 ? `${listed} and ${rest} more` : listed;
   const plural = names.length > 1;
+  const advice = misses.every((m) => untrapped.has(m.name) && input.hooked.includes(m.name))
+    ? 'The page defines them in a way the hook cannot trap.'
+    : 'Add them to options.dataLayerNames.';
   return {
     type: 'flag',
     id: newId('flag'),
@@ -46,7 +50,7 @@ export function buildDataLayerNotHookedFlag(input: { runId: Id<'run'>; loaders: 
     kind: 'dataLayerNotHooked',
     recordIds: misses.map((m) => m.id),
     detail: plural
-      ? `Google loaders name the data layers ${shown}, which are not hooked, so pushes to them are not recorded. Add them to options.dataLayerNames.`
-      : `A Google loader names the data layer ${shown}, which is not hooked, so pushes to it are not recorded. Add it to options.dataLayerNames.`,
+      ? `Google loaders name the data layers ${shown}, which are not hooked, so pushes to them are not recorded. ${advice}`
+      : `A Google loader names the data layer ${shown}, which is not hooked, so pushes to it are not recorded. ${advice.replace('them', 'it')}`,
   };
 }

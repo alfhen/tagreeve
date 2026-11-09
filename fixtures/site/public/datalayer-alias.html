@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DataLayer alias</title>
+</head>
+<body>
+<h1>DataLayer alias</h1>
+<p>The mode in the query decides what the page does: <code>alias</code>, <code>adopt</code> or <code>status</code>.</p>
+<script>
+(function () {
+  var mode = new URLSearchParams(location.search).get('mode') || 'alias';
+  if (mode === 'alias') {
+    window.dataLayer = window.dataLayer || [];
+    window.myLayer = window.dataLayer;
+    window.dataLayer.push({ event: 'alias_one' });
+    window.dataLayer.push({ event: 'alias_two' });
+    window.dataLayer.push({ event: 'alias_three' });
+  } else if (mode === 'adopt') {
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({ event: 'parent_one' });
+    var frame = document.createElement('iframe');
+    frame.src = '/datalayer-alias-child';
+    document.body.appendChild(frame);
+  } else if (mode === 'status') {
+    var script = document.createElement('script');
+    script.src = 'https://www.googletagmanager.com/gtm.js?id=GTM-PWTEST1&l=status';
+    document.head.appendChild(script);
+  }
+})();
+</script>
+</body>
+</html>

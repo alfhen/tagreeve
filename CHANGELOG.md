@@ -22,7 +22,9 @@ Not released yet. The newest release is 0.6.0, below.
 - Fix: `scripts/wordmark.ts` takes the font path as an argument and no longer reads `node_modules` (#727).
 - Fix: in the site intro, focus moves to the new Skip button when the menubar one is hidden (#867).
 
-<!-- D09 -->
+- Fix: a `dataLayer` name the hook could not trap, such as `status`, gives the `dataLayerNotHooked` flag when a loader names it (#1235).
+- Fix: one array under two names, or an array a child frame adopts from its parent, no longer gives a false `dataLayerIncomplete` flag or makes close wait for the posted-count deadline (#1299, #1360).
+- Docs: the `/datalayer-kinds` row of `fixtures/site/README.md` has all its columns (#1368).
 
 - Fix: a `must` rule with an exact count and unlinked server hits reads `serverSendUnlinked` when a subset of them could change the verdict (#1223).
 - Fix: a server container call no longer links `exact` by client ID when another container request that shares the client ID, or has no decoded hit, was sent in between. The miss reason is `concurrentRequest`, also a key of `serverContainer.notExact.clientId` (#1029).

@@ -72,3 +72,12 @@ test('one flag names every missed layer, at most five, and counts the rest', () 
   expect(many?.detail).toContain('"a", "b", "c", "d", "e" and 2 more');
   expect(many?.detail).not.toContain('"f"');
 });
+
+test('a configured name that the page made untrappable gives the flag', () => {
+  const r = req('https://www.googletagmanager.com/gtm.js?id=GTM-PWTEST1&l=status');
+  const flag = buildDataLayerNotHookedFlag({ runId, loaders: loaders([r]), hooked: ['status'], untrapped: ['status'] });
+  expect(flag).toMatchObject({ kind: 'dataLayerNotHooked', recordIds: [r.id] });
+  expect(flag?.detail).toContain('"status"');
+  expect(flag?.detail).not.toContain('Add it to options.dataLayerNames');
+  expect(buildDataLayerNotHookedFlag({ runId, loaders: loaders([r]), hooked: ['status'], untrapped: [] })).toBeUndefined();
+});

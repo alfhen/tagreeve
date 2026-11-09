@@ -15,7 +15,7 @@ function addTo(target: PayloadCounts, frame: number, d: string, layer: string | 
   for (let i = 0; i < n; i += 1) target.add({ d, a, ...(layer ? { layer } : {}) }, frame, NAMES);
 }
 
-const tally = (frame: number, d: string, arrays: FrameTally['arrays']): FrameTally => ({ frame, d, arrays });
+const tally = (frame: number, d: string, arrays: FrameTally['arrays']): FrameTally => ({ frame, d, arrays, untrapped: [] });
 
 test('equal counts give no flag', () => {
   const tallies = [tally(0, 'tok', [{ layer: 'dataLayer', a: 1, length: 3, posted: 3 }])];
@@ -129,4 +129,13 @@ test('postedAhead is true while fewer payloads arrived than the hook posted', ()
   addTo(all, 0, 'tok', undefined, 1, 1);
   expect(postedAhead(tallies, all)).toBe(false);
   expect(postedAhead([tally(0, 'tok', [{ layer: 'dataLayer', a: null, length: 3, posted: 0 }])], new PayloadCounts())).toBe(false);
+});
+
+test('validateTally keeps an untrapped name only when it is a hooked name', () => {
+  const text = JSON.stringify(['myLayer', 'status', 'dataLayer', 'https://planted.example.test/x', 7, 'myLayer']);
+  const kept = validateTally(0, { d: 'tok', arrays: [], untrapped: text }, NAMES);
+  expect(kept?.untrapped).toEqual(['myLayer']);
+  expect(validateTally(0, { d: 'tok', arrays: [], untrapped: 'myLayer' }, NAMES)?.untrapped).toEqual([]);
+  expect(validateTally(0, { d: 'tok', arrays: [], untrapped: ['myLayer'] }, NAMES)?.untrapped).toEqual([]);
+  expect(validateTally(0, { d: 'tok', arrays: [] }, NAMES)?.untrapped).toEqual([]);
 });
