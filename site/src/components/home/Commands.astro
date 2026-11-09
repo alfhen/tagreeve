@@ -6,6 +6,8 @@ import { loadDemo, type Tone } from '../../lib/demo-data.ts';
 const { commands } = await loadDemo(fileURLToPath(new URL('demo/', root)));
 // A long line wraps under its own indent instead of running past the panel.
 const indentOf = (text: string) => text.length - text.trimStart().length;
+// A flag stays one word, so `--site` never breaks into `-` and `-site`.
+const wordsOf = (text: string) => text.split(/(?<=^|\s)(--[\w-]+)/);
 const toneClass: Record<Tone, string> = {
   fg: 'text-code-ink',
   dim: 'text-code-comment',
@@ -49,12 +51,12 @@ const toneClass: Record<Tone, string> = {
         tabindex="0"
         role="region"
         aria-label={`${c.name} output`}
-        class="m-0 max-h-[640px] min-h-[380px] overflow-auto rounded-[14px] border border-rule bg-code px-[22px] py-5 font-mono text-[13px] leading-[1.7] text-code-ink"
+        class="m-0 min-h-[380px] overflow-auto rounded-[14px] border border-rule bg-code px-[22px] py-5 font-mono text-[13px] leading-[1.7] text-code-ink"
       >
         {
           c.lines.map((l) => (
-            <div data-command-line class:list={[toneClass[l.tone], 'whitespace-pre-wrap [overflow-wrap:anywhere]']} style={`padding-left:${indentOf(l.text)}ch`}>
-              {l.text.trimStart() || ' '}
+            <div data-command-line class:list={[toneClass[l.tone], 'whitespace-pre-wrap [overflow-wrap:anywhere]']} style={`padding-left:${indentOf(l.text)}ch;text-indent:-${indentOf(l.text)}ch`}>
+              {wordsOf(l.text || ' ').map((w, i) => (i % 2 ? <span class="whitespace-nowrap">{w}</span> : w))}
             </div>
           ))
         }

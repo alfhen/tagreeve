@@ -4,11 +4,22 @@ import AgentCallout from './AgentCallout.astro';
 import './docs-components.css';
 
 const isGuide = Astro.locals.starlightRoute.entry.id.startsWith('docs/guide/');
+const body = await Astro.slots.render('default');
+// The callout sits after the lede, the guide's first top-level paragraph.
+const lede = /^(\s*<p[\s>][\s\S]*?<\/p>)/.exec(body)?.[1] ?? '';
+const rest = body.slice(lede.length);
 ---
 
 <SiteMarkdownContent>
-  {isGuide && <AgentCallout />}
-  <slot />
+  {isGuide ? (
+    <>
+      <Fragment set:html={lede} />
+      <AgentCallout />
+      <Fragment set:html={rest} />
+    </>
+  ) : (
+    <Fragment set:html={body} />
+  )}
 </SiteMarkdownContent>
 
 <script>

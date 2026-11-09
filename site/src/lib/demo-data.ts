@@ -108,30 +108,20 @@ export function failedResults(records: RunRecords): RunRecords['results'] {
   return records.results.filter((r) => !r.pass && r.severity !== 'warn');
 }
 
-/** The numbers a reply may use: rule messages, evidence counts, hit counts, the number of failed rules and the exit code. */
+/** The numbers a reply may state: the matching-hit count in each failed rule's message, each failed rule's evidence length, the number of failed rules and the exit code. */
 export function recordNumbers(records: RunRecords, exitCode: number): Set<string> {
-  const numbers = new Set<string>([String(exitCode)]);
   const failed = failedResults(records);
-  numbers.add(String(failed.length));
-  numbers.add(String(records.results.length));
-  for (const r of records.results) {
+  const numbers = new Set<string>([String(exitCode), String(failed.length)]);
+  for (const r of failed) {
     numbers.add(String(r.evidence.length));
-    for (const n of (r.message ?? '').match(/\d+(?:\.\d+)?/g) ?? []) numbers.add(n);
+    const matching = /\bfound (\d+) matching\b/.exec(r.message ?? '')?.[1];
+    if (matching) numbers.add(matching);
   }
-  numbers.add(String(records.hits.length));
-  const byVendor = new Map<string, number>();
-  const byEvent = new Map<string, number>();
-  for (const h of records.hits) {
-    byVendor.set(h.vendor, (byVendor.get(h.vendor) ?? 0) + 1);
-    const key = `${h.vendor} ${h.event}`;
-    byEvent.set(key, (byEvent.get(key) ?? 0) + 1);
-  }
-  for (const n of [...byVendor.values(), ...byEvent.values()]) numbers.add(String(n));
   return numbers;
 }
 
 /**
- * Throws, naming the value, when the reply uses a number that the record does not hold, or an evidence ID that is not
+ * Throws, naming the value, when the reply uses a number that is not one a reply may state, or an evidence ID that is not
  * the evidence of a failed rule in the record. A shortened ID (`hit_…6CA`) must match exactly one such ID.
  */
 export function checkReply(text: string, records: RunRecords, exitCode: number, name: string): void {
@@ -146,7 +136,7 @@ export function checkReply(text: string, records: RunRecords, exitCode: number, 
   }
   const numbers = recordNumbers(records, exitCode);
   for (const n of text.replace(EVIDENCE, '').replace(LIST_MARKER, '').match(NUMBER) ?? []) {
-    if (!numbers.has(n)) throw new Error(`${name}: the number ${n} is not in the record of ${records.run.id}`);
+    if (!numbers.has(n)) throw new Error(`${name}: the number ${n} is not one a reply may state for the record of ${records.run.id}`);
   }
 }
 

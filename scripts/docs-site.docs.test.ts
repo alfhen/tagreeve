@@ -36,8 +36,11 @@ test('the build output has no outside fonts or URLs in src, stylesheet href or u
   expect(result.status, result.stderr).toBe(0);
 });
 
-test('no built file names the store host northwind.dk', () => {
-  const result = spawnSync('grep', ['-rl', 'northwind.dk', dist], { encoding: 'utf8' });
+test('no built file names the old store host', () => {
+  const host = ['northwind', 'dk'].join('.');
+  expect(spawnSync('grep', ['-rlF', 'staging.northwind.example', dist], { encoding: 'utf8' }).status, 'grep finds the story host').toBe(0);
+  const result = spawnSync('grep', ['-rlF', host, dist], { encoding: 'utf8' });
+  expect(result.status, result.stderr).toBe(1);
   expect(result.stdout).toBe('');
 });
 

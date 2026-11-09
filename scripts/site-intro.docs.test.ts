@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from 'playwright';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import { chromeUserAgent } from '../packages/recorder/src/user-agent.ts';
+import { WASTED_HOLD_MS } from '../site/src/lib/intro-data.ts';
 import { dist, docsUrl, newDocsContext } from './docs-test-helpers.ts';
 
 let browser: Browser | undefined;
@@ -300,7 +301,7 @@ test('the run from Reply to the end of fly plays every stage, then unmounts the 
   await page.getByText('Meta still fires before consent.').waitFor();
   expect(await page.evaluate(() => document.fonts.check('1em Anton', 'wasted'))).toBe(true);
   expect(await introSeen(page)).toBe(null);
-  await expect.poll(() => introSeen(page), { timeout: 5000 }).toBe('1');
+  await expect.poll(() => introSeen(page), { timeout: WASTED_HOLD_MS + 3000 }).toBe('1');
   expect(await stages).toEqual(['ask', 'mess', 'wasted', 'shrink', 'fly']);
   expect(await page.locator(overlay).count()).toBe(0);
   expect(await bodyOverflow(page)).not.toBe('hidden');
@@ -449,9 +450,10 @@ test('the page under the intro is complete HTML, and the intro adds nothing with
   await context.close();
 });
 
-test('no built file contains northwind.dk, and the intro names the .example host', () => {
-  const old = spawnSync('grep', ['-rl', 'northwind.dk', dist], { encoding: 'utf8' });
+test('no built file contains the old store host, and the intro names the .example host', () => {
+  const example = spawnSync('grep', ['-rlF', 'www.northwind.example', join(dist, '_astro')], { encoding: 'utf8' });
+  expect(example.status, example.stderr).toBe(0);
+  const old = spawnSync('grep', ['-rlF', ['northwind', 'dk'].join('.'), dist], { encoding: 'utf8' });
+  expect(old.status, old.stderr).toBe(1);
   expect(old.stdout).toBe('');
-  const example = spawnSync('grep', ['-rl', 'www.northwind.example', join(dist, '_astro')], { encoding: 'utf8' });
-  expect(example.stdout).not.toBe('');
 });

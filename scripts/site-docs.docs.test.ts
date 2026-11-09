@@ -152,3 +152,38 @@ test('at 1440 px the sidebar starts under the logo and the article 56 px past th
   }
   await context.close();
 });
+
+test('on each guide the agent callout comes after the first paragraph and before the first heading', async () => {
+  const context = await newDocsContext(browser!);
+  const page = await context.newPage();
+  const config = readFileSync(join(root, 'site/astro.config.mjs'), 'utf8');
+  const everyGuide = [...config.matchAll(/link: '(\/docs\/guide\/[^']+)'/g)].map((m) => m[1]!);
+  expect(everyGuide.length).toBeGreaterThanOrEqual(6);
+  for (const path of everyGuide) {
+    await page.goto(`${docsUrl}${path}`);
+    const order = await page.evaluate(() => {
+      const children = [...document.querySelector('.sl-markdown-content')!.children];
+      const at = (el: Element | undefined) => (el ? children.indexOf(el) : -1);
+      return {
+        firstParagraph: at(children.find((el) => el.tagName === 'P')),
+        callout: at(children.find((el) => el.classList.contains('agent-callout'))),
+        heading: at(children.find((el) => el.classList.contains('sl-heading-wrapper'))),
+      };
+    });
+    expect(order.firstParagraph, path).toBe(0);
+    expect(order.callout, path).toBe(1);
+    expect(order.heading, path).toBeGreaterThan(order.callout);
+  }
+  await context.close();
+});
+
+test('the docs theme fade covers the header and the sidebar as well as the body', async () => {
+  const context = await newDocsContext(browser!, { viewport: { width: 1440, height: 900 }, reducedMotion: 'no-preference' });
+  const page = await context.newPage();
+  await page.goto(`${docsUrl}/docs/guide/first-run`);
+  for (const selector of ['body', '.page > .header', '.sidebar-pane']) {
+    const property = await page.locator(selector).first().evaluate((el) => getComputedStyle(el).transitionProperty);
+    expect(property, selector).toContain('background-color');
+  }
+  await context.close();
+});

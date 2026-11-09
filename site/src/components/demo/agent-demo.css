@@ -393,7 +393,7 @@
   flex-direction: column;
   gap: 6px;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
   flex: 0 1 auto;
 }
 

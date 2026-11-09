@@ -5,9 +5,9 @@ import AgentDemoIsland from '../demo/AgentDemo.tsx';
 import { loadDemo } from '../../lib/demo-data.ts';
 import '../demo/agent-demo.css';
 
-const data = await loadDemo(fileURLToPath(new URL('demo/', root)));
+const { storyHost, userPrompt, scenarios } = await loadDemo(fileURLToPath(new URL('demo/', root)));
 ---
 
 <section class="frame pt-3" aria-label="Agent demo">
-  <AgentDemoIsland client:load data={data} />
+  <AgentDemoIsland client:load storyHost={storyHost} userPrompt={userPrompt} scenarios={scenarios} />
 </section>

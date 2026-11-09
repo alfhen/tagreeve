@@ -59,6 +59,13 @@ body {
       background-color 0.3s,
       color 0.3s;
   }
+
+  .page > .header,
+  .sidebar-pane {
+    transition:
+      background-color 0.3s,
+      color 0.3s;
+  }
 }
 
 @media (max-width: 520px) {
@@ -271,9 +278,8 @@ body {
   margin-top: 22px;
 }
 
-/* The lede: the first paragraph, after the agent callout on guide pages. */
-.sl-markdown-content > p:first-child,
-.sl-markdown-content > .agent-callout:first-child + p {
+/* The lede: the first paragraph. The agent callout follows it on guide pages. */
+.sl-markdown-content > p:first-child {
   color: var(--muted);
   font-size: 19px;
 }
