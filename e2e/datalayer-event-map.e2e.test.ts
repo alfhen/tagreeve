@@ -73,7 +73,7 @@ test('the built-in table makes checkout_completed and purchase the same event, a
 test('an event map file error names the file and the key, never a value', async () => {
   const { a, b } = await recordBuilds();
   const bad = join(outDir, 'bad-event-map.json');
-  await writeFile(bad, JSON.stringify({ events: { legacy_promo: 42, other: 'pw-secret-value-9' } }));
+  await writeFile(bad, JSON.stringify({ events: { legacy_promo: 'pw-secret-value-9 <' } }));
   const result = await cli(['diff', a, b, '--event-map', bad]);
   expect(result.code).toBe(2);
   expect(result.stderr).toContain(bad);

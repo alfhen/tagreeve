@@ -2,8 +2,10 @@ import { maskValuePath, stripSandboxPrefix } from '@tagreeve/decoders';
 import type { ConsentEpoch, Hit, HitIds, RunRecords } from '@tagreeve/core';
 import { consentFields } from './scenario.ts';
 import { epochForHit, judgeIndex, judgedAt } from './evaluate.ts';
-import { builtInEventName, mapPushGroups, mappedEventName, normalizePushGroups, type EventMap } from './event-map.ts';
-import { pushShapes, type PushFrameKind, type PushKind, type PushPath } from './push-shape.ts';
+import { builtInEventName, keepPushGroups, mappedEventName, normalizePushGroups, type EventMap } from './event-map.ts';
+import { pushShapes, type PushGroup, type PushKind } from './push-shape.ts';
+
+export type { PushGroup };
 
 export interface DiffOptions {
   /** Adds the page path to the match key, with the Shopify sandbox prefix stripped. */
@@ -118,16 +120,6 @@ export function diffRuns(a: RunRecords, b: RunRecords, options: DiffOptions = {}
     result.warnings.push(...result.dataLayer.kindChanged.map(kindChangeWarning));
   }
   return result;
-}
-
-/** The masked shape of the pushes of one consent epoch, event, push kind and frame kind. Holds no value and no count. */
-export interface PushGroup {
-  epoch: string;
-  event: string;
-  /** Absent in a baseline saved by 0.6.0-rc.2. */
-  kind?: PushKind;
-  frame: PushFrameKind;
-  paths: PushPath[];
 }
 
 export interface PushRef {
@@ -328,8 +320,7 @@ export function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap, co
   };
   pair(true);
   pair(false);
-  const targets = new Set(Object.values(userMap?.events ?? {}));
-  const kept = mapPushGroups(a, (e) => e, userMap?.paths, (r) => [r, builtInEventName(r)].filter((k, i) => i === 0 || !targets.has(k)));
+  const kept = keepPushGroups(a, userMap);
   return normalized.map((g, i) => {
     const recorded = a[i]!;
     const to = joined.get(epochEventId(recorded));

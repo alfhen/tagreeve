@@ -23,7 +23,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 <!-- I10 -->
 
-<!-- K10 -->
+- Internal: push shapes and the event map have one owner per rule (#1425, #1312, #1317, #1251, #1252, #1291, #1209, #1379, #1243).
 
 <!-- J10 -->
 

@@ -1,5 +1,5 @@
 import { ga4EventName } from '@tagreeve/decoders';
-import type { PushGroup } from './diff.ts';
+import { labelKind, type PushGroup } from './push-shape.ts';
 
 /** A user map for `diff`: event renames, and key path renames inside one event. Paths are keyed by the event name after the rename. */
 export interface EventMap {
@@ -127,7 +127,7 @@ export function parseEventMap(text: string, file: string): EventMap {
 
 /** The built-in name, for a Shopify standard event. Consent commands and gtag commands keep their labels. */
 export function builtInEventName(event: string): string {
-  return /^(consent|gtag) /.test(event) ? event : ga4EventName(event);
+  return labelKind(event) === 'event' ? ga4EventName(event) : event;
 }
 
 // A rename to "." moves the paths below the source to the root, and drops the source path itself. A rename from "." moves every root path under the target.
@@ -147,13 +147,13 @@ function renamePath(path: string, renames: Record<string, string>): string | und
 export function mapPushGroups(
   groups: PushGroup[],
   rename: (event: string) => string,
-  paths: EventMap['paths'] = {},
-  pathKeys: (recorded: string, final: string) => string[] = (recorded, final) => [final, recorded],
+  paths: EventMap['paths'] | undefined,
+  pathKeys: (recorded: string, final: string) => string[],
 ): PushGroup[] {
   return groups.map((g) => {
     const event = rename(g.event);
-    const key = pathKeys(g.event, event).find((k) => Object.hasOwn(paths, k));
-    const renames = key === undefined ? undefined : paths[key]!;
+    const key = pathKeys(g.event, event).find((k) => paths !== undefined && Object.hasOwn(paths, k));
+    const renames = key === undefined ? undefined : paths?.[key];
     if (!renames) return { ...g, event };
     const under = Object.hasOwn(renames, ROOT) ? renames[ROOT]! : undefined;
     if (under !== undefined) {
@@ -183,12 +183,21 @@ function userEventName(event: string, user: Record<string, string> | undefined):
   return user !== undefined && Object.hasOwn(user, event) ? user[event]! : user !== undefined && Object.hasOwn(user, named) ? user[named]! : named;
 }
 
+// In a swap or a chain, a recorded name can also be the name another group ends up with. Its paths entry then belongs to that group, so a name that is a target of the user map only counts as a key when `own` lists it.
+function pathKeysFor(userMap: EventMap | undefined, own: (recorded: string, final: string) => string[], fallback: (recorded: string) => string[]) {
+  const targets = new Set(Object.values(userMap?.events ?? {}));
+  return (recorded: string, final: string): string[] => [...own(recorded, final), ...fallback(recorded).filter((k) => !targets.has(k))];
+}
+
 /** Applies the built-in table, then a user map when there is one. The user map is for the older side of a diff. */
 export function normalizePushGroups(groups: PushGroup[], userMap?: EventMap): PushGroup[] {
   const user = userMap?.events;
-  const rename = (event: string): string => mappedEventName(event, userMap);
-  // In a swap or a chain, a recorded name can also be the name another group ends up with. Its paths entry then belongs to that group.
-  const targets = new Set(user === undefined ? [] : Object.values(user));
-  const pathKeys = (recorded: string, final: string): string[] => [final, userEventName(recorded, user), recorded].filter((k, i) => i < 2 || !targets.has(k));
-  return mapPushGroups(groups, rename, userMap?.paths, pathKeys);
+  const pathKeys = pathKeysFor(userMap, (recorded, final) => [final, userEventName(recorded, user)], (recorded) => [recorded]);
+  return mapPushGroups(groups, (event) => mappedEventName(event, userMap), userMap?.paths, pathKeys);
+}
+
+/** Keeps the recorded names and applies only the user's path renames. */
+export function keepPushGroups(groups: PushGroup[], userMap?: EventMap): PushGroup[] {
+  const pathKeys = pathKeysFor(userMap, (recorded) => [recorded], (recorded) => [builtInEventName(recorded)]);
+  return mapPushGroups(groups, (event) => event, userMap?.paths, pathKeys);
 }

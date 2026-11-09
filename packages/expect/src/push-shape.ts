@@ -1,7 +1,8 @@
 import type { DataLayerEvent, Step } from '@tagreeve/core';
 import { guardFieldName, isValueSegment, OTHER_NAME } from '@tagreeve/decoders';
 
-export type PushFrameKind = 'main' | 'embedded' | 'unknown';
+export const PUSH_FRAME_KINDS = ['main', 'embedded', 'unknown'] as const;
+export type PushFrameKind = (typeof PUSH_FRAME_KINDS)[number];
 
 export interface PushPath {
   path: string;
@@ -17,6 +18,16 @@ export interface PushShape {
   count: number;
   paths: PushPath[];
   ids: string[];
+}
+
+/** The masked shape of the pushes of one consent epoch, event, push kind and frame kind. Holds no value and no count. */
+export interface PushGroup {
+  epoch: string;
+  event: string;
+  /** Absent in a baseline saved by 0.6.0-rc.2. */
+  kind?: PushKind;
+  frame: PushFrameKind;
+  paths: PushPath[];
 }
 
 export interface StepPushShapes {
@@ -64,7 +75,7 @@ function walk(value: unknown, path: string, depth: number, out: Map<string, Set<
   }
 }
 
-function isGtagCommand(args: unknown[]): args is [string, ...unknown[]] {
+function startsWithString(args: unknown[]): args is [string, ...unknown[]] {
   return typeof args[0] === 'string';
 }
 
@@ -84,9 +95,9 @@ interface Command {
 }
 
 function commandOf(e: DataLayerEvent): Command | undefined {
-  if (isGtagCommand(e.args)) return { list: e.args, fromObject: false };
+  if (startsWithString(e.args)) return { list: e.args, fromObject: false };
   const list = argumentsLike(e.args);
-  return list !== undefined && isGtagCommand(list) ? { list, fromObject: true } : undefined;
+  return list !== undefined && startsWithString(list) ? { list, fromObject: true } : undefined;
 }
 
 const CONSENT_COMMANDS = new Set(['default', 'update']);
@@ -108,6 +119,13 @@ function eventLabel(e: DataLayerEvent, command: Command | undefined): string {
   if (e.isConsentCommand) return `consent ${String(e.args[1])}`;
   if (e.event !== null) return safeName(e.event);
   return command === undefined ? NO_EVENT : commandLabel(command);
+}
+
+export type LabelKind = 'consent' | 'gtag' | 'event';
+
+/** Which form an event label has. A consent or gtag label is a command, not a page event name. */
+export function labelKind(label: string): LabelKind {
+  return label.startsWith('consent ') ? 'consent' : label.startsWith('gtag ') ? 'gtag' : 'event';
 }
 
 function frameKind(e: DataLayerEvent): PushFrameKind {

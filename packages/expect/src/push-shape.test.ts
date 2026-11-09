@@ -1,6 +1,6 @@
 import type { DataLayerEvent, Step } from '@tagreeve/core';
 import { expect, test } from 'vitest';
-import { pushShapes } from './push-shape.ts';
+import { labelKind, pushShapes } from './push-shape.ts';
 
 const FAKE_EMAIL = 'fake.person@example.test';
 const GID = 'gid://shopify/Product/1234567890';
@@ -157,4 +157,25 @@ test('an arguments-like gtm.* event has a count and no paths', () => {
   expect(group!.event).toBe('gtm.dom');
   expect(group!.count).toBe(1);
   expect(group!.paths).toEqual([]);
+});
+
+test('labelKind agrees with the label each kind of push gets', () => {
+  const frame = { main: true, n: 0 };
+  const cases: [DataLayerEvent, string][] = [
+    [push(undefined, { args: ['consent', 'default', { ad_storage: 'denied' }], isConsentCommand: true, frame }), 'consent'],
+    [push(undefined, { args: [{ 0: 'consent', 1: 'update', 2: {} }] }), 'consent'],
+    [push(undefined, { args: ['config', 'G-PWTEST0001'] }), 'gtag'],
+    [push(undefined, { args: ['bogus'] }), 'gtag'],
+    [push(undefined, { args: [{ 0: 'set', 1: {} }] }), 'gtag'],
+    [push({ event: 'purchase' }), 'event'],
+    [push({ event: 'gtm.js' }), 'event'],
+    [push(undefined, { args: [{ 0: 'event', 1: 'purchase' }] }), 'event'],
+    [push({ value: 1 }), 'event'],
+  ];
+  for (const [e, want] of cases) {
+    const [shape] = first(e);
+    expect(labelKind(shape!.event)).toBe(want);
+  }
+  expect(first(cases[0]![0])[0]!.event).toBe('consent default');
+  expect(first(cases[3]![0])[0]!.event).toBe('gtag (other)');
 });

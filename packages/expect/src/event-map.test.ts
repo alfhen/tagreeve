@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
-import type { PushGroup } from './diff.ts';
 import { diffPushes } from './diff.ts';
-import { normalizePushGroups, parseEventMap } from './event-map.ts';
+import { keepPushGroups, normalizePushGroups, parseEventMap } from './event-map.ts';
+import type { PushGroup } from './push-shape.ts';
 
 const group = (event: string, paths: string[] = []): PushGroup => ({ epoch: 'undecided', event, frame: 'main', paths: paths.map((path) => ({ path, types: ['string'] })) });
 
@@ -75,6 +75,13 @@ describe('parseEventMap', () => {
 });
 
 describe('normalizePushGroups', () => {
+  test('a paths entry keyed by the user-renamed name applies to the recorded group', () => {
+    const map = parseEventMap('{"events":{"legacy":"checkout_completed"},"paths":{"checkout_completed":{"ecommerce":"data"}}}', 'm.json');
+    const input = [group('legacy', ['ecommerce.value'])];
+    expect(input[0]!.paths.map((p) => p.path)).toEqual(['ecommerce.value']);
+    expect(normalizePushGroups(input, map)[0]!.paths.map((p) => p.path)).toEqual(['data.value']);
+  });
+
   test('the longest matching source key renames a path, whatever the file order', () => {
     const map = parseEventMap('{"paths":{"b":{"ecommerce":"data","ecommerce.value":"value"}}}', 'm.json');
     const [mapped] = normalizePushGroups([group('b', ['ecommerce.value', 'ecommerce.id'])], map);
@@ -213,5 +220,22 @@ describe('null sections', () => {
     const map = parseEventMap(json, 'm.json');
     expect(map.events).toEqual({});
     expect(map.paths).toEqual({});
+  });
+});
+
+describe('keepPushGroups', () => {
+  test('keeps the recorded name and applies the paths of that name', () => {
+    const map = parseEventMap('{"paths":{"a":{"x":"y"}}}', 'm.json');
+    const [kept] = keepPushGroups([group('a', ['x'])], map);
+    expect(kept).toMatchObject({ event: 'a' });
+    expect(kept!.paths.map((p) => p.path)).toEqual(['y']);
+  });
+
+  test('a recorded name that another event is renamed to does not take that event paths entry through the built-in name', () => {
+    const map = parseEventMap('{"events":{"other":"purchase"},"paths":{"purchase":{"x":"y"}}}', 'm.json');
+    const [kept] = keepPushGroups([group('checkout_completed', ['x'])], map);
+    expect(kept!.paths.map((p) => p.path)).toEqual(['x']);
+    const [plain] = keepPushGroups([group('checkout_completed', ['x'])], parseEventMap('{"paths":{"purchase":{"x":"y"}}}', 'm.json'));
+    expect(plain!.paths.map((p) => p.path)).toEqual(['y']);
   });
 });

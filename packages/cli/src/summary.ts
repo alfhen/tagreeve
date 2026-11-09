@@ -1,6 +1,6 @@
 import { guardFieldName, maskValuePath, OTHER_NAME, platformHostFor } from '@tagreeve/decoders';
 import type { FlagKind, HitLinkMiss, Result, ResultNote, RunRecords, ServerContainerErrorClass, Severity } from '@tagreeve/core';
-import { isServerHit, judgeIndex, NO_EVENT, pushShapes, summarizeTags, tagLabel, viaHitOf, type PushShapes, type TagsContainerSummary } from '@tagreeve/expect';
+import { isServerHit, judgeIndex, labelKind, NO_EVENT, pushShapes, summarizeTags, tagLabel, viaHitOf, type PushShape, type PushShapes, type TagsContainerSummary } from '@tagreeve/expect';
 import { formatDefaultsLine, type DefaultUsed } from './defaults.ts';
 import { NOTE_TEXT } from './report/model.ts';
 
@@ -272,14 +272,19 @@ function serverContainerLines(summary: Summary): string[] {
 
 const DATALAYER_EVENTS_SHOWN = 3;
 
-function dataLayerLabelRank(label: string): number {
-  if (label.startsWith('consent ')) return 1;
-  if (label.startsWith('gtag ')) return 2;
-  return label.startsWith('gtm.') ? 3 : 0;
+export function dataLayerLabelRank({ event, kind }: PushShape): number {
+  const label = kind === 'gtag' ? labelKind(event) : 'event';
+  if (label === 'consent') return 1;
+  if (label === 'gtag') return 2;
+  return event.startsWith('gtm.') ? 3 : 0;
 }
 
 function dataLayerLine({ pushes, steps }: PushShapes): string {
-  const events = [...new Set(steps.flatMap((s) => s.events.map((e) => e.event)))].filter((e) => e !== NO_EVENT).sort((a, b) => dataLayerLabelRank(a) - dataLayerLabelRank(b) || (a < b ? -1 : a > b ? 1 : 0));
+  const ranks = new Map<string, number>();
+  for (const shape of steps.flatMap((s) => s.events)) {
+    if (shape.event !== NO_EVENT) ranks.set(shape.event, Math.min(ranks.get(shape.event) ?? Infinity, dataLayerLabelRank(shape)));
+  }
+  const events = [...ranks.keys()].sort((a, b) => ranks.get(a)! - ranks.get(b)! || (a < b ? -1 : a > b ? 1 : 0));
   const shown = events.slice(0, DATALAYER_EVENTS_SHOWN).join(', ');
   const list = events.length > 0 ? ` (${shown}${events.length > DATALAYER_EVENTS_SHOWN ? ', …' : ''})` : '';
   return `dataLayer: ${pushes} push${pushes === 1 ? '' : 'es'}, ${events.length} event${events.length === 1 ? '' : 's'}${list}; shapes in --json`;
