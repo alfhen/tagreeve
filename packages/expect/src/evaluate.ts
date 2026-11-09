@@ -144,7 +144,7 @@ function ruleWindowStart(rule: Rule, ctx: Context): { at: number; text: string }
   return rule.from ? { at: step.startedAt, text: `from ${label}` } : { at: step.endedAt ?? step.startedAt, text: `after ${label}` };
 }
 
-/** Most hits whose placement is tried one by one for a rule: 2 ** MAX_SEARCHED_HITS placements. With more, a rule that depends on which hits count warns without a search. */
+/** Most hits whose placement is tried one by one for a rule: 2 ** MAX_SEARCHED_HITS placements. With more, a subset search (a rule with `body` or `hashesMatch`) warns without a search. A plain exact count is searched by number and never capped. */
 const MAX_SEARCHED_HITS = 10;
 
 /** A count of matching hits alone is decided by how many hits are placed. With an exact count, `body` or `hashesMatch`, which ones matter too. */
@@ -163,20 +163,22 @@ function placementsChange(ctx: Context, rule: Rule, unlinked: readonly Hit[], pr
   const byOwnTime = new Set(probable.filter((h) => scopedIds(rule, asBrowserHits(ctx, [h])).has(h.id)).map((h) => h.id));
   const reach = probable.filter((h) => byLink.has(h.id) || byOwnTime.has(h.id));
   if (unlinked.length + reach.length === 0) return false;
+  const reachIds = new Set(reach.map((h) => h.id));
   const run = (placed: readonly Hit[], selected: readonly Hit[]) => {
     const chosen = new Set(selected.map((h) => h.id));
     const moved = asBrowserHits(ctx, selected.filter((h) => !byLink.has(h.id)));
-    const placedCtx = { ...moved, hits: moved.hits.filter((h) => chosen.has(h.id) || !reach.some((r) => r.id === h.id)), anywhere: new Set(placed.map((h) => h.id)) };
+    const placedCtx = { ...moved, hits: moved.hits.filter((h) => chosen.has(h.id) || !reachIds.has(h.id)), anywhere: new Set(placed.map((h) => h.id)) };
     return evaluateRuleHits(rule, placedCtx).pass !== base;
   };
   if (!dependsOnWhichHits(rule)) return run(unlinked, reach) || run([], []);
   const prefixes = isPlainExactCount(rule);
-  // A plain exact count tries both lists by number, (n + 1)(r + 1) runs, so the cap applies only to a subset search.
+  // A plain exact count is searched by number with no cap, so the cap applies only to a subset search.
   if (!prefixes && unlinked.length + reach.length > MAX_SEARCHED_HITS) return true;
   if (prefixes) {
-    // Every placed unlinked hit and every selected probable hit is in scope, so only how many of each counts: (n + 1)(r + 1) runs.
-    for (let u = 0; u <= unlinked.length; u++) {
-      for (let j = 0; j <= reach.length; j++) if (run(unlinked.slice(0, u), reach.slice(0, j))) return true;
+    // Every placed unlinked hit and every selected probable hit is in scope, so only their total counts: n + r + 1 runs.
+    for (let k = 0; k <= unlinked.length + reach.length; k++) {
+      const u = Math.min(k, unlinked.length);
+      if (run(unlinked.slice(0, u), reach.slice(0, k - u))) return true;
     }
     return false;
   }
@@ -233,7 +235,7 @@ function probableHits(ctx: Context, rule: Rule | undefined): Hit[] {
 
 /**
  * True when the verdict `passes` gives would change if the probable-linked server hits were placed by their own time. With a `rule`
- * every choice of selected or left out is tried, and a rule that depends on which hits count rests when more than MAX_SEARCHED_HITS hits are in scope.
+ * every choice of selected or left out is tried, and a rule with `body` or `hashesMatch` rests when more than MAX_SEARCHED_HITS hits are in scope. A plain exact count has no cap.
  */
 function passRestsOnProbableLink(ctx: Context, passes: (ctx: Context) => boolean, rule?: Rule): boolean {
   const probable = probableHits(ctx, rule);
