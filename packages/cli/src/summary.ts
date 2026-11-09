@@ -1,6 +1,6 @@
 import { guardFieldName, maskValuePath, OTHER_NAME, platformHostFor } from '@tagreeve/decoders';
 import type { FlagKind, HitLinkMiss, Result, ResultNote, RunRecords, ServerContainerErrorClass, Severity } from '@tagreeve/core';
-import { isServerHit, judgeIndex, labelKind, NO_EVENT, pushShapes, summarizeTags, tagLabel, viaHitOf, type PushShape, type PushShapes, type TagsContainerSummary } from '@tagreeve/expect';
+import { expectedTagsOf, isServerHit, judgeIndex, labelKind, listWithMore, NO_EVENT, pushShapes, summarizeTags, tagLabel, viaHitOf, type PushShape, type PushShapes, type TagsContainerSummary } from '@tagreeve/expect';
 import { formatDefaultsLine, type DefaultUsed } from './defaults.ts';
 import { NOTE_TEXT } from './report/model.ts';
 
@@ -126,8 +126,7 @@ export function buildSummary(records: RunRecords, results: Result[], path: strin
   const testPayment = testPaymentOf(records);
   const serverContainer = serverContainerOf(records);
   const dataLayer = pushShapes({ steps: records.steps, dataLayerEvents: records.dataLayerEvents ?? [] });
-  const override = records.run.gtmOverride;
-  const tags = summarizeTags(records.tagReports ?? [], override ? { container: override.container, tags: override.expectedTags } : undefined);
+  const tags = summarizeTags(records.tagReports ?? [], expectedTagsOf(records.run));
   return {
     runId: records.run.id,
     ...(records.run.label !== undefined && { label: records.run.label }),
@@ -293,7 +292,7 @@ function dataLayerLine({ pushes, steps }: PushShapes): string {
 const TAGS_SHOWN = 5;
 
 function tagList(items: string[]): string {
-  return items.length > TAGS_SHOWN ? `${items.slice(0, TAGS_SHOWN).join(', ')} and ${items.length - TAGS_SHOWN} more` : items.join(', ');
+  return listWithMore(items, TAGS_SHOWN);
 }
 
 function tagsLine(container: string, entry: TagsContainerSummary): string {

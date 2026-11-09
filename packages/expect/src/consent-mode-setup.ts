@@ -3,7 +3,7 @@ import { GCD_SIGNALS, gcdLetters, gcdSignals, type GcdSignalName } from '@tagree
 
 export const CONSENT_MODE_URL = 'https://developers.google.com/tag-platform/security/guides/consent';
 
-const GOOGLE_VENDORS = new Set(['ga4', 'google-ads']);
+export const GOOGLE_VENDORS: ReadonlySet<string> = new Set(['ga4', 'google-ads']);
 const TAG_ID = /^[A-Za-z]{1,3}-[A-Za-z0-9]{4,20}$/;
 const MAX_LISTED = 5;
 const MAX_LETTER_SETS = 3;

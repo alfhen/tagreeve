@@ -243,3 +243,23 @@ test('gcdLetters reads the four letters, shows ? for an unknown one and is undef
   expect(gcdLetters('13r3r3r3')).toBeUndefined();
   expect(gcdLetters(undefined)).toBeUndefined();
 });
+
+test.each([
+  [0, 'ad_storage'],
+  [1, 'analytics_storage'],
+  [2, 'ad_user_data'],
+  [3, 'ad_personalization'],
+] as const)('gcdSignals and gcdLetters read the same index for signal %i', (index, signal) => {
+  const letters = ['r', 'r', 'r', 'r'];
+  letters[index] = 'l';
+  const gcd = `13${letters.join('3')}5`;
+  expect(gcdLetters(gcd)![index]).toBe('l');
+  const signals = gcdSignals(gcd)!;
+  for (const name of ['ad_storage', 'analytics_storage', 'ad_user_data', 'ad_personalization'] as const) {
+    expect(signals[name].notSet, name).toBe(name === signal);
+  }
+});
+
+test('gcdLetters shows ? for an unknown letter', () => {
+  expect(gcdLetters('13p3q3r3z5')).toEqual(['p', 'q', 'r', '?']);
+});

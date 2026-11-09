@@ -55,8 +55,19 @@ function nameOf(report: TagReport, tag: { id: string; name: string | null }, exp
 
 export const tagLabel = (id: string, name: string | null | undefined): string => (name ? `${maskTagId(id)} ${maskTagName(name)}` : maskTagId(id));
 
+/** The expected tags the run's GTM override names, or undefined without an override. */
+export function expectedTagsOf(run: { gtmOverride?: { container: string; expectedTags: readonly GtmOverrideTag[] } | null } | undefined): ExpectedTags | undefined {
+  const override = run?.gtmOverride;
+  return override ? { container: override.container, tags: override.expectedTags } : undefined;
+}
+
+/** The first `max` items joined by commas, then `and N more`. */
+export function listWithMore(items: readonly string[], max: number): string {
+  return items.length > max ? `${items.slice(0, max).join(', ')} and ${items.length - max} more` : items.join(', ');
+}
+
 function listLabels(labels: string[]): string {
-  return labels.length > MAX_LISTED ? `${labels.slice(0, MAX_LISTED).join(', ')} and ${labels.length - MAX_LISTED} more` : labels.join(', ');
+  return listWithMore(labels, MAX_LISTED);
 }
 
 /** Reads tag reports only. The evidence is the `tag_` record IDs of the reports that hold a match. */

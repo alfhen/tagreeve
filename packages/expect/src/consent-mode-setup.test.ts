@@ -1,6 +1,6 @@
 import { newId, type DataLayerEvent, type Hit } from '@tagreeve/core';
 import { expect, test } from 'vitest';
-import { consentModeSetup } from './consent-mode-setup.ts';
+import { consentModeSetup, GOOGLE_VENDORS } from './consent-mode-setup.ts';
 import { evaluate } from './evaluate.ts';
 import { parseScenario } from './scenario.ts';
 
@@ -173,4 +173,41 @@ test('hits with no tag ID are grouped by vendor', () => {
   const m = consentModeSetup([hit('13l3r3r3r5', { params: {} }), hit('13l3r3r3r5', { vendor: 'google-ads', params: {} })], []).message;
   expect(m).toContain('Google tag GA4 (no tag ID) never set');
   expect(m).toContain('Google tag Google Ads (no tag ID) never set');
+});
+
+test('an Ads hit with ep.tid of a GA4 tag stays apart from the GA4 hit for that tag', () => {
+  const ga4 = hit('13r3l3r3r5');
+  const ads = hit('13l3r3r3r5', { vendor: 'google-ads', params: { conversionId: '000000001', 'ep.tid': 'G-PWTEST0001' } });
+  expect(ga4.params.tid).toBe('G-PWTEST0001');
+  expect(ads.params['ep.tid']).toBe('G-PWTEST0001');
+  const m = consentModeSetup([ga4, ads], []).message;
+  expect(m).toContain('Google tag G-PWTEST0001 never set analytics_storage');
+  expect(m).toContain('(gcd letters: rlrr)');
+  expect(m).toContain('Google tag AW-000000001 never set ad_storage');
+  expect(m).toContain('(gcd letters: lrrr)');
+  expect(m).not.toContain('G-PWTEST0001 never set ad_storage');
+});
+
+test('hits with only gcs are counted as carrying no gcd and never say every signal was set', () => {
+  const gcsOnly = () => hit(undefined, { consent: { ...hit(undefined).consent, raw: { gcs: 'G100' } } });
+  const hits = [gcsOnly(), gcsOnly()];
+  for (const h of hits) {
+    expect(h.consent.raw).toEqual({ gcs: 'G100' });
+    expect(h.consent.raw.gcd).toBeUndefined();
+  }
+  const r = consentModeSetup(hits, []);
+  expect(r.pass).toBe(true);
+  expect(r.message).toContain('no Google hit carried gcd, so the setup could not be read');
+  expect(r.message).not.toContain('found every signal set');
+});
+
+test('a full default set outside the dataLayer names the gcd letters per tag ID', () => {
+  const h = hit(FULL);
+  expect(h.consent.raw.gcd).toBe(FULL);
+  const r = consentModeSetup([h], []);
+  expect(r.message).toContain('default set outside the dataLayer (template API, TCF or other) (gcd letters: G-PWTEST0001 rrrr)');
+});
+
+test('the Google vendors are GA4 and Google Ads', () => {
+  expect([...GOOGLE_VENDORS].sort()).toEqual(['ga4', 'google-ads']);
 });

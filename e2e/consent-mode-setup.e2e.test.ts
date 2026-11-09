@@ -48,6 +48,7 @@ test('a full default pushed to the dataLayer passes', async () => {
 test('a full default with no dataLayer push passes and says it was set outside the dataLayer', async () => {
   const { code, result, records } = await setup('consent-mode-setup-outside');
   expect(records.dataLayerEvents.some((e) => e.isConsentCommand)).toBe(false);
+  expect(records.hits.some((h) => h.vendor === 'ga4' && h.consent.raw.gcd === '13r3r3r3r5'), 'a GA4 hit with gcd rrrr').toBe(true);
   expect(code).toBe(0);
   expect(result!.pass).toBe(true);
   expect(result!.message).toContain('default set outside the dataLayer');
