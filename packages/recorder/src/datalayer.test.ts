@@ -1,7 +1,7 @@
 import { runInNewContext } from 'node:vm';
 import { newId } from '@tagreeve/core';
 import { expect, test } from 'vitest';
-import { DATALAYER_BINDING, DATALAYER_TALLY, dataLayerEventFromPayload, dataLayerInitScript } from './datalayer.ts';
+import { DATALAYER_BINDING, DATALAYER_TALLY, DATALAYER_UNTRAPPED, dataLayerEventFromPayload, dataLayerInitScript } from './datalayer.ts';
 
 const MAIN = { main: true, n: 0 };
 
@@ -13,25 +13,23 @@ interface Sent {
   a?: number;
   uid?: number;
   reassigned?: true;
-  untrapped?: string;
 }
 
-function pageWith(setup: string, names: string[] = []): { sent: Sent[]; initial: Sent[]; run: (code: string) => unknown; flush: () => Promise<void> } {
+function pageWith(setup: string, names: string[] = []): { sent: Sent[]; run: (code: string) => unknown; flush: () => Promise<void> } {
   const sent: Sent[] = [];
-  const initial: Sent[] = [];
   const sandbox: Record<string, unknown> = {
     performance: { timeOrigin: 1000, now: () => 5 },
     Node: class {},
     queueMicrotask,
     addEventListener: () => {},
     [DATALAYER_BINDING]: (payload: Sent) => {
-      (payload.untrapped === undefined ? sent : initial).push(payload);
+      sent.push(payload);
       return Promise.resolve();
     },
   };
   sandbox.window = sandbox;
   runInNewContext(setup + dataLayerInitScript(names), sandbox);
-  return { sent, initial, run: (code) => runInNewContext(code, sandbox), flush: () => new Promise((resolve) => setTimeout(resolve, 0)) };
+  return { sent, run: (code) => runInNewContext(code, sandbox), flush: () => new Promise((resolve) => setTimeout(resolve, 0)) };
 }
 
 const argsOf = (sent: Sent[]) => sent.map((s) => JSON.parse(s.args) as unknown);
@@ -357,7 +355,7 @@ function realm(sent: Sent[], tag: string) {
     queueMicrotask,
     addEventListener: () => {},
     [DATALAYER_BINDING]: (payload: Sent) => {
-      if (payload.untrapped === undefined) sent.push({ ...payload, layer: tag });
+      sent.push({ ...payload, layer: tag });
       return Promise.resolve();
     },
   };
@@ -392,7 +390,7 @@ test('a push accessor the page defined is kept', async () => {
 });
 
 const tallyOf = (run: (code: string) => unknown): Tally => JSON.parse(JSON.stringify(run(`${DATALAYER_TALLY}()`))) as Tally;
-const untrappedOf = (page: { initial: Sent[] }): string[] => JSON.parse(page.initial[0]!.untrapped!) as string[];
+const untrappedOf = (run: (code: string) => unknown): string[] => JSON.parse(run(DATALAYER_UNTRAPPED) as string) as string[];
 
 test('one array under two names gives one tally entry, under the name it was hooked with', async () => {
   const page = pageWith('', ['myLayer']);
@@ -430,16 +428,29 @@ test('a page array with no marker and no hook in this realm keeps a: null', () =
   expect(tallyOf(page.run).arrays).toEqual([{ layer: 'dataLayer', a: null, length: 1, posted: 0 }]);
 });
 
-test('the init script sends the untrapped list once, before any page script', () => {
+test('page code cannot change the untrapped list a later tally returns', () => {
   const page = pageWith(`Object.defineProperty(globalThis, 'status', { get() { return ''; }, set() {}, configurable: true });`, ['status', 'myLayer']);
-  page.run(`Array.prototype.slice = () => ['myLayer']; Array.prototype[Symbol.iterator] = function* () {}; JSON.stringify = () => '[]'; window.Set = null;`);
-  expect(page.initial).toHaveLength(1);
-  expect(untrappedOf(page)).toEqual(['status']);
+  page.run(`const t = ${DATALAYER_TALLY}(); t.untrapped = ['myLayer']; try { Object.defineProperty(window, '${DATALAYER_UNTRAPPED}', { value: '[]' }); } catch {}`);
+  expect(untrappedOf(page.run)).toEqual(['status']);
+});
+
+test('page code cannot change the untrapped list by replacing Array methods', () => {
+  const page = pageWith(`Object.defineProperty(globalThis, 'status', { get() { return ''; }, set() {}, configurable: true });`, ['status', 'myLayer']);
+  page.run(`Array.prototype.slice = () => ['myLayer', 'dataLayer']; Array.prototype[Symbol.iterator] = function* () {}; JSON.stringify = () => '[]';`);
+  expect(untrappedOf(page.run)).toEqual(['status']);
+});
+
+test('page code that breaks Set or makes the array iterator throw cannot hide the untrapped list', () => {
+  for (const sabotage of [`window.Set = null;`, `Array.prototype[Symbol.iterator] = function () { throw 1; };`]) {
+    const page = pageWith(`Object.defineProperty(globalThis, 'status', { get() { return ''; }, set() {}, configurable: true });`, ['status', 'myLayer']);
+    page.run(sabotage);
+    expect(untrappedOf(page.run)).toEqual(['status']);
+  }
 });
 
 test('a name the page defined as an accessor is untrapped and not replaced', () => {
   const page = pageWith(`Object.defineProperty(globalThis, 'status', { get() { return ''; }, set() {}, configurable: true });`, ['status', 'myLayer']);
-  expect(untrappedOf(page)).toEqual(['status']);
+  expect(untrappedOf(page.run)).toEqual(['status']);
   expect(page.run(`'value' in Object.getOwnPropertyDescriptor(window, 'status')`)).toBe(false);
 });
 

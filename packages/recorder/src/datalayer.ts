@@ -6,6 +6,7 @@ export const DATALAYER_BINDING = '__tagreeveDataLayer';
 export const DEFAULT_DATALAYER = 'dataLayer';
 
 export const DATALAYER_TALLY = '__tagreeveTally';
+export const DATALAYER_UNTRAPPED = '__tagreeveUntrapped';
 
 export function hookedLayerNames(names: readonly string[] = []): string[] {
   return [...new Set([DEFAULT_DATALAYER, ...names.filter((name) => name !== DEFAULT_DATALAYER && isDataLayerName(name))])];
@@ -263,8 +264,8 @@ export function dataLayerInitScript(names: readonly string[] = []): string {
       },
     });
   }
-  // Sent here, before any page script runs. The recorder keeps only the first such message of a document, so page code cannot fake or hide it.
-  post({ t: clock(), args: '[]', untrapped: JSON.stringify(untrapped) });
+  // A frozen string on window, so the answer needs no page-reachable code to read.
+  Object.defineProperty(window, ${JSON.stringify(DATALAYER_UNTRAPPED)}, { value: JSON.stringify(untrapped) });
   Object.defineProperty(window, ${JSON.stringify(DATALAYER_TALLY)}, {
     value: () => {
       const arrays = [];
@@ -310,8 +311,6 @@ export interface DataLayerPayload {
   uid?: number;
   /** The page replaced `window.dataLayer` with another array. */
   reassigned?: true;
-  /** The names the init script could not trap, as a JSON array. Sent once, at document start. */
-  untrapped?: string;
 }
 
 export function isDataLayerName(name: unknown): name is string {
