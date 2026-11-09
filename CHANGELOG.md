@@ -2,36 +2,34 @@
 
 ## 0.6.2
 
-`npm i -g tagreeve` installs this release. 0.6.2 fixes the issues found in the review of 0.6.1. It has no new command and no new option. The record stays at schema version 5. After its release, 0.6.1 was field-tested on a Shopify store with a real GTM web container.
+`npm i -g tagreeve` installs this release. 0.6.2 fixes the issues found in the review of 0.6.1. It has no new command and no new option. The record stays at schema version 5. 0.6.1 was field-tested on a Shopify store with a real GTM web container.
 
 ### What 0.6.2 fixes
 
-- A test payment ends by its deadline when a card frame stops answering before the fill. The reason reads `the card frame could not be read`. The grace after the deadline no longer restarts at each await, and the card fields share the step deadline (#1404, #1418, #1462).
+- A test payment ends by its deadline when a card frame stops answering before the fill. The reason reads `the card frame could not be read`. The grace after the deadline no longer restarts at each await, and the card fields share the step deadline (#1404, #1418).
 - A click inside a submit button remembers the button's form for the next `wait` timeout. When that form is gone, the timeout lists every blocking control (#1419, #1415).
 - The handoff label uses the room up to the pill's width limit, and the pill has a 14 px radius, so four lines are not cut at the corners (#1428, #1411).
 - A scoped `must` rule tries every placement of the unlinked and probable server hits in scope. A probable hit is placed by its link, by its own time or left out. The rule warns when a placement could change the verdict. A rule with `body` or `identity.hashesMatch` tries every subset up to 10 such hits and always warns above 10. A plain exact count is searched by number with no cap. At-least and at-most counts try the same placements.
 - An unload send no longer breaks a client ID link between a server hit and its browser hit.
-- `diff`: a move or a kind change of a joined pair names the recorded event with `renamedFrom`, and a move has an optional `pushKind` in `--json`. A cross-epoch join forms only when it can become a move. The `push kind changed` warning says `(renamed from <name>)` for a joined pair. Also, a kind change does not report the `event` key path (#1456, #1461).
+- `diff`: a move or a kind change of a joined pair names the recorded event with `renamedFrom`, and a move has an optional `pushKind` in `--json`. A cross-epoch join forms only when it can become a move. The `push kind changed` warning says `(renamed from <name>)` for a joined pair. Also, a kind change of a joined pair does not report the `event` key path (#1456).
 - A dataLayer push finding with no field path reads `in the push`, not `in the body`.
 - `tagreeve init` creates nothing when one of its targets is refused (#1455).
-- The plain-hash message names the vendors that sent the plain field. A plain city, postal code or country is judged by one rule for vendors that require hashes. A value that only a binary-edged or glued base64 token holds is counted next to a longer value it ends, not merged into it (#1349, #1350, #1352, #1007, #1162, #1470).
+- The plain-hash message names the vendors that sent the plain field. A plain city, postal code or country is judged by one rule for vendors that require hashes. A value that only a binary-edged or glued base64 token holds is counted next to a longer value it ends, not merged into it (#1349, #1350, #1352, #1007, #1162).
 - Every duration key in a scenario fails with the same message: "must be a duration such as 4s, 500ms or 2m" (#1327).
-- `template web` reads the template only from the recorder package. When the bundled file is missing, it exits 2 with an error and prints nothing else (#1180).
-- `pnpm build --outdir` refuses a non-empty folder outside the repo that holds no build, and `pnpm test` no longer deletes `dist/` (#1468, #1181).
+- `template web` reads the template only from the recorder package. When the bundled file is missing, it exits 2 with an error and prints nothing else.
+- `pnpm build --outdir` refuses a non-empty folder outside the repo that holds no build, and `pnpm test` no longer deletes `dist/`.
 - The docs match the code on frame deadlines, `inputs not readable`, unload sends and the `event` key path of a kind change. Three lines of 0.6.1 are corrected (#1395, #1397, #1413, #1435, #1436, #1437, #1445, #1446, #1447, #1438, #1439, #1477, #1478, #1479, #1480, #1481).
 - Site: the agent callout on a guide follows the first paragraph (#750). The finished demo hit list scrolls and keeps every hit (#837). The run panel shows its Result line (#838). The commands panel keeps its indent when copied and does not split `--site` (#835). The docs theme fade covers the header and the sidebar (#857). The demo reply check allows only the numbers a reply can state (#759).
 
-Tests and cleanup: one rule or one owner for the folder names and the `Defaults:` line, Google loader URLs, layer names, GTM tag statuses, durations, push shapes, the event map, `GOOGLE_VENDORS`, `expectedTagsOf`, the "and N more" list helper and `gcdLetterAt`. `suite` lets a usage error go up to `main`, as `run` does, with the same text and exit code. The `dataLayer` hook, the unload gap, push shape, diff and payment tests check their inputs first and cover more cases. No change in output. Issues: #972, #1041, #1049, #1061, #1330, #1137, #1132, #1236, #1357, #1238, #1318, #1105, #1106, #1107, #1108, #1325, #1124, #1169, #1365, #954, #1380, #1425, #1312, #1317, #1251, #1252, #1291, #1209, #1379, #1243, #1355, #1359, #1358, #1300, #1218, #1217, #1171, #1172, #1212, #1213, #1116, #1117, #1118, #1178, #1332, #1186, #1150, #1224, #1222, #1305, #1307, #1167, #1378, #1144, #1341, #1146, #1192, #1244, #1340, #1195, #1155, #1156, #908, #1338, #1412, #1202, #1417, #1467, #1474, #760, #729, #866.
+Tests and cleanup: one rule or one owner for the folder names and the `Defaults:` line, Google loader URLs, layer names, GTM tag statuses, durations, push shapes, the event map, `GOOGLE_VENDORS`, `expectedTagsOf`, the "and N more" list helper and `gcdLetterAt`. `suite` lets a usage error go up to `main`, as `run` does, with the same text and exit code. The `dataLayer` hook, the unload gap, push shape, diff and payment tests check their inputs first and cover more cases. No change in output. Issues: #972, #1041, #1049, #1061, #1330, #1137, #1132, #1236, #1357, #1238, #1318, #1105, #1106, #1107, #1108, #1325, #1124, #1169, #1365, #954, #1380, #1425, #1312, #1317, #1251, #1252, #1291, #1209, #1379, #1243, #1355, #1359, #1358, #1300, #1218, #1217, #1171, #1172, #1212, #1213, #1116, #1117, #1118, #1180, #1178, #1332, #1181, #1186, #1150, #1224, #1222, #1305, #1307, #1167, #1378, #1144, #1341, #1146, #1192, #1244, #1340, #1195, #1155, #1156, #908, #1338, #1412, #1202, #1417, #1462, #1467, #1468, #1470, #1474, #760, #729, #866.
 
 ### Upgrading from 0.6.1
 
-- **A `must` rule can warn where 0.6.1 failed.** With `--server-container`, a scoped rule now warns with `serverSendUnlinked` or `serverSendProbableLink` when some placement of the unlinked or probable-linked server hits in scope gives another verdict. This is true even when browser hits are in the evidence. A run that exited 1 in 0.6.1 can exit 0, and a rule that gave PASS can warn.
+- **A `must` rule can warn where 0.6.1 failed.** With `--server-container`, a scoped rule now warns with `serverSendUnlinked` or `serverSendProbableLink` when some placement of the unlinked or probable-linked server hits in scope gives another verdict. With an exact count this is true even when browser hits are in the evidence. A run that exited 1 in 0.6.1 can exit 0, and a rule that gave PASS can warn.
 - **A call with an unload send keeps its client ID link.** A send from `pagehide` or `visibilitychange` no longer gives `concurrentRequest`.
 - **The handoff label is wider on a wide window** and still fits a narrow one.
 - **A `wait` timeout lists every control** when the clicked form is gone from the page.
-- **`diff --json` has new fields.** A `moved` or `kindChanged` entry can have `renamedFrom`, and a `moved` entry can have `pushKind`. A cross-epoch event join needs a neighbouring epoch.
-- **A `possibleRealDataPush` finding with no field path reads `in the push`,** not `in the body`.
-- **A test payment step has one deadline.** All card fields share the step timeout, so a step that needed more than one timeout in 0.6.1 now fails. Raise the step timeout if it does.
+- **`diff --json` has new fields.** A `moved` or `kindChanged` entry can have `renamedFrom`, and a `moved` entry can have `pushKind`. A push finding with no path reads `in the push`. A cross-epoch event join needs a neighbouring epoch.
 - **`tagreeve init` refuses before it writes.** When a target is refused, it creates nothing.
 - **A scenario with a bad duration key** fails with one message for every key.
 - **The record stays at version 5.** A 0.6.1 record reads as before.
@@ -66,7 +64,7 @@ Issues still open that you can meet:
 - `consentModeSetup` reads the `gcd` letters, whose format is documented only by the community.
 - Hits and pushes are not joined per frame (#931, #932).
 - A blocking control with no `aria-label`, `name` or `id` has no name in a `wait` timeout message.
-- Seven other `review-minor` issues are open. They are test gaps, wording, build edge cases and a vendor name table.
+- Other `review-minor` issues are open. They are test gaps, wording, build edge cases and a vendor name table.
 
 ## 0.6.1
 
