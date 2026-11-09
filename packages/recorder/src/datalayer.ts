@@ -267,25 +267,28 @@ export function dataLayerInitScript(names: readonly string[] = []): string {
   Object.defineProperty(window, ${JSON.stringify(DATALAYER_TALLY)}, {
     value: () => {
       const arrays = [];
-      const seen = new Set();
-      for (const name of names) {
-        try {
-          let layer;
-          reading = true;
+      // Page code can break Set or the array iterator; the untrapped list must still come back.
+      try {
+        const seen = new Set();
+        for (const name of names) {
           try {
-            layer = window[name];
-          } finally {
-            reading = false;
-          }
-          if (!Array.isArray(layer) || seen.has(layer)) continue;
-          seen.add(layer);
-          const state = hooks.get(layer);
-          // Another frame's hook owns it and that frame counts it.
-          if (!state && Object.prototype.hasOwnProperty.call(layer, '__tagreeveHooked')) continue;
-          if (state) state.sync();
-          arrays.push({ layer: state ? state.name : name, a: state ? state.info.a : null, length: layer.length, posted: state ? state.info.posted : 0 });
-        } catch {}
-      }
+            let layer;
+            reading = true;
+            try {
+              layer = window[name];
+            } finally {
+              reading = false;
+            }
+            if (!Array.isArray(layer) || seen.has(layer)) continue;
+            seen.add(layer);
+            const state = hooks.get(layer);
+            // Another frame's hook owns it and that frame counts it.
+            if (!state && Object.prototype.hasOwnProperty.call(layer, '__tagreeveHooked')) continue;
+            if (state) state.sync();
+            arrays.push({ layer: state ? state.name : name, a: state ? state.info.a : null, length: layer.length, posted: state ? state.info.posted : 0 });
+          } catch {}
+        }
+      } catch {}
       return { d: token, arrays, untrapped: untrappedText };
     },
   });
