@@ -198,6 +198,10 @@ test('0.6.2 docs text: design.md, guides and records.ts', () => {
 test('#1477: the 0.6.2 changelog says a kind change does not report the event path', () => {
   const released = section(read('CHANGELOG.md'), '## 0.6.2', '## 0.6.1\n');
   expect(released).toContain('a kind change of a joined pair does not report the `event` key path');
+  const kind =
+    'A kind change compares the two groups without the `event` key path of the object form, because the gtag form holds the event name in its arguments, so it adds no `pathsAdded` or `pathsRemoved` entry for `event`. A gtag body with its own `event` key keeps the path on both sides.';
+  expect(line(read('docs/cli.md'), '`kindChanged` is a list of')).toContain(kind);
+  expect(line(read('docs/design.md'), '`tagreeve diff a b` groups hits')).toContain(kind);
 });
 
 test('#1478: the payment frame deadlines are named, not "the step deadline"', () => {
