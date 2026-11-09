@@ -44,13 +44,14 @@ export function flagChangeLabel(f: { kind: string; host: string; a: number; b: n
 
 /** One line per push change, with key paths and types only. */
 export function describePushDiff(d: PushDiff): string[] {
+  const named = (r: { event: string; renamedFrom?: string }) => (r.renamedFrom === undefined ? r.event : `${r.event} (renamed from ${r.renamedFrom})`);
   const at = (r: { epoch: string; frame: string; kind?: string }) => `[epoch ${r.epoch}, frame ${r.frame}${r.kind === undefined ? '' : `, kind ${r.kind}`}]`;
   return [
     ...d.eventsRemoved.map((r) => `removed event ${r.event} ${at(r)}`),
     ...d.eventsAdded.map((r) => `new event ${r.event} ${at(r)}`),
-    ...d.pathsRemoved.map((p) => `missing path ${p.path} (${p.types.join('|')}) in ${p.event} ${at(p)}`),
-    ...d.pathsAdded.map((p) => `new path ${p.path} (${p.types.join('|')}) in ${p.event} ${at(p)}`),
-    ...d.typeChanges.map((p) => `type change ${p.path}: ${p.a.join('|')} -> ${p.b.join('|')} in ${p.event} ${at(p)}`),
+    ...d.pathsRemoved.map((p) => `missing path ${p.path} (${p.types.join('|')}) in ${named(p)} ${at(p)}`),
+    ...d.pathsAdded.map((p) => `new path ${p.path} (${p.types.join('|')}) in ${named(p)} ${at(p)}`),
+    ...d.typeChanges.map((p) => `type change ${p.path}: ${p.a.join('|')} -> ${p.b.join('|')} in ${named(p)} ${at(p)}`),
     ...d.moved.map((m) =>
       m.kind === 'frame'
         ? `moved event ${m.event} from frame ${m.from} to ${m.to} [epoch ${m.epoch}]`

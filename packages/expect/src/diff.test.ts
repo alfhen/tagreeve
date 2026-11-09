@@ -2,7 +2,7 @@ import { newId, type ConsentEpoch, type Flag, type Hit, type Request, type RunRe
 import { describe, expect, test } from 'vitest';
 import type { DataLayerEvent } from '@tagreeve/core';
 import { parseEventMap } from './event-map.ts';
-import { diffPushes, diffRuns, diffShapes, hitShape, pushGroups, type PushGroup, type ShapeKey, type ShapeTuple } from './diff.ts';
+import { diffPushes, diffRuns, diffShapes, hitShape, pairNames, pushGroups, type PushGroup, type ShapeKey, type ShapeTuple } from './diff.ts';
 
 const state = { analytics: 'denied', ads: 'denied', adUserData: 'denied', adPersonalization: 'denied' } as const;
 const consent = { ...state, raw: { gcs: 'G100' } };
@@ -591,11 +591,76 @@ describe('diffPushes', () => {
     expect(diffPushes([group({ paths })], [group({ epoch: 'granted', paths: [] })], { epochOrder: order }).changed).toBe(true);
   });
 
+  test('a Shopify name is never merged into a purchase group recorded in its own epoch', () => {
+    const x = [{ path: 'event', types: ['string'] }];
+    const d = diffPushes(
+      [group({ event: 'checkout_completed', paths: [...x, { path: 'only_cc', types: ['string'] }] }), group({ event: 'purchase', paths: x })],
+      [group({ event: 'purchase', paths: x }), group({ epoch: 'granted', event: 'purchase', paths: x })],
+    );
+    expect(d.changed).toBe(true);
+    expect(JSON.stringify(d)).not.toContain('renamed from');
+    expect(d.eventsRemoved.map((r) => r.event)).toContain('checkout_completed');
+  });
+
+  test('a paths key named by the events target applies when the target is a Shopify name', () => {
+    const eventMap = parseEventMap(JSON.stringify({ events: { order_done: 'checkout_completed' }, paths: { checkout_completed: { total: 'value' } } }), 'm.json');
+    const d = diffPushes([group({ event: 'order_done', paths: [{ path: 'total', types: ['number'] }] })], [group({ event: 'checkout_completed', paths: [{ path: 'value', types: ['number'] }] })], { eventMap });
+    expect(d.changed).toBe(false);
+  });
+
   test('the built-in table makes a Shopify name and its GA4 name the same event', () => {
     const paths = [{ path: 'value', types: ['number'] }];
     const d = diffPushes([group({ event: 'checkout_completed', paths })], [group({ event: 'purchase', paths })]);
     expect(d.changed).toBe(false);
     expect(diffPushes([group({ event: 'custom_a', paths })], [group({ event: 'custom_b', paths })]).changed).toBe(true);
+  });
+
+  test('two runs that both push one recorded name report it as recorded', () => {
+    const d = diffPushes([group({ event: 'checkout_completed', paths: [] })], [group({ event: 'checkout_completed', paths: [{ path: 'x', types: ['string'] }] })]);
+    expect(d.pathsAdded).toEqual([{ epoch: 'undecided', event: 'checkout_completed', kind: 'object', frame: 'main', path: 'x', types: ['string'] }]);
+  });
+
+  test('a run with both names against a run with one reports one removed event', () => {
+    const d = diffPushes([group({ event: 'checkout_completed' }), group({ event: 'purchase' })], [group({ event: 'purchase' })]);
+    expect(d.eventsRemoved.map((e) => e.event)).toEqual(['checkout_completed']);
+    expect(d.eventsAdded).toEqual([]);
+    expect(d.changed).toBe(true);
+  });
+
+  test('a pair joined by the table is named as side b pushed it, with renamedFrom', () => {
+    const d = diffPushes([group({ event: 'checkout_completed' })], [group({ event: 'purchase', paths: [{ path: 'coupon', types: ['string'] }] })]);
+    expect(d.pathsAdded).toEqual([expect.objectContaining({ event: 'purchase', renamedFrom: 'checkout_completed', path: 'coupon' })]);
+    expect(JSON.stringify(d)).not.toMatch(/"event":"checkout_completed"/);
+    const same = diffPushes([group({ event: 'checkout_completed' })], [group({ event: 'purchase' })]);
+    expect(same.changed).toBe(false);
+  });
+
+  test('a removed event keeps side a name and an added event side b name', () => {
+    const d = diffPushes([group({ event: 'old_one' })], [group({ event: 'new_one' })]);
+    expect(d.eventsRemoved[0]).not.toHaveProperty('renamedFrom');
+    expect(d.eventsRemoved.map((e) => e.event)).toEqual(['old_one']);
+    expect(d.eventsAdded.map((e) => e.event)).toEqual(['new_one']);
+  });
+
+  test('two events of one run that map to one name stay two nodes', () => {
+    const eventMap = parseEventMap(JSON.stringify({ events: { custom_a: 'custom_c', custom_b: 'custom_c' } }), 'm.json');
+    const d = diffPushes([group({ event: 'custom_a' }), group({ event: 'custom_b' })], [group({ event: 'custom_c' })], { eventMap });
+    expect(d.eventsRemoved).toHaveLength(1);
+    expect(d.eventsRemoved[0]!.event).toBe('custom_b');
+    expect(d.eventsAdded).toEqual([]);
+  });
+
+  test('a kind change with equal paths is a change', () => {
+    const d = diffPushes([group({ kind: 'gtag', paths: [{ path: 'x', types: ['string'] }] })], [group({ kind: 'object', paths: [{ path: 'x', types: ['string'] }] })]);
+    expect(d.kindChanged).toHaveLength(1);
+    expect(d.changed).toBe(true);
+  });
+
+  test('a move alone is not a change', () => {
+    const paths = [{ path: 'x', types: ['string'] }];
+    const d = diffPushes([group({ paths })], [group({ epoch: 'granted', paths })], { epochOrder: ['undecided', 'granted'] });
+    expect(d.moved).toHaveLength(1);
+    expect(d.changed).toBe(false);
   });
 
   test('a user map renames an event and a path of the first side', () => {
@@ -604,6 +669,97 @@ describe('diffPushes', () => {
     const b = [group({ event: 'custom_b', paths: [{ path: 'value', types: ['number'] }] })];
     expect(diffPushes(a, b, { eventMap }).changed).toBe(false);
     expect(diffPushes(a, b).changed).toBe(true);
+  });
+
+  test('a pair matched by recorded name uses a paths entry keyed by its GA4 name', () => {
+    const eventMap = parseEventMap(JSON.stringify({ paths: { purchase: { total: 'value' } } }), 'm.json');
+    const a = [group({ event: 'checkout_completed', paths: [{ path: 'total', types: ['number'] }] })];
+    const b = [group({ event: 'checkout_completed', paths: [{ path: 'value', types: ['number'] }] })];
+    expect(diffPushes(a, b, { eventMap }).changed).toBe(false);
+  });
+
+  test('a pair matched by recorded name does not take the paths entry of an event renamed to its GA4 name', () => {
+    const eventMap = parseEventMap(JSON.stringify({ events: { custom_a: 'purchase' }, paths: { purchase: { total: 'value' } } }), 'm.json');
+    const a = [group({ event: 'checkout_completed', paths: [{ path: 'total', types: ['number'] }] })];
+    const b = [group({ event: 'checkout_completed', paths: [{ path: 'total', types: ['number'] }] })];
+    expect(diffPushes(a, b, { eventMap }).changed).toBe(false);
+  });
+
+  test('a removed event keeps its side a name when its pair joins across epochs that are not next to each other', () => {
+    const a = [group({ epoch: 'undecided', event: 'checkout_completed' })];
+    const b = [group({ epoch: 'denied', event: 'purchase' })];
+    const d = diffPushes(a, b, { epochOrder: ['undecided', 'granted', 'denied'] });
+    expect(d.eventsRemoved).toEqual([{ epoch: 'undecided', event: 'checkout_completed', kind: 'object', frame: 'main' }]);
+    expect(d.eventsAdded).toEqual([{ epoch: 'denied', event: 'purchase', kind: 'object', frame: 'main' }]);
+  });
+});
+
+describe('pairNames', () => {
+  const NAMES = ['checkout_completed', 'order_done', 'purchase'];
+  const EPOCHS = ['undecided', 'granted'];
+  const eventMap = parseEventMap(JSON.stringify({ events: { checkout_completed: 'purchase', order_done: 'purchase' } }), 'm.json');
+  const keyOf = (g: { epoch: string; event: string }): string => JSON.stringify([g.epoch, g.event]);
+  const cells = EPOCHS.flatMap((epoch) => NAMES.map((event) => ({ epoch, event })));
+  const sides: { epoch: string; event: string }[][] = [];
+  for (let m = 0; m < 1 << cells.length; m++) {
+    const picked = cells.filter((_, i) => m & (1 << i));
+    if (picked.length <= 2) sides.push(picked);
+  }
+  const toGroups = (cs: { epoch: string; event: string }[], tag: string): PushGroup[] => cs.map((c) => ({ ...c, kind: 'object', frame: 'main', paths: [{ path: `${tag}.${c.epoch}.${c.event}`, types: ['string'] }] }));
+
+  const assertInvariants = (a: PushGroup[], b: PushGroup[]): void => {
+    const out = pairNames(a, b, eventMap);
+    expect(out).toHaveLength(a.length);
+    const outKeys = out.map(keyOf);
+    expect(new Set(outKeys).size).toBe(new Set(a.map(keyOf)).size);
+    out.forEach((o, i) => {
+      expect(o.epoch).toBe(a[i]!.epoch);
+      expect(o.paths.length).toBeGreaterThan(0);
+    });
+    const inA = new Set(a.map(keyOf));
+    const inB = new Set(b.map(keyOf));
+    const joinedByTarget = new Map<string, Set<string>>();
+    out.forEach((o, i) => {
+      const rec = a[i]!;
+      if (inB.has(keyOf(rec))) {
+        expect(o.event).toBe(rec.event);
+        expect(o.renamedFrom).toBeUndefined();
+      }
+      if (o.renamedFrom === undefined) {
+        expect(o.event).toBe(rec.event);
+        return;
+      }
+      expect(o.renamedFrom).toBe(rec.event);
+      expect(inB.has(keyOf(rec))).toBe(false);
+      joinedByTarget.set(o.event, (joinedByTarget.get(o.event) ?? new Set()).add(keyOf(rec)));
+    });
+    for (const [name, froms] of joinedByTarget) {
+      const free = new Set(b.filter((g) => g.event === name && !inA.has(keyOf(g))).map(keyOf));
+      expect(froms.size).toBeLessThanOrEqual(free.size);
+    }
+    const renamed = out.filter((o) => o.renamedFrom !== undefined).map((o) => keyOf({ epoch: o.epoch, event: o.event }));
+    for (const k of renamed) expect(outKeys.filter((x) => x === k)).toHaveLength(1);
+  };
+
+  test('every first-side group has one output, no two first-side names share a node, renamedFrom is the joined group, recorded names pair first', () => {
+    let n = 0;
+    for (const sa of sides) {
+      for (const sb of sides) {
+        assertInvariants(toGroups(sa, 'a'), toGroups(sb, 'b'));
+        n++;
+      }
+    }
+    expect(n).toBe(sides.length ** 2);
+  });
+
+  test('a join across epochs never gives two first-side events one name', () => {
+    const a = toGroups([{ epoch: 'undecided', event: 'checkout_completed' }, { epoch: 'undecided', event: 'order_done' }], 'a');
+    const b = toGroups([{ epoch: 'undecided', event: 'purchase' }, { epoch: 'granted', event: 'purchase' }], 'b');
+    const out = pairNames(a, b, eventMap);
+    expect(out.map((o) => o.event)).toEqual(['purchase', 'order_done']);
+    const d = diffPushes(a, b, { eventMap, epochOrder: ['undecided', 'granted'] });
+    expect(d.eventsRemoved.map((e) => e.event)).toEqual(['order_done']);
+    expect(d.eventsAdded.map((e) => e.event)).toEqual(['purchase']);
   });
 });
 

@@ -180,6 +180,19 @@ describe('dataLayer lines', () => {
     );
   });
 
+  test('a pair the table joined reads renamed from in a path line', () => {
+    const joined = {
+      ...pushes,
+      eventsAdded: [],
+      eventsRemoved: [],
+      pathsRemoved: [],
+      typeChanges: [],
+      moved: [],
+      pathsAdded: [{ epoch: 'undecided', event: 'purchase', frame: 'main', renamedFrom: 'checkout_completed', path: 'coupon', types: ['string'] }],
+    };
+    expect(formatDiff({ ...empty, dataLayer: joined }, 'a', 'b')).toContain('  new path coupon (string) in purchase (renamed from checkout_completed) [epoch undecided, frame main]\n');
+  });
+
   test('an unchanged dataLayer section still says no differences', () => {
     const none = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], typeChanges: [], moved: [], kindChanged: [], changed: false };
     expect(formatDiff({ ...empty, dataLayer: none }, 'a', 'b')).toContain('No differences.');

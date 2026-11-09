@@ -89,10 +89,16 @@ function commandOf(e: DataLayerEvent): Command | undefined {
   return list !== undefined && isGtagCommand(list) ? { list, fromObject: true } : undefined;
 }
 
+const CONSENT_COMMANDS = new Set(['default', 'update']);
+
+function isObjectConsent(command: Command | undefined): boolean {
+  return command?.fromObject === true && command.list[0] === 'consent' && typeof command.list[1] === 'string' && CONSENT_COMMANDS.has(command.list[1]);
+}
+
 function commandLabel(command: Command): string {
   const [name, second] = command.list;
   if (command.fromObject && typeof second === 'string') {
-    if (name === 'consent') return `consent ${safeName(second)}`;
+    if (isObjectConsent(command)) return `consent ${second}`;
     if (name === 'event') return safeName(second);
   }
   return GTAG_COMMANDS.has(name) ? `gtag ${name}` : GTAG_OTHER;
@@ -111,7 +117,8 @@ function frameKind(e: DataLayerEvent): PushFrameKind {
 // gtm.* pushes are counts only, and a consent command keeps its signal names without the granted or denied values.
 function collectPaths(e: DataLayerEvent, command: Command | undefined, into: Map<string, Set<string>>): void {
   if (e.event?.startsWith('gtm.')) return;
-  if (e.isConsentCommand || (command?.fromObject && command.list[0] === 'consent')) {
+  if (command?.fromObject && command.list[0] === 'event' && typeof command.list[1] === 'string' && command.list[1].startsWith('gtm.')) return;
+  if (e.isConsentCommand || isObjectConsent(command)) {
     const signals = (command?.fromObject ? command.list : e.args)[2];
     if (typeof signals === 'object' && signals !== null) for (const [name, value] of Object.entries(signals)) walk(value, safeKey(name), 0, into);
     return;

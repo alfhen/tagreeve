@@ -6,7 +6,9 @@ Not released yet. The newest release is 0.6.0, below.
 
 - A `dataLayer` push that holds an email, phone or hash that is not from the run identity now gets a `possibleRealDataPush` flag. It is a warning: the `possibleRealData` check does not count it and the exit code does not change. The flag detail names the push and the key paths, never the value. A tag name with a hex token after a character such as `!`, `$`, `^` or `~` reads `(other)` (#937, #1322).
 
-<!-- E09 -->
+- `diff` names an event as the run pushed it, and a pair joined by the event table or an event map shows `renamedFrom` in `--json` and `(renamed from <name>)` in the text (#1246). `changed` is true when a push kind changed (#1370).
+- An event map error gives a key position and no key text, and positions follow the order written in the file. A swap or chain map applies each `paths` entry to one event (#1316, #1314, #1315).
+- An arguments-like `consent` push other than `default` or `update` reads `gtag consent`, and an arguments-like `gtm.*` event has no paths (#1373).
 
 - `consentModeSetup` names a hit with no tag ID by its vendor, lists letter sets with an `l` first and counts the tag IDs it leaves out. A page parameter can no longer set the Google Ads conversion ID.
 
