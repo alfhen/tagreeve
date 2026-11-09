@@ -26,7 +26,7 @@ Not released yet. The newest release is 0.6.0, below.
 
 <!-- V09 -->
 
-<!-- C09 -->
+- Docs: the path defaults, the tag `status` values, the `dataLayerNotHooked` and `unloadGap` text, the `diff` and baseline text, the exit 2 row and the tag reports advice say what the code does. The docs also cover the wave 1 and wave 2 changes above (#1288, #1289, #1319, #1323, #1334, #1342, #1344, #1353, #1366, #1377, #1389). Two lines of 0.6.0-rc.3 are corrected (#1294, #1337).
 
 <!-- R15 -->
 
@@ -110,7 +110,7 @@ Release candidate. Install it with `npm i -g tagreeve@next`.
 
 ### What 0.6.0-rc.3 adds
 
-- Fixed: the web tag reporter works in real GTM, which gives tag IDs as numbers. In 0.6.0-rc.2 every report from a published container was recorded as an invalid report (`tagReport:tagId`). The template now sends IDs as strings, and the parser also accepts numbers, so a 0.6.0-rc.2 template keeps working.
+- Fixed: the web tag reporter works in real GTM, which gives tag IDs as numbers. In 0.6.0-rc.2 every report seen in a GTM preview was recorded as an invalid report (`tagReport:tagId`). The template now sends IDs as strings, and the parser also accepts numbers, so a 0.6.0-rc.2 template keeps working.
 - An invalid tag report now has `got`, the type of the rejected value. It never holds the value. The record stays at version 5.
 - The template's `read_data_layer` permission now lists `allowedKeys: specific`, so an import cannot widen it to every key.
 
@@ -145,7 +145,7 @@ Release candidate. Install it with `npm i -g tagreeve@next`.
 - The git-ignore probe file is `run_probe.jsonl`, so a `run_*.jsonl` rule counts as ignoring run records (#1139).
 - `init` asks git about the `tagreeve/runs/` folder itself, so a `.gitignore` with only `*.jsonl` still gets the `/tagreeve/runs/` line (#1140).
 
-- Fixed: a card frame that moves or reloads while a test payment fill runs out of time now fails with the gone-frame reason, not a Playwright timeout message (#1164, #1161, #1163).
+- Fixed: a card frame that moves, or reloads after its input was found, while a test payment fill runs out of time now fails with the gone-frame reason, not a Playwright timeout message (#1164, #1161, #1163).
 
 - An option with no command, such as `tagreeve --event-map x.json`, exits 2 (#1255).
 - `template` with an unknown name says so without echoing it, and extra arguments get their own message (#1182).

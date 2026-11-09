@@ -108,7 +108,7 @@ expect:
     - { tag: { name: "Meta *", status: [failure, exception, timeout] } }
 ```
 
-A rule with no report for its container cannot be evaluated. It fails with `noTagReports` and never passes. A name pattern on a tag with no name fails with `tagNameUnknown`. The HTML report shows both as CANNOT EVALUATE. See [Rules on tags](../cli.md#rules-on-tags) for the keys.
+A rule with no report for its container cannot be evaluated. It fails with `noTagReports` and never passes. A name pattern on a tag with no name fails with `tagNameUnknown`. For `noTagReports`, install the reporter template in the container and run with `--gtm-override`, so the page loads that workspace and the reporter sends its reports. The HTML report shows both as CANNOT EVALUATE. See [Rules on tags](../cli.md#rules-on-tags) for the keys.
 
 ## What the reports cannot tell you
 
