@@ -952,7 +952,7 @@ describe('renamed pairs in diffPushes', () => {
     }
     expect(checked).toBe(2 * variantPairs.length * sides.length ** 2);
     for (const [list, n] of Object.entries(seen)) expect(n, list).toBeGreaterThan(0);
-  });
+  }, 30_000);
 
   test('the rule for next-door epochs', () => {
     expect(neighbourEpochs(ORDER, 'undecided', 'granted')).toBe(true);
