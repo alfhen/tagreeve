@@ -2,36 +2,69 @@
 
 ## 0.6.1
 
-Not released yet. The newest release is 0.6.0, below.
+`npm i -g tagreeve` installs this release. 0.6.1 fixes three leaks and a set of smaller bugs found after 0.6.0. It has no new command and no new option. The record stays at schema version 5.
 
-- A `dataLayer` push that holds an email, phone or hash that is not from the run identity now gets a `possibleRealDataPush` flag. It is a warning: the `possibleRealData` check does not count it and the exit code does not change. The flag detail names the push and the key paths, never the value. A tag name with a hex token after a character such as `!`, `$`, `^` or `~` reads `(other)` (#937, #1322).
+### What 0.6.1 fixes
 
-- `diff` names an event as the run pushed it, and a pair joined by the event table or an event map shows `renamedFrom` in `--json` and `(renamed from <name>)` in the text (#1246). `changed` is true when a push kind changed (#1370).
+- A `dataLayer` push that holds an email, phone or hash that is not from the run identity now gets a `possibleRealDataPush` flag. It is a warning: the `possibleRealData` check does not count it and the exit code does not change. The flag detail names the push and the key paths, never the value. The text summary shows one `possibleRealDataPush: x<n>` line. The second half of #937, a failing check for a test identity pushed before consent, is #1392 and is planned for 0.7.0 (#937, #1322).
+- A tag name with a hex token after a character such as `!`, `$`, `^` or `~` reads `(other)` (#1322).
+- `diff` names an event as the run pushed it. A pair joined by the event table or an event map shows `renamedFrom` in `--json` and `(renamed from <name>)` in the text (#1246). `changed` is true when a push kind changed (#1370).
 - An event map error gives a key position and no key text, and positions follow the order written in the file. A swap or chain map applies each `paths` entry to one event (#1316, #1314, #1315).
 - An arguments-like `consent` push other than `default` or `update` reads `gtag consent`, and an arguments-like `gtm.*` event has no paths (#1373).
-
-- `consentModeSetup` names a hit with no tag ID by its vendor, lists letter sets with an `l` first and counts the tag IDs it leaves out. A page parameter can no longer set the Google Ads conversion ID.
-
+- `consentModeSetup` names a hit with no tag ID by its vendor, lists letter sets with an `l` first and counts the tag IDs it leaves out. A page parameter can no longer set the Google Ads conversion ID (#1385).
 - A baseline whose `dataLayer` push groups are partly kinded is refused as an invalid `dataLayer` section (#1374). The warning for a baseline with no `dataLayer` section says `saved before 0.6.0-rc.2`.
 - `tagreeve init` exits 2 with `tagreeve/config.yml is not a file` when a folder is at that path, instead of skipping it (#1329).
-
 - A `wait` timeout after a click on a form's submit control lists only the blocking controls of that form (#990).
 - A test payment fill cannot hang past its deadline when a card frame stops responding (#1339).
-- The handoff label wraps to at most four lines, and the full text is in its `title` (#1384).
+- The handoff label is at most 300 px wide and wraps to at most four lines. The full text is in its `title`. The Done button is as tall as the bar (#1384).
+- A `dataLayer` name the hook could not trap, such as `status`, gives the `dataLayerNotHooked` flag when a loader names it (#1235).
+- One array under two names, or an array a child frame adopts from its parent, no longer gives a false `dataLayerIncomplete` flag or makes close wait for the posted-count deadline (#1299, #1360).
+- A `must` rule with an exact count and unlinked server hits reads `serverSendUnlinked` when a subset of them could change the verdict (#1223).
+- A server container call no longer links `exact` by client ID when another container request that shares the client ID, or has no decoded hit, was sent in between. The miss reason is `concurrentRequest`, also a key of `serverContainer.notExact.clientId` (#1029).
+- `scripts/wordmark.ts` takes the font path as an argument and no longer reads `node_modules` (#727). In the site intro, focus moves to the new Skip button when the menubar one is hidden (#867).
+- The docs say what the code does for the path defaults, the tag `status` values, the `dataLayerNotHooked` and `unloadGap` text, the `diff` and baseline text, the exit 2 row and the tag reports advice. They also cover the changes above (#1288, #1289, #1319, #1323, #1334, #1342, #1344, #1353, #1366, #1377, #1389). Two lines of 0.6.0-rc.3 are corrected (#1294, #1337). The `/datalayer-kinds` row of `fixtures/site/README.md` has all its columns (#1368).
 
-- Fix: `scripts/wordmark.ts` takes the font path as an argument and no longer reads `node_modules` (#727).
-- Fix: in the site intro, focus moves to the new Skip button when the menubar one is hidden (#867).
+### Upgrading from 0.6.0
 
-- Fix: a `dataLayer` name the hook could not trap, such as `status`, gives the `dataLayerNotHooked` flag when a loader names it (#1235).
-- Fix: one array under two names, or an array a child frame adopts from its parent, no longer gives a false `dataLayerIncomplete` flag or makes close wait for the posted-count deadline (#1299, #1360).
-- Docs: the `/datalayer-kinds` row of `fixtures/site/README.md` has all its columns (#1368).
+- **Pushes are scanned for data not from the run identity.** A finding is a `possibleRealDataPush` warning. It never changes the exit code. Records from 0.6.0 or earlier that you check again get no push findings.
+- **`diff` names events as recorded.** A pair joined by the event table or an event map has `renamedFrom`. `changed` counts a change of push kind.
+- **A baseline with mixed push kinds exits 2.** Only a hand edit makes one. Save the baseline again.
+- **A folder at `tagreeve/config.yml` exits 2** in `tagreeve init`.
+- **A `wait` timeout lists only the clicked form's controls,** not every blocking control on the page.
+- **The handoff label wraps.** It shows at most four lines, and the full text is in its `title`.
+- **A new rule 2 miss reason, `concurrentRequest`,** in the hit's link miss and in `serverContainer.notExact.clientId`. A call with a concurrent request no longer links `exact`.
+- **The record stays at version 5.** A 0.6.0 record reads as before.
 
-- Fix: a `must` rule with an exact count and unlinked server hits reads `serverSendUnlinked` when a subset of them could change the verdict (#1223).
-- Fix: a server container call no longer links `exact` by client ID when another container request that shares the client ID, or has no decoded hit, was sent in between. The miss reason is `concurrentRequest`, also a key of `serverContainer.notExact.clientId` (#1029).
+### Known in 0.6.1
 
-- Docs: the path defaults, the tag `status` values, the `dataLayerNotHooked` and `unloadGap` text, the `diff` and baseline text, the exit 2 row and the tag reports advice say what the code does. The docs also cover the wave 1 and wave 2 changes above (#1288, #1289, #1319, #1323, #1334, #1342, #1344, #1353, #1366, #1377, #1389). Two lines of 0.6.0-rc.3 are corrected (#1294, #1337).
+Issues still open that you can meet:
 
-<!-- R15 -->
+- `network: stub` and `server` mode can still let a hit reach a real vendor account, for an unknown destination in `stub` and for a hosted `serverHosts` host in `server`.
+- Records keep the full flag detail, including query values. Do not share a record from a page that sends an identifier in a query.
+- `--server-container` needs Docker. The container downloads its configuration from Google at every start, so a run needs the network for three Google paths, and Google sees the container's request with your `gtm_auth`.
+- The local container is Google's image. Stape-only features are missing, and with the live config it serves the published version. To test an unpublished server workspace, use a config from its preview environment.
+- Sends from `pagehide` or `visibilitychange` are answered in the page, also to your `serverHosts`, so the container never gets them.
+- The Meta Conversions API, Pinterest and Criteo template tags are not yet proven to reach the recording proxy.
+- The `payment` step is not confirmed on a real Shopify checkout. The test-mode marker on the page, the expiry format and the card frame paths are inferred. If one does not match, the step fails closed and the error names the frame path and the inputs' attributes. It checks the card host before each short fill try, which narrows the window in which typing could go to another host but cannot close it.
+- Playwright's request interception sometimes misses a redirect hop. The `possibleRedirectHop` flag marks a likely miss in `stub` and `server` mode. `live` mode has no such flag.
+- With `--net-log`, requests seen only in the net log are labelled by timing, and an early `srcdoc` iframe request can still read `unload`.
+- `--viewport` takes `<W>x<H>` only. A `mobile` preset is not built.
+- `identity.country` has local formats for US, SE, GB and DE. Other countries keep US-shaped data and the run warns.
+- A test identity pushed to the `dataLayer` before consent is a warning only. A failing check is planned (#1392).
+- The handoff label is capped at 300 px, so on a very narrow viewport it can be wider than the page (#1428).
+- Page code that sabotages itself on purpose can still hide the untrapped list of the `dataLayer` count check (#1442).
+- The reporter's own entry is in `tags[]` once for each event. The timeout status and the version string of a published container are field checks.
+- A report sent while the page navigates can be lost, so `notFired` can list a tag that fired.
+- Any page script can call the binding or change what the tally reads, so a tag report and the count check are what the page said, not proof.
+- The server tag reporter is not built.
+- The `dataLayer` hook after real `gtm.js` re-wraps, and `gtm.uniqueEventId` on real pushes, are field checks (#922). Arguments-like pushes from the pixel sandbox are read as `gtag` commands in shapes only, so consent commands in them do not count as a `consent default` push for `consentModeSetup`.
+- The count check compares only the document each frame holds when the run closes. A page that replaced `push` on an earlier page of the run only is not flagged, and a page that edits its `dataLayer` in place can be flagged.
+- `consentModeSetup` reads the `gcd` letters, whose format is documented only by the community.
+- Hits and pushes are not joined per frame (#931, #932).
+- A blocking control with no `aria-label`, `name` or `id` has no name in a `wait` timeout message.
+- The other open `review-minor` issues are in the Backlog milestone. They are test gaps, wording and edge cases.
+
+Field-tested on a real store with a real GTM web container in a workspace preview (0.6.0-rc.2 and rc.3). 0.6.1 has no field test of its own.
 
 ## 0.6.0
 
