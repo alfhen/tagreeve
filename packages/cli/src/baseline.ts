@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
 import { readRun, type RunRecords } from '@tagreeve/core';
 import { diffPushes, diffShapes, hitShape, kindChangeWarning, kindsMerged, PUSH_FRAME_KINDS, pushGroups, type DiffKey, type PushGroup, type ShapeDiff, type ShapeKey, type ShapeMove } from '@tagreeve/expect';
-import { PUBLISHED_VARIANT, type BaselineArgs } from './args.ts';
+import { PUBLISHED_VARIANT, VARIANT_NAME, type BaselineArgs } from './args.ts';
 import { describePushDiff } from './diff.ts';
 import { DEFAULT_BASELINES } from './defaults.ts';
 import type { Io } from './run.ts';
@@ -108,13 +108,15 @@ export function parseBaseline(text: string, label: string): BaselineFile {
   return json as unknown as BaselineFile;
 }
 
+const errnoCode = (error: unknown) => (error as NodeJS.ErrnoException).code ?? 'unknown error';
+
 export async function readBaseline(path: string): Promise<BaselineFile> {
   let text: string;
   try {
     text = await readFile(path, 'utf8');
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    throw new BaselineError(`Cannot read ${path}: ${code ?? 'unknown error'}`, code === 'ENOENT' ? 'missing' : 'unreadable');
+    const code = errnoCode(error);
+    throw new BaselineError(`Cannot read ${path}: ${code}`, code === 'ENOENT' ? 'missing' : 'unreadable');
   }
   return parseBaseline(text, path);
 }
@@ -166,8 +168,6 @@ export function defaultBaselineName(run: RunRecords['run']): string {
   return baselineFileName(run.scenario, run.store, run.variant);
 }
 
-const VARIANT_NAME = /^[a-z0-9][a-z0-9_-]*$/;
-
 export function insideBaselines(path: string): boolean {
   const rel = relative(resolve(DEFAULT_BASELINES), resolve(path));
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
@@ -204,8 +204,6 @@ export function compareBaseline(baseline: BaselineFile, records: RunRecords): Ba
     changes: describeDiff(diff),
   };
 }
-
-const errnoCode = (error: unknown) => (error as NodeJS.ErrnoException).code ?? 'unknown error';
 
 export async function baselineCommand(args: BaselineArgs, io: Io): Promise<number> {
   let records: RunRecords;

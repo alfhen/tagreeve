@@ -107,7 +107,7 @@ export interface SuiteArgs {
 }
 
 export const PUBLISHED_VARIANT = 'published';
-const VARIANT_NAME = /^[a-z0-9][a-z0-9_-]*$/;
+export const VARIANT_NAME = /^[a-z0-9][a-z0-9_-]*$/;
 
 export interface ServerContainerArgs {
   command: 'server-container';

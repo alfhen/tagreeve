@@ -33,7 +33,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 <!-- T10 -->
 
-<!-- B10 -->
+Tests and cleanup: #1144, #1341, #1146, #1192, #1244, #1340, #1195, #1155, #908.
 
 <!-- C10 -->
 

@@ -278,6 +278,7 @@ test('baseline save with a crafted scenario name exits 2 and writes nothing outs
   try {
     const err: string[] = [];
     expect(await main(['baseline', 'save', record], { stdout: () => {}, stderr: (t) => err.push(t) })).toBe(2);
+    expect(err.join('')).toContain('Give the baseline path');
     expect(err.join('')).not.toContain('escape');
     expect(await readdir(root)).toEqual(['work']);
     expect(await readdir(work)).toEqual(['run.jsonl']);
@@ -327,7 +328,28 @@ test('baseline save exits 2 with a short message when the folder cannot be made'
   const err: string[] = [];
   expect(await main(['baseline', 'save', path, join(dir, 'file', 'b.json')], { stdout: () => {}, stderr: (t) => err.push(t) })).toBe(2);
   expect(err.join('')).toContain('Cannot make the folder for');
-  expect(err.join('')).not.toContain('ENOENT:');
+  expect(err.join('')).not.toMatch(/E[A-Z]+: .*(open|mkdir) '/);
+});
+
+test('baseline save with a relative path shows the relative path and no tmpdir prefix when the folder cannot be made', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'pw-baseline-'));
+  const run = makeRun(['a_event']);
+  const path = join(root, 'run.jsonl');
+  await writeFile(path, [run.run, ...run.consentEpochs, ...run.hits].map((r) => JSON.stringify(r)).join('\n') + '\n');
+  await writeFile(join(root, 'file'), '');
+  const before = process.cwd();
+  process.chdir(root);
+  try {
+    const err: string[] = [];
+    expect(await main(['baseline', 'save', path, 'file/b.json'], { stdout: () => {}, stderr: (t) => err.push(t) })).toBe(2);
+    const text = err.join('');
+    expect(text).toContain('Cannot make the folder for file/b.json: ');
+    expect(text).not.toContain(root);
+    expect(text).not.toContain(tmpdir());
+    expect(text).not.toMatch(/E[A-Z]+: .*(open|mkdir) '/);
+  } finally {
+    process.chdir(before);
+  }
 });
 
 test('readBaseline marks a missing file by its errno code, not by its message', async () => {
@@ -423,6 +445,21 @@ test('baseline save with one path puts the record path in front of a refusal', a
   expect(err.join('')).not.toContain('pw-secret-value');
 });
 
+test('baseline save with one path puts the record path in front of the suite-record refusal', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'pw-baseline-'));
+  const record = join(root, 'run.jsonl');
+  const records = makeRun(['page_view']);
+  records.run.recordSchemaVersion = 3;
+  records.run.variant = 'published';
+  await writeFile(record, [records.run, ...records.consentEpochs, ...records.hits].map((r) => JSON.stringify(r)).join('\n') + '\n');
+  const read = (await readRun(record)).run;
+  expect(read.recordSchemaVersion).toBe(3);
+  expect(read.variant).toBe('published');
+  const err: string[] = [];
+  expect(await main(['baseline', 'save', record], { stdout: () => {}, stderr: (t) => err.push(t) })).toBe(2);
+  expect(err.join('')).toContain(`${record}: This record is from a suite`);
+});
+
 test('insideBaselines accepts a file in tagreeve/baselines only', () => {
   expect(insideBaselines('tagreeve/baselines/x.json')).toBe(true);
   expect(insideBaselines('tagreeve/baselines')).toBe(false);
@@ -494,6 +531,17 @@ test('a gtag purchase against an object purchase baseline pairs and warns', () =
   const warnings = compareBaseline(baseline, now).warnings;
   expect(warnings).toContain('dataLayer push kind changed: purchase');
   expect(warnings.some((w) => w.startsWith('dataLayer new event') || w.startsWith('dataLayer removed event'))).toBe(false);
+});
+
+test('a baseline with checkout_completed against a run with purchase and the same paths has no dataLayer warning', () => {
+  const saved = makeRun(['page_view']);
+  pushTo(saved, { event: 'checkout_completed', value: 1 }, 'dle_1');
+  const baseline = parseBaseline(JSON.stringify(buildBaseline(saved, false)), 'b.json');
+  expect(baseline.dataLayer?.map((g) => g.event)).toEqual(['checkout_completed']);
+  const now = makeRun(['page_view']);
+  pushTo(now, { event: 'purchase', value: 1 }, 'dle_2');
+  expect(now.dataLayerEvents.map((e) => e.event)).toEqual(['purchase']);
+  expect(compareBaseline(baseline, now).warnings.filter((w) => w.startsWith('dataLayer'))).toEqual([]);
 });
 
 test('a joined kind change names the baseline event it was recorded as', () => {

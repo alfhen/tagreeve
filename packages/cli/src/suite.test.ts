@@ -642,6 +642,9 @@ test('--server-container with a missing image exits 2 before any scenario and pr
     Object.assign(process.env, saved);
   }
   expect(fake.specs).toEqual([]);
+  expect(Buffer.from(env.TAGREEVE_SERVER_CONTAINER_CONFIG, 'base64').toString()).toContain('pw-fixture-auth');
+  expect(c.err()).not.toContain('pw-fixture-auth');
+  expect(c.err()).not.toContain(env.TAGREEVE_SERVER_CONTAINER_CONFIG);
   expect(c.err().match(/is not available/g)).toHaveLength(1);
   expect(c.err()).toContain('tagreeve server-container build');
 });
@@ -970,6 +973,9 @@ test('a --stores cell record holds the store name and the site origin, and no st
   const stores = await storesFile(dir, [{ name: 'se', site: 'https://shop.example.se/private/path?token=abc', vars: { size: 'pw-secret-value' } }]);
   const written: string[] = [];
   const run = async (spec: RunSpec): Promise<RunOutcome> => {
+    expect(spec.site).toContain('token=abc');
+    expect(spec.site).toContain('/private/path');
+    expect(JSON.stringify(spec.parsed)).toContain('pw-secret-value');
     await mkdir(out, { recursive: true });
     const path = join(out, `raw-${written.length}.jsonl`);
     await writeFile(path, `${JSON.stringify({ type: 'run', id: 'run_1', scenario: spec.scenarioName, site: spec.site })}\n`);
@@ -1014,6 +1020,8 @@ test('a baseline path that holds ENOENT does not turn an invalid file into a mis
   expect(await suiteCommand(args(dir, out, { baseline: folder }), c.io, recorder())).toBe(2);
   expect(c.err()).toContain('is not valid JSON');
   expect(c.err()).not.toContain('Baseline files missing');
+  expect(c.err()).toContain('Fix an invalid file');
+  expect(c.err()).not.toContain('Save missing files');
 });
 
 test('two cells that map to one baseline file name exit 2 and name both cells', async () => {
