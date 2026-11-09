@@ -2,47 +2,69 @@
 
 ## 0.6.2
 
-Not released yet. The newest release is 0.6.1, below.
+`npm i -g tagreeve` installs this release. 0.6.2 fixes the issues found in the review of 0.6.1 and clears the `review-minor` backlog. It has no new command and no new option. The record stays at schema version 5. 0.6.1 was field-tested on a Shopify store with a real GTM web container.
 
-- A test payment now ends by its deadline when a card frame stops answering before the fill. The reason reads `the card frame could not be read`, and the grace after the deadline no longer restarts at each await (#1404, #1418).
+### What 0.6.2 fixes
+
+- A test payment ends by its deadline when a card frame stops answering before the fill. The reason reads `the card frame could not be read`. The grace after the deadline no longer restarts at each await, and the card fields share the step deadline (#1404, #1418).
 - A click inside a submit button remembers the button's form for the next `wait` timeout. When that form is gone, the timeout lists every blocking control (#1419, #1415).
-- The handoff label uses the room up to the pill's width limit and the pill has a 14 px radius, so four lines are not cut at the corners (#1428, #1411).
-- Tests for the card frame field, the form of a click, the controls of a form, and a required select and textarea (#1338, #1412, #1202). The handoff label title is covered by the unit test only, because the closed shadow root hides it from Playwright (#1417).
-
-- `diff`: a move or a kind change of a joined pair now names the recorded event with `renamedFrom`, and moves have an optional `pushKind` in `--json`. A cross-epoch join forms only when it can become a move. The `push kind changed` warning says `(renamed from <name>)` for a joined pair.
-
-- An exact count with `body` or `identity.hashesMatch` now tries every placement of the unlinked and probable server hits in scope, up to 10 hits. A probable hit is placed by its link, by its own time or left out. It warns when a placement could change the verdict, and always above 10 hits. At-least and at-most counts try the same placements. Some rules that failed in 0.6.1 now warn, so a run can exit 0 where it exited 1.
+- The handoff label uses the room up to the pill's width limit, and the pill has a 14 px radius, so four lines are not cut at the corners (#1428, #1411).
+- An exact count with `body` or `identity.hashesMatch` tries every placement of the unlinked and probable server hits in scope, up to 10 hits. A probable hit is placed by its link, by its own time or left out. The rule warns when a placement could change the verdict, and always above 10 hits. At-least and at-most counts try the same placements.
 - An unload send no longer breaks a client ID link between a server hit and its browser hit.
-- `diff`: a kind change of a joined pair does not report the `event` key path, and the docs now say so. The payment, baseline and server container docs match the code on frame deadlines, `inputs not readable` and unload sends.
+- `diff`: a move or a kind change of a joined pair names the recorded event with `renamedFrom`, and a move has an optional `pushKind` in `--json`. A cross-epoch join forms only when it can become a move. The `push kind changed` warning says `(renamed from <name>)` for a joined pair. Also, a kind change of a joined pair does not report the `event` key path (#1456).
 - A dataLayer push finding with no field path reads `in the push`, not `in the body`.
+- `tagreeve init` creates nothing when one of its targets is refused (#1455).
+- The plain-hash message names the vendors that sent the plain field. A plain city, postal code or country is judged by one rule for vendors that require hashes. A value that only a binary-edged or glued base64 token holds is counted next to a longer value it ends, not merged into it (#1349, #1350, #1352, #1007, #1162).
+- Every duration key in a scenario fails with the same message: "must be a duration such as 4s, 500ms or 2m" (#1327).
+- `template web` reads the template only from the recorder package. When the bundled file is missing, it exits 2 with an error and prints nothing else.
+- `pnpm build --outdir` refuses a non-empty folder outside the repo that holds no build, and `pnpm test` no longer deletes `dist/`.
+- The docs match the code on frame deadlines, `inputs not readable`, unload sends and the `event` key path of a kind change. Three lines of 0.6.1 are corrected (#1395, #1397, #1413, #1435, #1436, #1437, #1445, #1446, #1447, #1438, #1439, #1477, #1478, #1479, #1480, #1481).
+- Site: the agent callout on a guide follows the first paragraph (#750). The finished demo hit list scrolls and keeps every hit (#837). The run panel shows its Result line (#838). The commands panel keeps its indent when copied and does not split `--site` (#835). The docs theme fade covers the header and the sidebar (#857). The demo reply check allows only the numbers a reply can state (#759).
 
-- Internal: the folder names under `tagreeve/` and the `Defaults:` line code live in one place. `run` and `suite` read the out folder and the old-runs notice from one call. No change in output (#972, #1041, #1049, #1061, #1330, #1137, #1132).
+Tests and cleanup: one rule or one owner for the folder names and the `Defaults:` line, Google loader URLs, layer names, GTM tag statuses, durations, push shapes, the event map, `GOOGLE_VENDORS`, `expectedTagsOf`, the "and N more" list helper and `gcdLetterAt`. `suite` lets a usage error go up to `main`, as `run` does, with the same text and exit code. The `dataLayer` hook, the unload gap, push shape, diff and payment tests check their inputs first and cover more cases. No change in output. Issues: #972, #1041, #1049, #1061, #1330, #1137, #1132, #1236, #1357, #1238, #1318, #1105, #1106, #1107, #1108, #1325, #1124, #1169, #1365, #954, #1380, #1425, #1312, #1317, #1251, #1252, #1291, #1209, #1379, #1243, #1355, #1359, #1358, #1300, #1218, #1217, #1171, #1172, #1212, #1213, #1116, #1117, #1118, #1180, #1178, #1332, #1181, #1186, #1150, #1224, #1222, #1305, #1307, #1167, #1378, #1144, #1341, #1146, #1192, #1244, #1340, #1195, #1155, #1156, #908, #1338, #1412, #1202, #1417, #1462, #1467, #1468, #1470, #1474, #760, #729, #866.
 
-- Internal: one rule for what a Google loader URL is, for a valid layer name, for the GTM tag statuses and for a duration. Every duration key in a scenario now fails with the same message: "must be a duration such as 4s, 500ms or 2m" (#1327). Internal cleanups: #1236, #1357, #1238, #1318.
+### Upgrading from 0.6.1
 
-- Tests and cleanup: #1105, #1106, #1107, #1108, #1325, #1124, #1169, #1365, #954, #1380.
+- **An exact count rule can warn where 0.6.1 failed.** A rule with an exact `count` that is judged with `body` or `identity.hashesMatch` now warns with `serverSendUnlinked` or `serverSendProbableLink` when some placement of the server hits in scope gives another verdict. A run that exited 1 in 0.6.1 can exit 0. A rule that gave PASS can warn too.
+- **A call with an unload send keeps its client ID link.** A send from `pagehide` or `visibilitychange` no longer gives `concurrentRequest`.
+- **The handoff label is wider on a wide window** and still fits a narrow one.
+- **A `wait` timeout lists every control** when the clicked form is gone from the page.
+- **`diff --json` has new fields.** A `moved` or `kindChanged` entry can have `renamedFrom`, and a `moved` entry can have `pushKind`. A push finding with no path reads `in the push`. A cross-epoch event join needs a neighbouring epoch.
+- **`tagreeve init` refuses before it writes.** When a target is refused, it creates nothing.
+- **A scenario with a bad duration key** fails with one message for every key.
+- **The record stays at version 5.** A 0.6.1 record reads as before.
 
-- Possible real data: a value that only a binary-edged or glued base64 token holds is now counted next to a longer value it ends, not merged into it. The merge check reads the body through the same decoder as the scan. A plain city, postal code or country is judged by one rule for vendors that require hashes (#1349, #1350, #1352, #1007, #1162).
+### Known in 0.6.2
 
-- Internal: push shapes and the event map have one owner per rule (#1425, #1312, #1317, #1251, #1252, #1291, #1209, #1379, #1243).
+Issues still open that you can meet:
 
-- Tests only: the `dataLayer` hook and tally tests now check their inputs first and cover a frozen array, a fixed `push` and a failing binding. The unload gap, push shape and diff e2e tests check the main-frame rule, more leak values, a sandboxed frame and a literal rc.1 baseline (#1355, #1359, #1358, #1300, #1218, #1217, #1171, #1172, #1212, #1213). `/datalayer-build` now has the same masked keys and an email-keyed push in both builds, so the diff output is unchanged.
-
-- `template web` reads the template only from the recorder package. When the bundled file is missing, it exits 2 with an error and prints nothing else. Tests and cleanup: the template permission parser reads each entry's flags by key name, and the build test builds into a temp folder, so `pnpm test` no longer deletes `dist/` (#1116, #1117, #1118, #1180, #1178, #1332, #1181, #1186).
-
-- Site: the agent callout on a guide follows the first paragraph (#750). The finished demo hit list scrolls and keeps every hit (#837). The run panel shows its Result line (#838). The commands panel keeps its indent when copied and does not split `--site` (#835). The docs theme fade covers the header and the sidebar (#857). The demo reply check allows only the numbers a reply can state (#759). Internal: #760, #729, #866.
-
-- Tests and cleanup: one `GOOGLE_VENDORS`, one `expectedTagsOf`, one "and N more" list helper and one `gcdLetterAt`. The Consent Mode setup, `report-marks` and `redactFlagDetail` tests check their inputs first and use the recorder builders (#1150, #1224, #1222, #1305, #1307, #1167, #1378).
-
-- Tests and cleanup: #1144, #1341, #1146, #1192, #1244, #1340, #1195, #1155, #1156, #908. `suite` now lets a usage error go up to `main`, as `run` does; the text and exit code are the same.
-
-- Docs for 0.6.2: the handoff label width and radius, the `wait` timeout for a gone form, the exact count placements, unload sends in the container link rule, `renamedFrom` and `pushKind` in `diff --json`, the `in the push` label and the card frame reason. `init` creates nothing when a target is refused (#1455), and `diff` does not report the event path when a push changes kind (#1456). The docs-text test fails when a heading or a line it reads is missing. Three lines of 0.6.1 are corrected (#1395, #1397, #1413, #1435, #1436, #1437, #1445, #1446, #1447, #1438, #1439).
-
-- A test payment's card fields now share the step deadline. The plain-hash message names the vendors that sent the plain field. `pnpm build --outdir` refuses a non-empty folder outside the repo that holds no build. Tests and cleanup: #1462, #1467, #1468, #1470, #1474.
-
-<!-- X08 -->
-
-<!-- R16 -->
+- `network: stub` and `server` mode can still let a hit reach a real vendor account, for an unknown destination in `stub` and for a hosted `serverHosts` host in `server`.
+- Records keep the full flag detail, including query values. Do not share a record from a page that sends an identifier in a query.
+- `--server-container` needs Docker. The container downloads its configuration from Google at every start, so a run needs the network for three Google paths, and Google sees the container's request with your `gtm_auth`.
+- The local container is Google's image. Stape-only features are missing, and with the live config it serves the published version. To test an unpublished server workspace, use a config from its preview environment.
+- On a multi-page run a server container call rarely links `exact` by client ID, because later calls see several hits with the same client ID. `serverContainer.notExact` counts these calls.
+- Sends from `pagehide` or `visibilitychange` are answered in the page, also to your `serverHosts`, so the container never gets them.
+- The Meta Conversions API, Pinterest and Criteo template tags are not yet proven to reach the recording proxy.
+- The `payment` step is not confirmed on a real Shopify checkout. The test-mode marker on the page, the expiry format and the card frame paths are inferred. If one does not match, the step fails closed and the error names the frame path and the inputs' attributes. It checks the card host before each short fill try, which narrows the window in which typing could go to another host but cannot close it.
+- The payment hang fix (#1339) and the server-mode link fixes (#1029, #1223) are covered by tests. They were not tried on a real store.
+- The Shopify platform-host list holds only hosts that a Shopify docs page names. Other Shopify hosts stay `unknownDestination`.
+- Playwright's request interception sometimes misses a redirect hop. The `possibleRedirectHop` flag marks a likely miss in `stub` and `server` mode. `live` mode has no such flag.
+- With `--net-log`, requests seen only in the net log are labelled by timing, and an early `srcdoc` iframe request can still read `unload`.
+- `--viewport` takes `<W>x<H>` only. A `mobile` preset is not built.
+- `identity.country` has local formats for US, SE, GB and DE. Other countries keep US-shaped data and the run warns.
+- A test identity pushed to the `dataLayer` before consent is not reported yet. A check is planned for 0.7.0 (#1392).
+- Page code that sabotages itself on purpose can still hide the untrapped list of the `dataLayer` count check (#1442).
+- `diff` can undo a cross-epoch join when it matches moved events by epoch (#1457).
+- The reporter's own entry is in `tags[]` once for each event. The timeout status and the version string of a published container are field checks.
+- A report sent while the page navigates can be lost, so `notFired` can list a tag that fired.
+- Any page script can call the binding or change what the tally reads, so a tag report and the count check are what the page said, not proof.
+- The server tag reporter is not built.
+- The `dataLayer` hook after real `gtm.js` re-wraps, and `gtm.uniqueEventId` on real pushes, are field checks (#922). Arguments-like pushes from the pixel sandbox are read as `gtag` commands in shapes only, so consent commands in them do not count as a `consent default` push for `consentModeSetup`.
+- The count check compares only the document each frame holds when the run closes. A page that replaced `push` on an earlier page of the run only is not flagged, and a page that edits its `dataLayer` in place can be flagged.
+- `consentModeSetup` reads the `gcd` letters, whose format is documented only by the community.
+- Hits and pushes are not joined per frame (#931, #932).
+- A blocking control with no `aria-label`, `name` or `id` has no name in a `wait` timeout message.
+- Eight other `review-minor` issues are open. They are test gaps, wording, build edge cases and a vendor name table.
 
 ## 0.6.1
 
