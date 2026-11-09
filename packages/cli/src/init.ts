@@ -20,15 +20,6 @@ interface Item {
   text: string;
 }
 
-async function exists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function ensureIgnoreLine(cwd: string): Promise<Item> {
   const file = join(cwd, '.gitignore');
   let current: string | undefined;
@@ -55,7 +46,9 @@ async function ensureFolder(cwd: string, folder: string): Promise<Item> {
 }
 
 async function ensureConfig(cwd: string): Promise<Item> {
-  if (await exists(join(cwd, CONFIG))) return { path: CONFIG, action: 'skipped', text: `Skipped ${CONFIG}: it exists` };
+  const found = await stat(join(cwd, CONFIG)).catch(() => undefined);
+  if (found && !found.isFile()) throw Object.assign(new Error('not a file'), { code: 'NOTFILE' });
+  if (found) return { path: CONFIG, action: 'skipped', text: `Skipped ${CONFIG}: it exists` };
   await mkdir(join(cwd, 'tagreeve'), { recursive: true });
   await writeFile(join(cwd, CONFIG), STARTER_CONFIG, { flag: 'wx' });
   return { path: CONFIG, action: 'created', text: `Created ${CONFIG}` };
@@ -64,6 +57,7 @@ async function ensureConfig(cwd: string): Promise<Item> {
 function failureText(path: string, error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;
   if (code === 'NOTFOLDER') return `${path.replace(/\/$/, '')} is not a folder\n`;
+  if (code === 'NOTFILE') return `${path} is not a file\n`;
   const reason = code === 'EACCES' || code === 'EPERM' ? 'permission denied' : code === 'EEXIST' ? 'it exists' : code === 'ENOTDIR' || code === 'EISDIR' ? 'a file or folder is in the way' : 'the write failed';
   return `Could not write ${path}: ${reason}\n`;
 }

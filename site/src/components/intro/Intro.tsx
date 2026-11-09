@@ -57,6 +57,9 @@ export default function FirstVisitIntro() {
   const timers = useRef<number[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
   const siteRef = useRef<HTMLElement[]>([]);
+  const menuSkipRef = useRef<HTMLButtonElement>(null);
+  const wastedSkipRef = useRef<HTMLButtonElement>(null);
+  const moveSkipFocus = useRef(false);
 
   const later = useCallback((fn: () => void, ms: number) => {
     timers.current.push(window.setTimeout(fn, ms));
@@ -105,6 +108,7 @@ export default function FirstVisitIntro() {
       later(() => setShown(i + 1), at);
     });
     later(() => {
+      moveSkipFocus.current = document.activeElement === menuSkipRef.current;
       setStage('wasted');
       setPreviewOpen(false);
     }, at + WASTED_AFTER_MS);
@@ -154,6 +158,12 @@ export default function FirstVisitIntro() {
     };
   }, [isOpen]);
 
+  useLayoutEffect(() => {
+    if (stage !== 'wasted' || !moveSkipFocus.current) return;
+    moveSkipFocus.current = false;
+    wastedSkipRef.current?.focus({ preventScroll: true });
+  }, [stage]);
+
   if (!stage) return null;
 
   const leaving = stage === 'shrink' || stage === 'fly';
@@ -177,7 +187,7 @@ export default function FirstVisitIntro() {
         class="intro-wallpaper"
         style={`position:absolute;inset:0;transition:filter 1.2s;filter:${wastedShowing ? 'grayscale(1) contrast(1.15) brightness(.8)' : 'none'};animation:${wastedShowing ? 'intro-slow-zoom 4s ease-out both' : 'none'};transform-origin:60% 40%;font-family:${SYSTEM_FONT}`}
       >
-        <MenuBar app={stage === 'ask' ? 'Mail' : 'TagMangler Pro'} unread={1 + shown} shown={shown} onSkip={fly} skipHidden={stage === 'wasted'} />
+        <MenuBar app={stage === 'ask' ? 'Mail' : 'TagMangler Pro'} unread={1 + shown} shown={shown} onSkip={fly} skipHidden={stage === 'wasted'} skipRef={menuSkipRef} />
         <Dock browserOpen={stage !== 'ask'} />
         <MailWindow asking={stage === 'ask'} shown={shown} unread={1 + shown} onReply={startMess} onSkip={fly} />
         {messShowing && (
@@ -196,7 +206,7 @@ export default function FirstVisitIntro() {
         <Notifications shown={shown} />
       </div>
       {wastedShowing && <Wasted />}
-      {stage === 'wasted' && <SkipButton onSkip={fly} style="position:absolute;top:3px;right:16px;z-index:5" />}
+      {stage === 'wasted' && <SkipButton onSkip={fly} buttonRef={wastedSkipRef} style="position:absolute;top:3px;right:16px;z-index:5" />}
     </div>
   );
 }

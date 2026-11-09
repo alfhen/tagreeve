@@ -182,3 +182,9 @@ test('script loads and other paths are not collection endpoints', () => {
     expect(isCollectionEndpoint(req(u))).toBe(false);
   }
 });
+
+test('an ep or epn page parameter cannot set the conversion ID', () => {
+  const [hit] = decodeRequest(req('https://www.google.com/ccm/collect?en=purchase&tid=AW-000000001&ep.conversionId=999&epn.conversionId=888&ep.other=1'));
+  expect(hit?.params.conversionId).toBe('000000001');
+  expect(hit?.params.other).toBe('1');
+});

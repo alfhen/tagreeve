@@ -183,3 +183,13 @@ test('only web reports count for notFired', () => {
   const summary = summarizeTags([...REPORTS, server], { container: 'GTM-PWTEST1', tags: OVERRIDE.expectedTags })!;
   expect((summary['GTM-PWTEST1'] as { notFired: unknown }).notFired).toEqual([{ id: '45', name: 'GA4 - Purchase' }]);
 });
+
+test.each(['thanks-', 'x~', 'thanks!', 'thanks$', 'thanks^'])('maskTagName masks a hex token after %s', (prefix) => {
+  const name = `${prefix}${'deadbeef'.repeat(4)}`;
+  expect(name).toContain('deadbeef'.repeat(4));
+  expect(maskTagName(name)).toBe('(other)');
+});
+
+test('maskTagName keeps GA4 page_view', () => {
+  expect(maskTagName('GA4 page_view')).toBe('GA4 page_view');
+});

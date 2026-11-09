@@ -833,3 +833,9 @@ test.each([
   expect(message).toContain(shown);
   expect(message).not.toMatch(/pw-test|0123456789abcdef|email|sid/);
 });
+
+test('a possibleRealDataPush flag leaves the possibleRealData check passing', () => {
+  const flag: Flag = { type: 'flag', id: newId('flag'), runId, kind: 'possibleRealDataPush', recordIds: ['dle_P1'], detail: 'dataLayer push dle_P1 carries 1 email value(s)' };
+  const check = evaluate([flag], parseScenario('start: /'), { identity }).find((r) => r.expectation === 'builtin: possibleRealData')!;
+  expect(check.pass).toBe(true);
+});

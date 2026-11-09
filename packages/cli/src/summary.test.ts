@@ -634,3 +634,12 @@ test('the dataLayer line lists page events before consent, gtag and gtm labels',
   const records = { run: { id: 'run_1' }, hits: [], consentEpochs: [], flags: [], steps: [], dataLayerEvents } as unknown as RunRecords;
   expect(formatSummary(buildSummary(records, [result(true)], 'p'))).toContain('dataLayer: 4 pushes, 4 events (purchase, consent default, gtag config, …); shapes in --json');
 });
+
+test('possibleRealDataPush flags collapse into one counted line', () => {
+  const details = Array.from({ length: 3 }, (_, i) => `dataLayer push dle_${i} carries 1 email value(s) that are not from fake.person@example.test`);
+  const flags = details.map((detail) => ({ kind: 'possibleRealDataPush', detail }));
+  expect(JSON.stringify(flags)).toContain('fake.person@example.test');
+  const text = formatSummary({ ...base, flags });
+  expect(text.split('\n').filter((l) => l.includes('possibleRealDataPush'))).toEqual(['  possibleRealDataPush: x3']);
+  expect(text).not.toContain('fake.person');
+});
