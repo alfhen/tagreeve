@@ -45,6 +45,7 @@ test('--label with --out uses the folder as given and still stores the label', a
   const r = await runCli(runArgs('--label', 'x', '--out', 'o'), {}, cwd);
   expect(r.code, failure(r)).toBe(0);
   expect((JSON.parse(r.stdout) as { label: string }).label).toBe('x');
+  expect(r.records?.run.label).toBe('x');
   const [name] = await readdir(join(cwd, 'o'));
   expect((await readRun(join(cwd, 'o', name!))).run.label).toBe('x');
   const text = await runCli(['run', scenario('run-label'), '--site', site.url, '--label', 'x', '--out', 'o'], {}, cwd);

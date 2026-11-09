@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readRun, type Hit, type RunRecords } from '../packages/core/src/index.ts';
 import { startFixtureSite, type FixtureSite } from '../fixtures/site/src/index.ts';
@@ -43,8 +43,8 @@ export function runCli(args: string[], env: Record<string, string> = {}, cwd: st
       let failed: string[] = [];
       try {
         const summary = JSON.parse(stdout) as { path: string; results: { expectation: string; pass: boolean }[] };
-        records = await readRun(summary.path);
         failed = summary.results.filter((r) => !r.pass).map((r) => r.expectation);
+        records = await readRun(resolvePath(cwd, summary.path));
       } catch {
         // Not a JSON summary: a usage or run error.
       }

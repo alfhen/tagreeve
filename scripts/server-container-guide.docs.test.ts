@@ -27,7 +27,7 @@ export function unsafeFileTargets(markdown: string): string[] {
   for (const snippet of snippets) {
     const text = snippet
       .replace(/\\\n/g, ' ')
-      .replace(/<[A-Za-z][^<>\n]*[^\s<>]>(?=&)/g, ' ')
+      .replace(/(?<==)<[^<>\n]+>/g, ' ')
       .replace(/\d*>&\s*(?:\d+|-)(?=[\s;|&)]|$)/g, ' ')
       .replace(/(?<!<)<(?!<)\s*[^\s;|&)<>]+/g, ' ');
     for (const m of text.matchAll(/(?:^|[^<>])>[>|]?\s*([^\s;|&)<>]+)/g)) targets.push(m[1]!);
@@ -104,6 +104,8 @@ test.each([
   ['a >& redirect with no space before it', '```bash\ncat x>&out.txt\n```', ['out.txt']],
   ['a placeholder before &', 'use `id=GTM-PWTEST1&env=<env id>&auth=<auth>` here', []],
   ['a tee with only an input redirect', '```bash\ntee < ~/plain.txt\n```', []],
+  ['an input redirect then >& with no space', '```bash\ncat <in.txt>&out.txt\n```', ['out.txt']],
+  ['an input redirect then a 2>& file', '```bash\ncat <in.txt 2>&err.txt\n```', ['err.txt']],
   ['a redirect with >& and a space', '```bash\ncat >& sgtm-config.txt\n```', ['sgtm-config.txt']],
   ['an absolute target outside home', '```bash\nbase64 > /tmp/sgtm-workspace-config.txt\n```', ['/tmp/sgtm-workspace-config.txt']],
   ['an absolute repo target', '```bash\ncat > /repo/checkout/sgtm-config.txt\n```', ['/repo/checkout/sgtm-config.txt']],
