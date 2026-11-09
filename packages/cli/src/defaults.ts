@@ -16,7 +16,7 @@ export const DEFAULT_AUTOCONSENT_DIR = 'tagreeve/autoconsent';
 export const DEFAULT_STORES = 'tagreeve/stores.json';
 export const DEFAULT_BASELINES = 'tagreeve/baselines';
 
-export const SETTING_TEXT: Record<DefaultSetting, string> = {
+const SETTING_TEXT: Record<DefaultSetting, string> = {
   config: 'project config',
   scenarios: 'scenario folder',
   trackerList: 'tracker list',
