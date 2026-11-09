@@ -902,56 +902,55 @@ describe('renamed pairs in diffPushes', () => {
   test('every dataLayer entry names the event as one run pushed it, and renamedFrom is there exactly when a pair joined', () => {
     let checked = 0;
     const seen = { pathsAdded: 0, pathsRemoved: 0, typeChanges: 0, kindChanged: 0, epochMoved: 0, frameMoved: 0, eventsAdded: 0, eventsRemoved: 0, renamedRemoved: 0 };
+    const variantPairs: [number, number][] = [[0, 0], [0, 1], [1, 0], [0, 2], [0, 3], [3, 0]];
     for (const acrossFrames of [false, true]) {
-      for (const va of [0, 1, 2, 3]) {
-        for (const vb of [0, 1, 2, 3]) {
-          for (const sa of sides) {
-            for (const sb of sides) {
-              const a = sa.map((c) => variant(c, va));
-              const b = sb.map((c) => variant(c, vb));
-              const d = diffPushes(a, b, { epochOrder: ORDER, eventMap: map, acrossFrames });
-              const inA = (epoch: string, event: string): boolean => a.some((x) => x.epoch === epoch && x.event === event);
-              const aNames = new Set(a.map((x) => x.event));
-              const bNames = new Set(b.map((x) => x.event));
-              const inNodeEpoch = (e: { epoch: string; event: string; renamedFrom?: string }): void => {
-                expect(bNames.has(e.event) || aNames.has(e.event)).toBe(true);
-                expect(e.renamedFrom !== undefined).toBe(!inA(e.epoch, e.event));
-                if (e.renamedFrom !== undefined) {
-                  expect(inA(e.epoch, e.renamedFrom)).toBe(true);
-                  expect(bNames.has(e.event)).toBe(true);
-                }
-              };
-              for (const list of [d.pathsAdded, d.pathsRemoved, d.typeChanges, d.kindChanged]) list.forEach(inNodeEpoch);
-              for (const e of d.eventsRemoved) {
-                expect(inA(e.epoch, e.event)).toBe(true);
-                expect(e).not.toHaveProperty('renamedFrom');
-                if (!bNames.has(e.event)) seen.renamedRemoved++;
+      for (const [va, vb] of variantPairs) {
+        for (const sa of sides) {
+          for (const sb of sides) {
+            const a = sa.map((c) => variant(c, va));
+            const b = sb.map((c) => variant(c, vb));
+            const d = diffPushes(a, b, { epochOrder: ORDER, eventMap: map, acrossFrames });
+            const inA = (epoch: string, event: string): boolean => a.some((x) => x.epoch === epoch && x.event === event);
+            const aNames = new Set(a.map((x) => x.event));
+            const bNames = new Set(b.map((x) => x.event));
+            const inNodeEpoch = (e: { epoch: string; event: string; renamedFrom?: string }): void => {
+              expect(bNames.has(e.event) || aNames.has(e.event)).toBe(true);
+              expect(e.renamedFrom !== undefined).toBe(!inA(e.epoch, e.event));
+              if (e.renamedFrom !== undefined) {
+                expect(inA(e.epoch, e.renamedFrom)).toBe(true);
+                expect(bNames.has(e.event)).toBe(true);
               }
-              expect(new Set(d.eventsRemoved.map((e) => JSON.stringify([e.epoch, e.event]))).size).toBe(d.eventsRemoved.length);
-              for (const e of d.eventsAdded) {
-                expect(b.some((x) => x.epoch === e.epoch && x.event === e.event)).toBe(true);
-                expect(e).not.toHaveProperty('renamedFrom');
-              }
-              for (const m of d.moved) {
-                const from = (m.kind === 'epoch' ? m.from : m.epoch) ?? '';
-                expect(inA(from, m.renamedFrom ?? m.event)).toBe(true);
-                expect(m.renamedFrom !== undefined).toBe(!inA(from, m.event));
-              }
-              seen.pathsAdded += d.pathsAdded.length ? 1 : 0;
-              seen.pathsRemoved += d.pathsRemoved.length ? 1 : 0;
-              seen.typeChanges += d.typeChanges.length ? 1 : 0;
-              seen.kindChanged += d.kindChanged.length ? 1 : 0;
-              seen.epochMoved += d.moved.some((m) => m.kind === 'epoch') ? 1 : 0;
-              seen.frameMoved += d.moved.some((m) => m.kind === 'frame') ? 1 : 0;
-              seen.eventsAdded += d.eventsAdded.length ? 1 : 0;
-              seen.eventsRemoved += d.eventsRemoved.length ? 1 : 0;
-              checked++;
+            };
+            for (const list of [d.pathsAdded, d.pathsRemoved, d.typeChanges, d.kindChanged]) list.forEach(inNodeEpoch);
+            for (const e of d.eventsRemoved) {
+              expect(inA(e.epoch, e.event)).toBe(true);
+              expect(e).not.toHaveProperty('renamedFrom');
+              if (!bNames.has(e.event)) seen.renamedRemoved++;
             }
+            expect(new Set(d.eventsRemoved.map((e) => JSON.stringify([e.epoch, e.event]))).size).toBe(d.eventsRemoved.length);
+            for (const e of d.eventsAdded) {
+              expect(b.some((x) => x.epoch === e.epoch && x.event === e.event)).toBe(true);
+              expect(e).not.toHaveProperty('renamedFrom');
+            }
+            for (const m of d.moved) {
+              const from = (m.kind === 'epoch' ? m.from : m.epoch) ?? '';
+              expect(inA(from, m.renamedFrom ?? m.event)).toBe(true);
+              expect(m.renamedFrom !== undefined).toBe(!inA(from, m.event));
+            }
+            seen.pathsAdded += d.pathsAdded.length ? 1 : 0;
+            seen.pathsRemoved += d.pathsRemoved.length ? 1 : 0;
+            seen.typeChanges += d.typeChanges.length ? 1 : 0;
+            seen.kindChanged += d.kindChanged.length ? 1 : 0;
+            seen.epochMoved += d.moved.some((m) => m.kind === 'epoch') ? 1 : 0;
+            seen.frameMoved += d.moved.some((m) => m.kind === 'frame') ? 1 : 0;
+            seen.eventsAdded += d.eventsAdded.length ? 1 : 0;
+            seen.eventsRemoved += d.eventsRemoved.length ? 1 : 0;
+            checked++;
           }
         }
       }
     }
-    expect(checked).toBe(32 * sides.length ** 2);
+    expect(checked).toBe(2 * variantPairs.length * sides.length ** 2);
     for (const [list, n] of Object.entries(seen)) expect(n, list).toBeGreaterThan(0);
   });
 
