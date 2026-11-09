@@ -76,6 +76,16 @@ test('the Defaults line names each default, and is absent when there is none', (
   ).toBe('Defaults: tagreeve/trackers.json (tracker list), tagreeve/autoconsent/cookiebot.json (autoconsent rules)');
 });
 
+test('the Defaults line names the config first, as 0.6.1 did', () => {
+  expect(
+    formatDefaultsLine([
+      { setting: 'stores', path: 'tagreeve/stores.json' },
+      { setting: 'config', path: 'tagreeve/config.yml' },
+      { setting: 'trackerList', path: 'tagreeve/trackers.json' },
+    ]),
+  ).toBe('Defaults: tagreeve/config.yml (project config), tagreeve/stores.json (stores), tagreeve/trackers.json (tracker list)');
+});
+
 test('a symlinked autoconsent rule file is used as a default', async () => {
   await mkdir(join(root, 'tagreeve/autoconsent'));
   await writeFile(join(root, 'shared.json'), '{}');
@@ -94,8 +104,7 @@ test('a directory and a dangling link named *.json are not listed; a linked file
   expect(used).toEqual([{ setting: 'autoconsentRules', path: 'tagreeve/autoconsent/linked.json' }]);
 });
 
-test('a default that cannot be read throws with the fixed relative path, not the absolute one', async () => {
-  if (process.getuid?.() === 0) return;
+test.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('a default that cannot be read throws with the fixed relative path, not the absolute one', async () => {
   await mkdir(join(root, 'tagreeve/autoconsent'));
   await writeFile(join(root, 'tagreeve/stores.json'), '{}');
   const message = (run: () => Promise<unknown>): Promise<string> => run().then(() => 'no error', (error: Error) => error.message);

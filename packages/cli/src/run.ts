@@ -30,7 +30,7 @@ import {
 import { BaselineError, baselineFileName, compareBaseline, readBaseline, type BaselineFile } from './baseline.ts';
 import { DEFAULT_BASELINES, resolveAutoconsentRules, resolveTrackerList, type DefaultUsed } from './defaults.ts';
 import { warnIfNotIgnored } from './git-ignore.ts';
-import { oldRunsNotice, resolveOutDir } from './out-dir.ts';
+import { resolveRunFolder } from './out-dir.ts';
 import { NET_LOG_NEEDS_LIVE, UsageError, type Network, type RunArgs, type SuiteArgs } from './args.ts';
 import { ALLOW_TEST_PAYMENT_NEEDS_SITE, loadProjectConfig, ProjectConfigLoadError, siteMissingMessage, type LoadedConfig } from './project-config.ts';
 import { applyBaseline, buildSummary, exitCodeFor, formatSummary, type Summary } from './summary.ts';
@@ -395,11 +395,8 @@ export async function runCommand(args: RunArgs, io: Io): Promise<number> {
   }
   warnTestGtmOrigin(io);
   warnTestLoopbackHosted(io);
-  const out = resolveOutDir({ out: args.out, now: new Date(), label: args.label, base: loaded?.config.out });
-  if (args.out === undefined && loaded?.config.out === undefined) {
-    const notice = await oldRunsNotice(process.cwd(), out);
-    if (notice) io.stderr(notice);
-  }
+  const { folder: out, notice } = await resolveRunFolder({ out: args.out, now: new Date(), label: args.label, base: loaded?.config.out });
+  if (notice) io.stderr(notice);
   await warnIfNotIgnored(out, io.stderr);
 
   const outcome = await executeRun(

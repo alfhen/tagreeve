@@ -10,7 +10,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 <!-- V10 -->
 
-<!-- F10 -->
+- Internal: the folder names under `tagreeve/` and the `Defaults:` line code live in one place. `run` and `suite` read the out folder and the old-runs notice from one call. No change in output (#972, #1041, #1049, #1061, #1330, #1137, #1132).
 
 <!-- D10 -->
 

@@ -1,7 +1,7 @@
 import { guardFieldName, maskValuePath, OTHER_NAME, platformHostFor } from '@tagreeve/decoders';
 import type { FlagKind, HitLinkMiss, Result, ResultNote, RunRecords, ServerContainerErrorClass, Severity } from '@tagreeve/core';
 import { isServerHit, judgeIndex, NO_EVENT, pushShapes, summarizeTags, tagLabel, viaHitOf, type PushShapes, type TagsContainerSummary } from '@tagreeve/expect';
-import { formatDefaults, type DefaultEntry } from './project-config.ts';
+import { formatDefaultsLine, type DefaultUsed } from './defaults.ts';
 import { NOTE_TEXT } from './report/model.ts';
 
 export interface BaselineSummary {
@@ -39,7 +39,7 @@ export interface Summary {
   label?: string;
   path: string;
   /** Files used because their flag was not given. Absent when none. */
-  defaults?: DefaultEntry[];
+  defaults?: DefaultUsed[];
   /** Every result passed, warnings included, and the run shows no baseline drift. */
   pass: boolean;
   /** No result failed at `fail` severity and the run shows no baseline drift. The exit code is 0 exactly when this is true. */
@@ -306,7 +306,7 @@ function tagsLine(container: string, entry: TagsContainerSummary): string {
 export function formatSummary(summary: Summary): string {
   const lines: string[] = [];
   if (summary.label !== undefined) lines.push(`Label: ${summary.label}`);
-  const defaultsLine = formatDefaults(summary.defaults);
+  const defaultsLine = formatDefaultsLine(summary.defaults);
   if (defaultsLine) lines.push(defaultsLine);
   if (summary.testPayment) {
     const { provider, host, testMode } = summary.testPayment;

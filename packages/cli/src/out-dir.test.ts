@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, test } from 'vitest';
-import { oldRunsNotice, oldRunsNoticeText, resolveOutDir } from './out-dir.ts';
+import { oldRunsNotice, oldRunsNoticeText, resolveOutDir, resolveRunFolder } from './out-dir.ts';
 
 const F = join('tagreeve', 'runs', '2026-11-04');
 let dir: string;
@@ -70,4 +70,18 @@ test('the notice shows the folder it is given, with the label, not a placeholder
   const text = await oldRunsNotice(dir, join('tagreeve', 'runs', '2026-11-04-x1'));
   expect(text).toContain(`records now go to ${join('tagreeve', 'runs', '2026-11-04-x1')}/.`);
   expect(text).not.toContain('<date>');
+});
+
+test('the entry point returns the notice only for a default folder', async () => {
+  await mkdir(join(dir, 'runs'));
+  await writeFile(join(dir, 'runs', 'run_old.jsonl'), '');
+  const now = new Date('2026-11-04T12:00:00Z');
+  process.env.TZ = 'UTC';
+  const fromDefault = await resolveRunFolder({ out: undefined, now }, dir);
+  expect(fromDefault).toEqual({ folder: F, isDefault: true, notice: oldRunsNoticeText(F) });
+  for (const input of [{ out: 'o' }, { out: undefined, base: 'records' }]) {
+    const chosen = await resolveRunFolder({ ...input, now }, dir);
+    expect(chosen.isDefault).toBe(false);
+    expect(chosen.notice).toBeUndefined();
+  }
 });

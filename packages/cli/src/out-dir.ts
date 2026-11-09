@@ -1,5 +1,6 @@
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { DEFAULT_RUNS } from './defaults.ts';
 
 export interface OutDirInput {
   out: string | undefined;
@@ -8,7 +9,7 @@ export interface OutDirInput {
   base?: string;
 }
 
-export function resolveOutDir({ out, now, label, base = 'tagreeve/runs' }: OutDirInput): string {
+export function resolveOutDir({ out, now, label, base = DEFAULT_RUNS }: OutDirInput): string {
   if (out !== undefined) return out;
   const pad = (n: number) => String(n).padStart(2, '0');
   const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
@@ -29,4 +30,18 @@ export async function oldRunsNotice(cwd: string, folder: string): Promise<string
     return undefined;
   }
   return names.some((n) => /^run_.*\.jsonl$/.test(n) || n.startsWith('suite_')) ? oldRunsNoticeText(folder) : undefined;
+}
+
+export interface RunFolder {
+  folder: string;
+  /** True when neither --out nor the project config chose the folder. */
+  isDefault: boolean;
+  notice?: string;
+}
+
+export async function resolveRunFolder(input: OutDirInput, cwd: string = process.cwd()): Promise<RunFolder> {
+  const folder = resolveOutDir(input);
+  const isDefault = input.out === undefined && input.base === undefined;
+  const notice = isDefault ? await oldRunsNotice(cwd, folder) : undefined;
+  return { folder, isDefault, ...(notice && { notice }) };
 }
