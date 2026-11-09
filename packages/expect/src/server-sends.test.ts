@@ -341,13 +341,6 @@ describe('rules on a server hit', () => {
       expect(results).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendProbableLink' });
     });
 
-    test('with more than 6 probable hits and a direct hit in scope a failing count warns', () => {
-      const direct = browser(100, { vendor: 'meta-capi' });
-      const vias = Array.from({ length: 7 }, (_, i) => browser(500 + i));
-      const results = rule(exact, [direct, ...vias, ...vias.map((v, i) => capi(1500 + i, link(v, 'probable')))]);
-      expect(results).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendProbableLink' });
-    });
-
     test('probable hits outside the rule scope do not make a failing count warn', () => {
       const vias = Array.from({ length: 7 }, (_, i) => browser(500 + i));
       const other = vias.map((v, i) => capi(1500 + i, link(v, 'probable'), { vendor: 'ga4' }));
@@ -361,6 +354,93 @@ describe('rules on a server hit', () => {
       const two = '  must:\n    - { vendor: meta-capi, in: epoch(denied), count: 2 }';
       const results = rule(two, [via, capi(500, link(via, 'probable')), capi(600, undefined)]);
       expect(results).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked' });
+    });
+
+    describe('a hit placed by its own time alone changes the verdict', () => {
+      const onlyOne = '  must:\n    - { vendor: meta-capi, in: epoch(denied), count: 1, body.only: [event_name] }';
+      const hashOne = '  must:\n    - { vendor: meta-capi, in: epoch(denied), count: 1, identity.hashesMatch: true }';
+      const cleanBody = { fields: ['event_name'], idFields: [] };
+      const rightEm = { fields: ['em'], params: { em: hashEmail(identity.email).hex } };
+      const table: { shape: string; yaml: string; own: Partial<Hit>; warns: boolean }[] = [
+        { shape: 'plain count', yaml: exact, own: {}, warns: true },
+        { shape: 'body.only, a clean hit', yaml: onlyOne, own: cleanBody, warns: true },
+        { shape: 'identity.hashesMatch, a right hash', yaml: hashOne, own: rightEm, warns: true },
+        { shape: 'body.only, a dirty hit', yaml: onlyOne, own: { fields: ['event_name', 'email'], idFields: [] }, warns: false },
+      ];
+      test.each(table)('a hit linked into granted and sent in denied: $shape', ({ yaml, own, warns }) => {
+        const later = browser(1200);
+        const sent = capi(600, link(later, 'probable'), own);
+        expect(judgedAt(sent.hit, judgeIndex([later.hit, sent.hit], [later.req, sent.req]))).toBe(1200);
+        const result = rule(yaml, [later, sent]);
+        expect(result.pass).toBe(false);
+        if (warns) expect(result).toMatchObject({ severity: 'warn', note: 'serverSendProbableLink' });
+        else expect(result.note).toBeUndefined();
+      });
+
+      test('a passing count that the hit placed by its own time would break carries the note', () => {
+        const later = browser(1200);
+        const direct = browser(100, { vendor: 'meta-capi' });
+        const results = rule(exact, [direct, later, capi(600, link(later, 'probable'))]);
+        expect(results).toMatchObject({ pass: true, note: 'serverSendProbableLink' });
+      });
+    });
+
+    describe('every placement is tried up to 10 hits', () => {
+      const only = '  must:\n    - { vendor: meta-capi, in: epoch(denied), count: 1, body.only: [event_name] }';
+      const dirty = { fields: ['event_name', 'email'], idFields: [] };
+      const probables = (n: number) => {
+        const vias = Array.from({ length: n }, (_, i) => browser(500 + i));
+        return [...vias, ...vias.map((v, i) => capi(1500 + i, link(v, 'probable'), dirty))];
+      };
+
+      test('10 dirty probable hits fail, 11 warn', () => {
+        const ten = rule(only, probables(10));
+        expect(ten.pass).toBe(false);
+        expect(ten.severity).not.toBe('warn');
+        expect(ten.note).toBeUndefined();
+        expect(rule(only, probables(11))).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendProbableLink' });
+      });
+
+      test('4 dirty unlinked and 4 dirty probable hits fail', () => {
+        const unlinked = Array.from({ length: 4 }, (_, i) => capi(100 + i, undefined, dirty));
+        const result = rule(only, [...probables(4), ...unlinked]);
+        expect(result.pass).toBe(false);
+        expect(result.severity).not.toBe('warn');
+        expect(result.note).toBeUndefined();
+      });
+
+      test('an exact browser leak next to 7 probable hits still fails a count of 0', () => {
+        const zero = '  must:\n    - { vendor: meta-capi, in: epoch(denied), count: 0 }';
+        const result = rule(zero, [browser(100, { vendor: 'meta-capi' }), ...probables(7)]);
+        expect(result.pass).toBe(false);
+        expect(result.severity).not.toBe('warn');
+        expect(result.note).toBeUndefined();
+      });
+    });
+
+    describe('an at-least count places each probable hit by its link or its own time', () => {
+      const atLeastTwo = '  must:\n    - { vendor: meta-capi, in: epoch(denied), count: ">= 2" }';
+
+      test('one hit by its link and one by its own time meet it', () => {
+        const viaX = browser(500);
+        const viaY = browser(1200);
+        const results = rule(atLeastTwo, [viaX, viaY, capi(1500, link(viaX, 'probable')), capi(600, link(viaY, 'probable'))]);
+        expect(results).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendProbableLink' });
+      });
+
+      test('an unlinked and a probable hit placed together meet it', () => {
+        const via = browser(1200);
+        const results = rule(atLeastTwo, [via, capi(600, link(via, 'probable')), capi(700, undefined)]);
+        expect(results).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked' });
+      });
+
+      test('two hits that no placement can bring into scope fail', () => {
+        const viaX = browser(1200);
+        const viaY = browser(1300);
+        const result = rule(atLeastTwo, [viaX, viaY, capi(1500, link(viaX, 'probable')), capi(1600, link(viaY, 'probable'))]);
+        expect(result.pass).toBe(false);
+        expect(result.note).toBeUndefined();
+      });
     });
   });
 

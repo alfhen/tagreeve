@@ -8,7 +8,7 @@ Not released yet. The newest release is 0.6.1, below.
 
 <!-- E10 -->
 
-- An exact count with `body` or `identity.hashesMatch` now tries every placement of the unlinked and probable server hits in scope, up to 10 hits. It warns when a placement could change the verdict, and always above 10 hits. Some rules that failed in 0.6.1 now warn, so a run can exit 0 where it exited 1.
+- An exact count with `body` or `identity.hashesMatch` now tries every placement of the unlinked and probable server hits in scope, up to 10 hits. A probable hit is placed by its link, by its own time or left out. It warns when a placement could change the verdict, and always above 10 hits. At-least and at-most counts try the same placements. Some rules that failed in 0.6.1 now warn, so a run can exit 0 where it exited 1.
 - An unload send no longer breaks a client ID link between a server hit and its browser hit.
 - A dataLayer push finding with no field path reads `in the push`, not `in the body`.
 
