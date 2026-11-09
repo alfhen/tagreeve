@@ -23,6 +23,7 @@ interface Seen {
   length: number;
   rawLength: number;
   token: string;
+  raw: string;
 }
 
 async function runPages(queries: string[]) {
@@ -36,7 +37,7 @@ async function runPages(queries: string[]) {
       seen.push(
         await page.evaluate(() => {
           const w = window as unknown as { pwOwnPushes: number; dataLayer: unknown[]; pwRaw: unknown[]; __tagreeveTally: () => { d: string } };
-          return { pwOwnPushes: w.pwOwnPushes, length: w.dataLayer.length, rawLength: w.pwRaw.length, token: w.__tagreeveTally().d };
+          return { pwOwnPushes: w.pwOwnPushes, length: w.dataLayer.length, rawLength: w.pwRaw.length, token: w.__tagreeveTally().d, raw: JSON.stringify(w.pwRaw) };
         }),
       );
     }
@@ -49,7 +50,13 @@ async function runPages(queries: string[]) {
   return { records: closed.records, flags, seen };
 }
 
-function expectNoLeak(records: { dataLayerEvents: unknown[] }, flags: { detail: string }[]) {
+function expectNoLeak(records: { dataLayerEvents: unknown[] }, flags: { detail: string }[], seen: Seen[]) {
+  for (const page of seen) {
+    expect(page.token.length).toBeGreaterThan(0);
+    expect(page.raw).toContain('pw-planted-value-1');
+    expect(page.raw).toContain('https://planted.example.test/x');
+    expect(JSON.stringify(records)).not.toContain(page.token);
+  }
   const pushes = JSON.stringify(records.dataLayerEvents);
   if (records.dataLayerEvents.length > 0) {
     expect(pushes).toContain('pw-planted-value-1');
@@ -68,7 +75,7 @@ test('mode=redefine gives one flag for the main frame that says 3 items', async 
   expect(flags).toHaveLength(1);
   expect(flags[0]!.detail).toMatch(/^Frame \d+: dataLayer holds 3 items, and 0 were recorded\./);
   expect(records.dataLayerEvents).toHaveLength(0);
-  expectNoLeak(records, flags);
+  expectNoLeak(records, flags, seen);
 }, 60_000);
 
 test('mode=theme is never silent: it records the 8 pushes or gives one flag that says 8 items', async () => {
@@ -81,7 +88,7 @@ test('mode=theme is never silent: it records the 8 pushes or gives one flag that
     expect(flags).toHaveLength(1);
     expect(flags[0]!.detail).toMatch(/^Frame \d+: dataLayer holds 8 items, and \d+ were recorded\./);
   }
-  expectNoLeak(records, flags);
+  expectNoLeak(records, flags, seen);
 }, 60_000);
 
 test('mode=plain records its 3 pushes and gives no flag', async () => {
@@ -89,7 +96,7 @@ test('mode=plain records its 3 pushes and gives no flag', async () => {
   expect(seen[0]).toMatchObject({ pwOwnPushes: 3, length: 3 });
   expect(records.dataLayerEvents).toHaveLength(3);
   expect(flags).toEqual([]);
-  expectNoLeak(records, flags);
+  expectNoLeak(records, flags, seen);
 }, 60_000);
 
 test('a plain page that navigates in the same frame to a theme page is judged on the second document', async () => {
@@ -105,7 +112,7 @@ test('a plain page that navigates in the same frame to a theme page is judged on
     expect(flags).toEqual([]);
     expect(recorded).toBe(18);
   }
-  expectNoLeak(records, flags);
+  expectNoLeak(records, flags, seen);
 }, 60_000);
 
 test('a plain page that navigates to an unshift page is flagged for the edit that no hook records', async () => {
@@ -115,11 +122,12 @@ test('a plain page that navigates to an unshift page is flagged for the edit tha
   expect(records.dataLayerEvents).toHaveLength(11);
   expect(flags).toHaveLength(1);
   expect(flags[0]!.detail).toContain('holds 4 items, and 1 were recorded');
-  expectNoLeak(records, flags);
+  expectNoLeak(records, flags, seen);
 }, 60_000);
 
 test('two plain pages in one frame record 8 pushes and give no flag', async () => {
-  const { records, flags } = await runPages(['?mode=plain&n=5', '?mode=plain&n=3']);
+  const { records, flags, seen } = await runPages(['?mode=plain&n=5', '?mode=plain&n=3']);
   expect(records.dataLayerEvents).toHaveLength(8);
   expect(flags).toEqual([]);
+  expectNoLeak(records, flags, seen);
 }, 60_000);

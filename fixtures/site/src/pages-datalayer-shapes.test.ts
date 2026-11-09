@@ -19,6 +19,7 @@ test('/datalayer-shapes pushes a purchase, odd keys, an odd event name and a con
   expect(html).toContain("event: 'fake.person@example.test'");
   expect(html).toContain("window.gtag('consent', 'default'");
   expect(html).toContain('/datalayer-shapes?child=1');
+  expect(html).toContain('<iframe id="child" title="Embedded frame" sandbox="allow-scripts">');
   expect(html).not.toContain('site.js');
 });
 

@@ -13,7 +13,7 @@ interface Summary {
   dataLayer?: { pushes: number; steps: { step: string; events: Shape[] }[] };
 }
 
-const LEAKS = [/fake\.person/, /example\.test/, /gid:\/\//, /1234567890/, /deadbeef/, /pw-secret-value/, /tok-value/];
+const LEAKS = [/fake\.person/, /example\.test/, /gid:\/\//, /1234567890/, /deadbeef/, /pw-secret-value/, /tok-value/, /sku-\d/, /USD/, /25\.5/, /15\.5/];
 
 test('the summary carries masked push shapes and no pushed value', async () => {
   const r = await run('datalayer-shapes');
@@ -22,8 +22,10 @@ test('the summary carries masked push shapes and no pushed value', async () => {
   expect(args).toContain('fake.person@example.test');
   expect(args).toContain('gid://shopify/Product/1234567890');
   expect(args).toContain('deadbeefdeadbeefdeadbeefdeadbeef');
+  for (const leak of LEAKS) expect(args, String(leak)).toMatch(leak);
   expect(records.dataLayerEvents.some((e) => e.event === 'fake.person@example.test')).toBe(true);
-  expect(records.dataLayerEvents.some((e) => e.frame?.main === false)).toBe(true);
+  const embeddedPush = records.dataLayerEvents.find((e) => e.event === 'embedded_push');
+  expect(embeddedPush?.frame?.main).toBe(false);
 
   const { dataLayer } = JSON.parse(r.stdout) as Summary;
   expect(dataLayer).toBeDefined();

@@ -15,7 +15,11 @@ interface Sent {
   reassigned?: true;
 }
 
-function pageWith(setup: string, names: string[] = []): { sent: Sent[]; run: (code: string) => unknown; flush: () => Promise<void> } {
+function pageWith(
+  setup: string,
+  names: string[] = [],
+  binding: (payload: Sent) => unknown = () => Promise.resolve(),
+): { sent: Sent[]; run: (code: string) => unknown; flush: () => Promise<void> } {
   const sent: Sent[] = [];
   const sandbox: Record<string, unknown> = {
     performance: { timeOrigin: 1000, now: () => 5 },
@@ -24,7 +28,7 @@ function pageWith(setup: string, names: string[] = []): { sent: Sent[]; run: (co
     addEventListener: () => {},
     [DATALAYER_BINDING]: (payload: Sent) => {
       sent.push(payload);
-      return Promise.resolve();
+      return binding(payload);
     },
   };
   sandbox.window = sandbox;
@@ -340,12 +344,58 @@ test('assigning the same array again posts no reassigned notice', async () => {
   expect(page.sent.filter((s) => s.reassigned)).toHaveLength(0);
 });
 
-test('the tally reading the name queues no second check', async () => {
+test('the tally reading the name queues no second check, so a push that skips the base after the read stays unrecorded', async () => {
   const page = pageWith('');
   page.run(`window.dataLayer = []; window.saved = dataLayer; Array.prototype.push.call(saved, { event: 'a' });`);
-  page.run(`${DATALAYER_TALLY}()`);
   await page.flush();
-  expect(page.sent).toHaveLength(1);
+  page.run(`${DATALAYER_TALLY}(); Array.prototype.push.call(saved, { event: 'late' });`);
+  await page.flush();
+  expect(argsOf(page.sent)).toEqual([[{ event: 'a' }]]);
+  expect(page.run('saved.length')).toBe(2);
+});
+
+test('a page read of the name does queue a check that records the late push', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; window.saved = dataLayer; dataLayer.length; Array.prototype.push.call(saved, { event: 'late' });`);
+  await page.flush();
+  expect(argsOf(page.sent)).toEqual([[{ event: 'late' }]]);
+});
+
+test('a frozen array is hooked without throwing and keeps its early items', async () => {
+  const page = pageWith(`window.dataLayer = Object.freeze([{ event: 'early' }]);`);
+  await page.flush();
+  expect(argsOf(page.sent)).toEqual([[{ event: 'early' }]]);
+  expect(() => page.run(`${DATALAYER_TALLY}()`)).not.toThrow();
+  expect(page.run('dataLayer.length')).toBe(1);
+});
+
+test('a non-configurable push stays the page function and the growth check still records', async () => {
+  const page = pageWith('');
+  page.run(`const l = []; globalThis.mine = function (...a) { return Array.prototype.push.apply(this, a); }; Object.defineProperty(l, 'push', { value: mine, configurable: false, writable: false }); window.dataLayer = l; dataLayer.push({ event: 'x' });`);
+  expect(page.run('dataLayer.push === mine')).toBe(true);
+  expect((page.run(`${DATALAYER_TALLY}()`) as Tally).arrays).toEqual([{ layer: 'dataLayer', a: 1, length: 1, posted: 1 }]);
+  await page.flush();
+  expect(argsOf(page.sent)).toEqual([[{ event: 'x' }]]);
+});
+
+test('a binding that throws, rejects or is missing never reaches the page; a throw or a missing binding is not counted as posted', async () => {
+  const bindings: [string, (payload: Sent) => unknown][] = [
+    ['throws', () => { throw new Error('binding gone'); }],
+    ['rejects', () => Promise.reject(new Error('binding gone'))],
+  ];
+  for (const [label, binding] of bindings) {
+    const page = pageWith('', [], binding);
+    expect(() => page.run(`window.dataLayer = []; dataLayer.push({ event: 'a' }); dataLayer.length`), label).not.toThrow();
+    await page.flush();
+    expect(page.run('dataLayer.length'), label).toBe(1);
+    const posted = (page.run(`${DATALAYER_TALLY}()`) as Tally).arrays[0]!.posted;
+    expect(posted, label).toBe(label === 'throws' ? 0 : 1);
+  }
+  const absent = pageWith('');
+  absent.run(`delete window[${JSON.stringify(DATALAYER_BINDING)}]; window.dataLayer = []; dataLayer.push({ event: 'a' });`);
+  await absent.flush();
+  expect(absent.run('dataLayer.length')).toBe(1);
+  expect((absent.run(`${DATALAYER_TALLY}()`) as Tally).arrays[0]!.posted).toBe(0);
 });
 
 function realm(sent: Sent[], tag: string) {
@@ -456,3 +506,202 @@ test('a name the page defined as an accessor is untrapped and not replaced', () 
   expect(tallyOf(page.run).untrapped).toEqual(['status']);
   expect(page.run(`'value' in Object.getOwnPropertyDescriptor(window, 'status')`)).toBe(false);
 });
+
+test('two stacked call-through wrappers report once and reach the array', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = [];
+    for (let i = 0; i < 2; i++) { const saved = dataLayer.push; dataLayer.push = function () { return saved.apply(this, arguments); }; }
+    dataLayer.push({ event: 'a' });`);
+  await page.flush();
+  expect(argsOf(page.sent)).toEqual([[{ event: 'a' }]]);
+  expect(page.run('dataLayer.length')).toBe(1);
+});
+
+test('a wrapper that calls Array.prototype.push records each push once', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; dataLayer.push = function () { return Array.prototype.push.apply(this, arguments); }; dataLayer.push({ event: 'a' }); dataLayer.push({ event: 'b' });`);
+  await page.flush();
+  expect(argsOf(page.sent)).toEqual([[{ event: 'a' }], [{ event: 'b' }]]);
+});
+
+test('a wrapper that pushes a copy through the saved push records both items', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; const saved = dataLayer.push;
+    dataLayer.push = function (item) { saved.call(this, { ...item, copy: true }); return saved.apply(this, arguments); };
+    dataLayer.push({ event: 'a' });`);
+  await page.flush();
+  expect(page.run('dataLayer.length')).toBe(2);
+  expect(argsOf(page.sent)).toEqual([[{ event: 'a', copy: true }], [{ event: 'a' }]]);
+});
+
+test('a fixed-function identity-guarded install does not throw or recurse', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; globalThis.n = 0; let saved;
+    const mine = function () { n++; return saved.apply(this, arguments); };
+    function install() { if (dataLayer.push === mine) return; saved = dataLayer.push; dataLayer.push = mine; }
+    install(); install(); install();`);
+  expect(() => page.run(`dataLayer.push({ event: 'a' })`)).not.toThrow();
+  await page.flush();
+  expect(page.run('n')).toBe(1);
+  expect(page.sent).toHaveLength(1);
+});
+
+test('a push made while a wrapper runs goes through the wrapper and is recorded once', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; globalThis.calls = []; const saved = dataLayer.push;
+    dataLayer.push = function () {
+      const r = saved.apply(this, arguments);
+      for (const item of arguments) { calls.push(item.event); if (item.event === 'a') dataLayer.push({ event: 'nested' }); }
+      return r;
+    };
+    dataLayer.push({ event: 'a' });`);
+  expect(page.run('calls')).toEqual(['a', 'nested']);
+  expect(page.run('dataLayer.length')).toBe(2);
+  await page.flush();
+  expect(argsOf(page.sent).map((a) => ((a as Array<{ event: string }>)[0]!).event).sort()).toEqual(['a', 'nested']);
+});
+
+test('a deferred call to the saved push is not reported again and does not loop', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; globalThis.n = 0; const saved = dataLayer.push;
+    dataLayer.push = function () { n++; const args = arguments; Promise.resolve().then(() => saved.apply(this, args)); return 0; };
+    dataLayer.push({ event: 'a' });`);
+  await new Promise((r) => setTimeout(r, 10));
+  expect(page.run('n')).toBe(1);
+  expect(page.run('dataLayer.length')).toBe(1);
+  await page.flush();
+  expect(page.sent).toHaveLength(1);
+});
+
+test('putting the saved push back removes the wrapper', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; globalThis.n = 0; const saved = dataLayer.push;
+    dataLayer.push = function () { n++; return saved.apply(this, arguments); };
+    dataLayer.push({ event: 'a' }); dataLayer.push = saved; dataLayer.push({ event: 'b' });`);
+  expect(page.run('n')).toBe(1);
+  expect(page.run('dataLayer.length')).toBe(2);
+  await page.flush();
+  expect(page.sent).toHaveLength(2);
+});
+
+test('a cached entry still runs its own wrapper after an out-of-order unwrap', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; globalThis.log = [];
+    const s0 = dataLayer.push;
+    dataLayer.push = function () { log.push(1); return s0.apply(this, arguments); };
+    const s1 = dataLayer.push;
+    dataLayer.push = function () { log.push(2); return s1.apply(this, arguments); };
+    globalThis.cached = dataLayer.push;
+    dataLayer.push = s0;`);
+  expect(() => page.run(`cached.call(dataLayer, { event: 'a' })`)).not.toThrow();
+  expect(page.run('dataLayer.length')).toBe(1);
+  expect(page.run('log')).toEqual([2, 1]);
+  await page.flush();
+  expect(argsOf(page.sent)).toEqual([[{ event: 'a' }]]);
+});
+
+test('a saved call-through keeps its wrapper when a new wrapper is added after an unwrap', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; globalThis.log = [];
+    const s0 = dataLayer.push;
+    dataLayer.push = function () { log.push(1); return s0.apply(this, arguments); };
+    const s1 = dataLayer.push;
+    dataLayer.push = function () { log.push(2); return s1.apply(this, arguments); };
+    dataLayer.push = s0;
+    const s2 = dataLayer.push;
+    dataLayer.push = function () { log.push(3); return s2.apply(this, arguments); };
+    s1.call(dataLayer, { event: 'a' });`);
+  expect(page.run('log')).toEqual([1]);
+});
+
+test('a cached top entry assigned back after a restore is active again', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; globalThis.n = 0;
+    const s0 = dataLayer.push;
+    dataLayer.push = function () { n++; return s0.apply(this, arguments); };
+    globalThis.top = dataLayer.push;
+    dataLayer.push = s0;
+    dataLayer.push = top;
+    dataLayer.push({ event: 'a' });`);
+  expect(page.run('dataLayer.push === top')).toBe(true);
+  expect(page.run('n')).toBe(1);
+});
+
+test('an extra item pushed through the saved push is recorded', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; const s0 = dataLayer.push;
+    dataLayer.push = function () { s0.call(this, { event: 'extra' }); return s0.apply(this, arguments); };
+    dataLayer.push({ event: 'a' });`);
+  expect(page.run('dataLayer.length')).toBe(2);
+  await page.flush();
+  expect(argsOf(page.sent).map((a) => ((a as Array<{ event: string }>)[0]!).event).sort()).toEqual(['a', 'extra']);
+});
+
+test('the same object pushed twice through an Array.prototype.push wrapper is reported twice', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; dataLayer.push = function () { return Array.prototype.push.apply(this, arguments); };
+    const o = { event: 'a' }; dataLayer.push(o); dataLayer.push(o);`);
+  expect(page.run('dataLayer.length')).toBe(2);
+  await page.flush();
+  expect(argsOf(page.sent)).toEqual([[{ event: 'a' }], [{ event: 'a' }]]);
+});
+
+test('a marker-guarded install runs the page wrapper once however often it is called', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; globalThis.n = 0;
+    function install() { if (dataLayer.push.mine) return; const saved = dataLayer.push;
+      const w = function () { n++; return saved.apply(this, arguments); }; w.mine = true; dataLayer.push = w; }
+    install(); install(); install(); dataLayer.push({ event: 'a' });`);
+  expect(page.run('n')).toBe(1);
+  expect(page.run('dataLayer.length')).toBe(1);
+  await page.flush();
+  expect(page.sent).toHaveLength(1);
+});
+
+test('assigning a non-function to push is kept, as without the hook', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; dataLayer.push = undefined;`);
+  expect(page.run('dataLayer.push')).toBeUndefined();
+});
+
+test('a hole made by an index write is skipped and later items are recorded', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; dataLayer.push({ event: 'a' }); dataLayer[3] = { event: 'h' };
+    dataLayer.push = Array.prototype.push; dataLayer.push({ event: 'b' });`);
+  await page.flush();
+  expect(argsOf(page.sent)).toEqual([[{ event: 'a' }], [{ event: 'h' }], [{ event: 'b' }]]);
+});
+
+test('a length shrink resets the known length and later appends are recorded', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; dataLayer.push = Array.prototype.push; dataLayer.push({ event: 'a' }, { event: 'b' });`);
+  await page.flush();
+  page.run(`dataLayer.length = 1; dataLayer.push;`);
+  await page.flush();
+  page.run(`dataLayer.push({ event: 'c' });`);
+  await page.flush();
+  expect(argsOf(page.sent)).toEqual([[{ event: 'a' }], [{ event: 'b' }], [{ event: 'c' }]]);
+});
+
+test('a length write that makes holes does not throw and records later pushes', async () => {
+  const page = pageWith('');
+  page.run(`window.dataLayer = []; dataLayer.push({ event: 'a' }); dataLayer.length = 3;
+    dataLayer.push = Array.prototype.push; dataLayer.push({ event: 'b' });`);
+  await page.flush();
+  expect(argsOf(page.sent)).toEqual([[{ event: 'a' }], [{ event: 'b' }]]);
+});
+
+test('a non-configurable or frozen push never throws into page code', async () => {
+  const page = pageWith('');
+  expect(() =>
+    page.run(`window.dataLayer = [];
+      const a = []; Object.defineProperty(a, 'push', { value: Array.prototype.push, configurable: false, writable: false });
+      window.dataLayer = a; a.push({ event: 'a' });
+      const b = Object.freeze([]); window.dataLayer = b; try { b.push({ event: 'b' }); } catch {}`),
+  ).not.toThrow();
+  const pre = pageWith(`const z = []; Object.defineProperty(z, 'push', { value: Array.prototype.push, configurable: false }); window.dataLayer = z;`);
+  expect(() => pre.run(`dataLayer.push({ event: 'c' }); dataLayer.length`)).not.toThrow();
+  await pre.flush();
+  expect(argsOf(pre.sent)).toEqual([[{ event: 'c' }]]);
+});
+

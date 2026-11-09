@@ -1,0 +1,5 @@
+start: /unload-gap-frame-nav?main=1
+steps:
+  - consent: reject
+  - wait: 3s
+options: { seed: 1, allowUnknownDestination: true }

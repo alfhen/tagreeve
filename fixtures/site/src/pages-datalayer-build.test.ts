@@ -28,3 +28,11 @@ test('build a pushes add_to_cart from the embedded frame and build b from the to
   expect(html.slice(top)).toContain("if (build === 'b') {");
   expect(html.slice(top).match(/event: 'add_to_cart'/g)).toHaveLength(1);
 });
+
+test('both builds carry masked keys in the purchase and an email-as-key push', async () => {
+  const html = await (await fetch(`${site.url}/datalayer-build`)).text();
+  const top = html.slice(html.indexOf('} else {', html.indexOf("if (q.get('child'))")));
+  expect(top).toContain("purchase.legacy = { 'gid://shopify/Product/1234567890'");
+  expect(top).toContain("{ event: 'legacy_user', 'fake.person@example.test'");
+  expect(top.indexOf('purchase.legacy')).toBeLessThan(top.indexOf("if (build === 'b')"));
+});

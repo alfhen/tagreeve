@@ -50,6 +50,9 @@ test('a dataLayer push records whether the main frame made it and a frame number
   expect(before!.frame?.main).toBe(false);
   expect(before!.frame?.n).not.toBe(top!.frame?.n);
 
+  expect(written).toContain('/datalayer-frame-child?again=1');
+  expect(written).toContain(site.url);
+
   const lines = written.split('\n').filter(Boolean).map((l) => JSON.parse(l) as { type: string; frame?: unknown });
   const writtenEvents = lines.filter((l) => l.type === 'dataLayerEvent');
   expect(writtenEvents.length).toBe(records.dataLayerEvents.length);

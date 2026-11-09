@@ -44,6 +44,8 @@ test('mode=theme records the 8 pushes of a page that replaced push, in order, wi
 test('an item added through the saved raw array right before close is recorded by the close catch-up', async () => {
   const recorder = await launchRecorder({ networkMode: 'stub', outDir, site: site.url });
   let rawLength = 0;
+  let recordedBeforeClose = -1;
+  const step = recorder.beginStep('theme', 0);
   try {
     const page = await recorder.visit(`${site.url}/datalayer-theme?mode=theme`);
     await recorder.wait(300);
@@ -52,11 +54,13 @@ test('an item added through the saved raw array right before close is recorded b
       Array.prototype.push.call(w.pwRaw, { event: 'pw_late_raw' });
       return w.pwRaw.length;
     });
+    recordedBeforeClose = recorder.stepActivity(step).dataLayerEvents.filter((e) => e.frame?.main).length;
   } catch (error) {
     await recorder.close().catch(() => undefined);
     throw error;
   }
   expect(rawLength).toBe(9);
+  expect(recordedBeforeClose).toBe(8);
   const { records } = await recorder.close();
   const main = records.dataLayerEvents.filter((e) => e.frame?.main);
   expect(main).toHaveLength(9);

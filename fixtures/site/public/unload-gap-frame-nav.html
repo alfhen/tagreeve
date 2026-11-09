@@ -10,5 +10,15 @@
 <nav><a href="/">Home</a></nav>
 <h1>Unload gap frame navigation</h1>
 <iframe id="pw-nav-frame" src="/unload-gap-frame-nav-frame" style="width:0;height:0;border:0"></iframe>
+<script>
+  if (new URLSearchParams(location.search).get('main')) {
+    document.getElementById('pw-nav-frame').remove();
+    window.dataLayer = window.dataLayer || [];
+    setTimeout(function () {
+      window.dataLayer.push({ event: 'add_to_cart' });
+      location.href = '/';
+    }, 400);
+  }
+</script>
 </body>
 </html>
