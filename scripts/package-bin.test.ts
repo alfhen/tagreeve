@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, symlinkSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -90,6 +90,43 @@ test.each([
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain('--outdir must be empty, missing or a folder that holds a build');
   expect(existsSync(sentinel)).toBe(true);
+  rmSync(fake, { recursive: true, force: true });
+  rmSync(elsewhere, { recursive: true, force: true });
+}, 60_000);
+
+test('the build rebuilds the repo dist from a partial build and refuses other folders that hold only a cli.js', () => {
+  const fake = realpathSync(mkdtempSync(join(tmpdir(), 'tagreeve-decoy-')));
+  const elsewhere = realpathSync(mkdtempSync(join(tmpdir(), 'tagreeve-elsewhere-')));
+  const write = (file: string, text: string) => {
+    mkdirSync(join(file, '..'), { recursive: true });
+    writeFileSync(file, text);
+  };
+  write(join(fake, 'package.json'), JSON.stringify({ dependencies: {} }));
+  write(join(fake, 'packages/cli/src/bin.ts'), 'console.log(1);');
+  write(join(fake, 'packages/consent/rules/fixture-site.json'), '{}');
+  write(join(fake, 'packages/recorder/src/gtm-templates/web-tag-reporter.tpl'), 'TPL');
+  mkdirSync(join(fake, 'scripts'), { recursive: true });
+  copyFileSync(join(root, 'scripts/build.ts'), join(fake, 'scripts/build.ts'));
+  mkdirSync(join(fake, 'node_modules/.cache'), { recursive: true });
+  for (const entry of readdirSync(join(root, 'node_modules'))) {
+    if (entry !== '.cache') symlinkSync(join(root, 'node_modules', entry), join(fake, 'node_modules', entry));
+  }
+  const build = (...args: string[]) => spawnSync(process.execPath, ['--experimental-transform-types', join(fake, 'scripts/build.ts'), ...args], { encoding: 'utf8' });
+
+  write(join(fake, 'dist/cli.js'), 'x');
+  const rebuilt = build();
+  expect(rebuilt.status).toBe(0);
+  expect(existsSync(join(fake, 'dist/cli.js'))).toBe(true);
+  expect(readFileSync(join(fake, 'dist/templates/tagreeve-tag-reporter.tpl'), 'utf8')).toBe('TPL');
+
+  for (const dir of [join(elsewhere, 'other'), join(fake, 'node_modules/.cache/other')]) {
+    write(join(dir, 'cli.js'), 'x');
+    write(join(dir, 'SENTINEL'), 'keep');
+    const refused = build('--outdir', dir);
+    expect(refused.status).not.toBe(0);
+    expect(refused.stderr).toContain('--outdir must be empty, missing or a folder that holds a build');
+    expect(existsSync(join(dir, 'SENTINEL'))).toBe(true);
+  }
   rmSync(fake, { recursive: true, force: true });
   rmSync(elsewhere, { recursive: true, force: true });
 }, 60_000);

@@ -16,7 +16,8 @@ const ownedByBuild = inside('dist') || inside('node_modules/.cache');
 if (inside('') && !ownedByBuild) throw new Error('--outdir must be outside the repo, or inside dist or node_modules/.cache.');
 if (!relative(outdir, path('')).startsWith('..')) throw new Error('--outdir must not be the repo root or a folder that holds it.');
 const holdsBuild = ['cli.js', 'templates/tagreeve-tag-reporter.tpl'].every((file) => existsSync(resolve(outdir, file)));
-if (existsSync(outdir) && readdirSync(outdir).length > 0 && !holdsBuild) {
+const isRepoDist = outdir === resolve(path('dist'));
+if (!isRepoDist && existsSync(outdir) && readdirSync(outdir).length > 0 && !holdsBuild) {
   throw new Error('--outdir must be empty, missing or a folder that holds a build (cli.js and templates/tagreeve-tag-reporter.tpl).');
 }
 
