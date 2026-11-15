@@ -113,22 +113,26 @@ test('the build rebuilds the repo dist from a partial build and refuses other fo
   }
   const build = (...args: string[]) => spawnSync(process.execPath, ['--experimental-transform-types', join(fake, 'scripts/build.ts'), ...args], { encoding: 'utf8' });
 
-  write(join(fake, 'dist/cli.js'), 'x');
-  const rebuilt = build();
-  expect(rebuilt.status).toBe(0);
-  expect(existsSync(join(fake, 'dist/cli.js'))).toBe(true);
-  expect(readFileSync(join(fake, 'dist/templates/tagreeve-tag-reporter.tpl'), 'utf8')).toBe('TPL');
+  try {
+    write(join(fake, 'dist/cli.js'), 'x');
+    const rebuilt = build();
+    expect(rebuilt.status).toBe(0);
+    expect(readFileSync(join(fake, 'dist/cli.js'), 'utf8')).not.toBe('x');
+    expect(readFileSync(join(fake, 'dist/templates/tagreeve-tag-reporter.tpl'), 'utf8')).toBe('TPL');
 
-  for (const dir of [join(elsewhere, 'other'), join(fake, 'node_modules/.cache/other')]) {
-    write(join(dir, 'cli.js'), 'x');
-    write(join(dir, 'SENTINEL'), 'keep');
-    const refused = build('--outdir', dir);
-    expect(refused.status).not.toBe(0);
-    expect(refused.stderr).toContain('--outdir must be empty, missing or a folder that holds a build');
-    expect(existsSync(join(dir, 'SENTINEL'))).toBe(true);
+    const refusedDirs = [join(elsewhere, 'other'), join(elsewhere, 'x/dist'), join(fake, 'node_modules/.cache/other'), join(fake, 'dist/sub')];
+    for (const dir of refusedDirs) {
+      write(join(dir, 'cli.js'), 'x');
+      write(join(dir, 'SENTINEL'), 'keep');
+      const refused = build('--outdir', dir);
+      expect(refused.status).not.toBe(0);
+      expect(refused.stderr).toContain('--outdir must be empty, missing or a folder that holds a build');
+      expect(existsSync(join(dir, 'SENTINEL'))).toBe(true);
+    }
+  } finally {
+    rmSync(fake, { recursive: true, force: true });
+    rmSync(elsewhere, { recursive: true, force: true });
   }
-  rmSync(fake, { recursive: true, force: true });
-  rmSync(elsewhere, { recursive: true, force: true });
 }, 60_000);
 
 test('building into a temp folder leaves dist/cli.js as it was', () => {
