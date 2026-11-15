@@ -13,6 +13,7 @@ Tagreeve is an agent-first CLI that tests a website's tracking and consent: it p
 - Be safe by default: fake identities, no real payments, known collection endpoints stubbed, and every unknown destination flagged.
 - A new user starts with one simple setup prompt to their agent. The first run shows where the setup likely breaks consent rules (for example a hit before consent), what to fix first, and other likely issues.
 - Make it easy to change a GTM config reliably. Every change gets trusted signals that tracking still works as intended.
+- Keep the core platform-neutral: each release tests at least one plain GTM setup besides any platform-specific one, and platform-specific checks are marked as such.
 
 ## Non-goals
 
@@ -27,7 +28,7 @@ Tagreeve is an agent-first CLI that tests a website's tracking and consent: it p
 
 ## Users
 
-- Tracking professionals who already know GTM and tracking well, in-house or at an agency, and are tired of testing changes by hand. They want trusted signals that tracking and consent still work after each GTM change. Shopify stores come first: Shopify is the only checkout platform Tagreeve supports today.
+- Tracking professionals who already know GTM and tracking well, in-house or at an agency, and are tired of testing changes by hand. They want trusted signals that tracking and consent still work after each GTM change. Any site that runs Google Tag Manager is in scope. Core checks work on a plain GTM setup and never depend on one platform. Shopify is the only checkout platform Tagreeve supports today, and improvements for Shopify stores are welcome as additions on top of that core.
 - Coding agents that run Tagreeve for those professionals. They set it up from one prompt, run scenarios, read `--json`, and report what to fix.
 - CI jobs that run a suite or a baseline on each change, and fail the build on a regression.
 
