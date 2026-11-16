@@ -47,12 +47,12 @@
   window.dataLayer.push({ 'gtm.start': Date.now(), event: 'gtm.js' });
   window.gtag('event', 'page_view', { page_location: location.href });
 
-  // The typed email is pushed once. By default it waits for the banner answer; ?identity=early pushes it at once.
   var early = new URLSearchParams(location.search).get('identity') === 'early';
   var identified = false;
   function pushIdentity() {
     var field = document.getElementById('email');
     if (identified || !field || !field.value) return;
+    if (!early && !(window.pwConsent && window.pwConsent.choice() === 'accept')) return;
     identified = true;
     window.dataLayer.push({ event: 'identify', user: { email: field.value } });
   }

@@ -13,14 +13,17 @@ const MAX_DEPTH = 8;
 const MAX_LISTED = 5;
 
 // A key can itself hold a value, so only a plain name is shown.
-const safeKey = (key: string) => (guardFieldName(key) === key && !isValueSegment(key) ? key : OTHER_NAME);
+const safeKey = (key: string, identity: Identity) => {
+  if (guardFieldName(key) !== key || isValueSegment(key)) return OTHER_NAME;
+  const local = identity.email.split('@')[0]?.toLowerCase() ?? '';
+  return (local.length >= 3 && key.toLowerCase().includes(local)) || ownValueKinds(key, identity).size > 0 ? OTHER_NAME : key;
+};
 
 /** Collects the key path and kinds of every leaf that holds one of the identity's own values. Never keeps a value. */
 function ownLeaves(value: unknown, path: string, key: string, identity: Identity, depth: number, out: Leaves): void {
   if (depth > MAX_DEPTH) return;
   if (typeof value === 'string' || typeof value === 'number') {
     const kinds = ownValueKinds(`${key}=${value}`, identity);
-    for (const k of ownValueKinds(String(value), identity)) kinds.add(k);
     for (const k of ownValueKinds(String(value), identity)) kinds.add(k);
     if (kinds.size === 0) return;
     const name = path || '(value)';
@@ -31,10 +34,10 @@ function ownLeaves(value: unknown, path: string, key: string, identity: Identity
   }
   if (typeof value !== 'object' || value === null) return;
   if (Array.isArray(value)) {
-    for (const item of value) ownLeaves(item, `${path}[*]`, key, identity, depth + 1, out);
+    for (const item of value) ownLeaves(item, `${path}[]`, key, identity, depth + 1, out);
     return;
   }
-  for (const [k, child] of Object.entries(value)) ownLeaves(child, path === '' ? safeKey(k) : `${path}.${safeKey(k)}`, k, identity, depth + 1, out);
+  for (const [k, child] of Object.entries(value)) ownLeaves(child, path === '' ? safeKey(k, identity) : `${path}.${safeKey(k, identity)}`, k, identity, depth + 1, out);
 }
 
 const withoutConsent = (epoch: ConsentEpoch): boolean =>

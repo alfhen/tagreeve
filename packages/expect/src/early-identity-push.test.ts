@@ -44,8 +44,8 @@ test('an email and its hash in two pushes before the answer warn, naming push, p
 
 test('a phone hash and a value in an array are found', () => {
   const r = check([...undecided, push(100, { users: [{ ph: hashPhone(identity.phone).hex }, { tel: identity.phone }] })]);
-  expect(r.message).toContain('users[*].ph: phone hash');
-  expect(r.message).toContain('users[*].tel: phone');
+  expect(r.message).toContain('users[].ph: phone hash');
+  expect(r.message).toContain('users[].tel: phone');
 });
 
 test('a key that is the email is masked in the key path', () => {

@@ -48,7 +48,7 @@ test('the email and its hash are in the push records and in no output or result 
   expect(pushesOf(records, HASH).length).toBeGreaterThan(0);
   const result = records.results.find((x) => x.expectation === NAME)!;
   expect(result.pass).toBe(false);
-  expect(text.stdout).toContain('earlyIdentityPush');
+  expect(text.stdout).toContain('WARN builtin: earlyIdentityPush');
   for (const secret of [EMAIL, HASH]) {
     expect(text.stdout).not.toContain(secret);
     expect(json.stdout).not.toContain(secret);

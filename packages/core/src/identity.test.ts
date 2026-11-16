@@ -723,4 +723,13 @@ describe('ownValueKinds', () => {
   ])('finds nothing for %s', (_n, text) => {
     expect(kinds(text)).toEqual([]);
   });
+
+  it('reads a bare base64 hash of the email', () => {
+    expect(kinds(hashEmail(id.email).base64)).toEqual(['email hash']);
+  });
+
+  it('does not read the hash of a typed city as a phone hash', () => {
+    const withCity = { ...id, extra: ['Berlin'] };
+    expect([...ownValueKinds(sha256('berlin').hex, withCity)]).toEqual([]);
+  });
 });
