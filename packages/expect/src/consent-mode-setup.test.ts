@@ -52,6 +52,31 @@ test('a full default passes, and says so when no consent default was pushed', ()
   expect(pushed.message).not.toContain('outside the dataLayer');
 });
 
+function objectPush(...args: unknown[]): DataLayerEvent {
+  return { ...push(), args: [{ ...args }], isConsentCommand: false };
+}
+
+test('a consent default pushed as an object counts as pushed', () => {
+  const r = consentModeSetup([hit(FULL)], [objectPush('consent', 'default', { ad_storage: 'denied' })]);
+  expect(r.pass).toBe(true);
+  expect(r.message).toContain('found every signal set');
+  expect(r.message).not.toContain('outside the dataLayer');
+});
+
+test('an object push with the index keys written out counts as pushed', () => {
+  const r = consentModeSetup([hit(FULL)], [{ ...push(), args: [{ 0: 'consent', 1: 'default', 2: { ad_storage: 'denied' } }], isConsentCommand: false }]);
+  expect(r.message).toContain('found every signal set');
+});
+
+test.each([
+  ['consent update', ['consent', 'update', {}]],
+  ['consent foo', ['consent', 'foo', {}]],
+  ['config', ['config', 'G-PWTEST0001']],
+])('an object push of %s leaves the default read as set outside the dataLayer', (_, args) => {
+  expect(consentModeSetup([hit(FULL)], [objectPush(...args)]).message).toContain('outside the dataLayer');
+  expect(consentModeSetup([hit(FULL)], [objectPush('consent', 'default', {})]).message).not.toContain('outside the dataLayer');
+});
+
 test('no Google hits passes', () => {
   const r = consentModeSetup([hit(undefined, { vendor: 'meta' })], []);
   expect(r.pass).toBe(true);

@@ -12,7 +12,7 @@ Not released yet. The newest release is 0.6.2, below.
 
 - Docs: the 0.6.2 notes are corrected, and the card fill ends "at the step deadline" in `docs/cli.md` (#1483, #1490, #1491, #1492, #1493, #1494, #1495, #1496).
 
-<!-- K11 -->
+- Consent Mode setup check: a `consent default` pushed as a plain object with index keys, for example relayed from a sandboxed frame, now counts as pushed (#1401).
 
 <!-- D11 -->
 

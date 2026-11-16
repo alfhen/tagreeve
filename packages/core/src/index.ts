@@ -8,3 +8,4 @@ export * from './library.ts';
 export * from './version.ts';
 export * from './glob.ts';
 export * from './limits.ts';
+export * from './consent-command.ts';

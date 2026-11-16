@@ -1,4 +1,4 @@
-import type { DataLayerEvent, Hit } from '@tagreeve/core';
+import { consentCommandOf, type DataLayerEvent, type Hit } from '@tagreeve/core';
 import { GCD_SIGNALS, gcdLetters, gcdSignals, type GcdSignalName } from '@tagreeve/decoders';
 
 export const CONSENT_MODE_URL = 'https://developers.google.com/tag-platform/security/guides/consent';
@@ -87,7 +87,7 @@ export function consentModeSetup(hits: readonly Hit[], dataLayer: readonly DataL
     };
   }
 
-  const pushed = dataLayer.some((e) => e.isConsentCommand && e.args[0] === 'consent' && e.args[1] === 'default');
+  const pushed = dataLayer.some((e) => consentCommandOf(e.args)?.command === 'default');
   if (showsDefault && !pushed) {
     return { pass: true, evidence: [], message: `Consent Mode signals are set on every Google hit${noGcd > 0 ? ' that carried gcd' : ''}; default set outside the dataLayer (template API, TCF or other) (gcd letters: ${lettersNote(letterSets)}).${missingNote}` };
   }

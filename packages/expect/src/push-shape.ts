@@ -1,4 +1,4 @@
-import type { DataLayerEvent, Step } from '@tagreeve/core';
+import { argumentsListOf, consentCommandOf, type DataLayerEvent, type Step } from '@tagreeve/core';
 import { guardFieldName, isValueSegment, OTHER_NAME } from '@tagreeve/decoders';
 
 export const PUSH_FRAME_KINDS = ['main', 'embedded', 'unknown'] as const;
@@ -47,7 +47,6 @@ const MAX_DEPTH = 8;
 const MAX_PATHS = 200;
 const GTAG_COMMANDS = new Set(['config', 'consent', 'event', 'get', 'js', 'set']);
 const GTAG_OTHER = 'gtag (other)';
-const MAX_ARGUMENTS = 16;
 
 function safeName(name: string): string {
   return EVENT_CHARS.test(name) && !isValueSegment(name) && guardFieldName(name) === name ? name : OTHER_NAME;
@@ -79,16 +78,6 @@ function startsWithString(args: unknown[]): args is [string, ...unknown[]] {
   return typeof args[0] === 'string';
 }
 
-// A gtag() call pushed as its `arguments` object is recorded as one plain object with the keys "0" to "n-1".
-function argumentsLike(args: unknown[]): unknown[] | undefined {
-  const [item] = args;
-  if (args.length !== 1 || typeof item !== 'object' || item === null || Array.isArray(item)) return undefined;
-  const keys = Object.keys(item);
-  if (keys.length < 1 || keys.length > MAX_ARGUMENTS || !keys.every((k, i) => Object.hasOwn(item, String(i)) && k === String(i))) return undefined;
-  const list = keys.map((_, i) => (item as Record<string, unknown>)[String(i)]);
-  return typeof list[0] === 'string' ? list : undefined;
-}
-
 interface Command {
   list: [string, ...unknown[]];
   fromObject: boolean;
@@ -96,14 +85,12 @@ interface Command {
 
 function commandOf(e: DataLayerEvent): Command | undefined {
   if (startsWithString(e.args)) return { list: e.args, fromObject: false };
-  const list = argumentsLike(e.args);
+  const list = argumentsListOf(e.args);
   return list !== undefined && startsWithString(list) ? { list, fromObject: true } : undefined;
 }
 
-const CONSENT_COMMANDS = new Set(['default', 'update']);
-
 function isObjectConsent(command: Command | undefined): boolean {
-  return command?.fromObject === true && command.list[0] === 'consent' && typeof command.list[1] === 'string' && CONSENT_COMMANDS.has(command.list[1]);
+  return command?.fromObject === true && consentCommandOf(command.list) !== undefined;
 }
 
 function commandLabel(command: Command): string {
