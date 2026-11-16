@@ -349,7 +349,7 @@ function withoutEventName(n: PushNode, other: PushNode): PushNode {
   return { ...n, types };
 }
 
-/** Compares push shapes. Nothing here is drift: the caller reports the changes as warnings. A cross-epoch join made by `pairNames` is kept as a move to its epoch. Same-name moves with no join are matched greedily, in node order: a known limit. */
+/** Compares push shapes. Nothing here is drift: the caller reports the changes as warnings. A cross-epoch join made by `pairNames` is kept as a move to its epoch. Same-name moves with no join use a greedy match in node order: a known limit. */
 export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOptions = {}): PushDiff {
   const result: PushDiff = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], typeChanges: [], moved: [], kindChanged: [], changed: false };
   const mergeKinds = kindsMerged(a, b);
