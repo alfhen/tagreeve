@@ -104,6 +104,8 @@ test.each([
   ['a >& redirect with no space before it', '```bash\ncat x>&out.txt\n```', ['out.txt']],
   ['a double-quoted URL that ends in <auth>', '```bash\ncurl "https://example.test/?id=<id>&auth=<auth>"\n```', []],
   ['a snippet that starts with a placeholder pair', '```bash\nid=<env id>&auth=<auth>\n```', []],
+  ['a double-quoted URL that ends in <auth> then a redirect', '```bash\ncurl "https://example.test/?id=<id>&auth=<auth>" > out.txt\n```', ['out.txt']],
+  ['a snippet that starts with a placeholder pair then a redirect', '```bash\nid=<env id>&auth=<auth> > out.txt\n```', ['out.txt']],
   ['a placeholder before &', 'use `id=GTM-PWTEST1&env=<env id>&auth=<auth>` here', []],
   ['a process substitution after a flag', '```bash\ntagreeve run --server-container-config=<(pbpaste) > out.txt\n```', ['out.txt']],
   ['an input redirect after an assignment', '```bash\nFOO=<in.txt; cat > out.txt\n```', ['out.txt']],
