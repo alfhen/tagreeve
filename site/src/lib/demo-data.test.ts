@@ -217,3 +217,15 @@ test('rewriteHosts puts a demo host in place of each fixture origin, and leaves 
     ].join('\n'),
   );
 });
+
+test('rewriteHosts rewrites a bare localhost host, and leaves a text without one unchanged', () => {
+  const text = 'Warn: G-PWTEST0001 client ID differs between main frame on localhost and sub frame on localhost';
+  expect(demoLeaks(text)).toContain('localhost');
+  expect(rewriteHosts(text, origins)).toBe(
+    'Warn: G-PWTEST0001 client ID differs between main frame on staging.northwind.example and sub frame on staging.northwind.example',
+  );
+  expect(demoLeaks(rewriteHosts(text, origins))).toEqual([]);
+  expect(rewriteHosts('page on localhost:1 and localhost', origins)).toBe('page on staging.northwind.example and staging.northwind.example');
+  const plain = 'Warn: G-PWTEST0001 client ID differs between main frame and sub frame';
+  expect(rewriteHosts(plain, origins)).toBe(plain);
+});
