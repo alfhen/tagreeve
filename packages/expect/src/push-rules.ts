@@ -29,19 +29,37 @@ interface Push {
   id: string;
   t: number;
   shape: PushDescription;
+  /** The leaf paths of the shape plus every object and array on the way to a leaf. */
+  paths: Map<string, Set<string>>;
+}
+
+function withContainers(leaves: Map<string, Set<string>>): Map<string, Set<string>> {
+  const all = new Map<string, Set<string>>();
+  const add = (path: string, types: Iterable<string>) => {
+    const set = all.get(path) ?? all.set(path, new Set()).get(path)!;
+    for (const t of types) set.add(t);
+  };
+  for (const [path, types] of leaves) {
+    add(path, types);
+    for (let i = 1; i < path.length; i++) {
+      if (path[i] === '.') add(path.slice(0, i), ['object']);
+      else if (path.startsWith('[*]', i)) add(path.slice(0, i), ['array']);
+    }
+  }
+  return all;
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function holdsPath(push: Push, matcher: RegExp): boolean {
-  for (const path of push.shape.paths.keys()) if (matcher.test(path)) return true;
+  for (const path of push.paths.keys()) if (matcher.test(path)) return true;
   return false;
 }
 
 /** The types found at a path, or `absent`. Several paths that a glob matches give one list. */
 function typesAt(push: Push, matcher: RegExp): string[] {
   const found = new Set<string>();
-  for (const [path, types] of push.shape.paths) if (matcher.test(path)) for (const t of types) found.add(t);
+  for (const [path, types] of push.paths) if (matcher.test(path)) for (const t of types) found.add(t);
   return found.size === 0 ? ['absent'] : [...found].sort();
 }
 
@@ -49,7 +67,10 @@ function typesAt(push: Push, matcher: RegExp): string[] {
 export function evaluatePushRule(rule: Rule, input: PushRuleInput): PushRuleOutcome {
   const sel = rule.dataLayer!;
   const matching: Push[] = input.pushes
-    .map((e) => ({ id: e.id, t: e.t, shape: pushShapeOf(e) }))
+    .map((e) => {
+      const shape = pushShapeOf(e);
+      return { id: e.id, t: e.t, shape, paths: withContainers(shape.paths) };
+    })
     .filter((p) => p.shape.event === sel.event && (sel.kind === undefined || p.shape.kind === sel.kind) && (sel.frame === undefined || p.shape.frame === sel.frame));
   const selected = matching.filter((p) => input.inScope(p.t));
   const { where } = input;

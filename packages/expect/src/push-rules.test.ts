@@ -200,3 +200,27 @@ test("a mustNot that would pass with the hook incomplete is a warn that cannot b
   expect(evaluatePushRule(rule, everywhere([], { hookIncomplete: true }))).toMatchObject({ pass: false, severity: "warn", evidence: [] });
   expect(evaluatePushRule(rule, everywhere([]))).toMatchObject({ pass: true });
 });
+
+describe('a path that names an object or array', () => {
+  const withItems = push(['event', 'purchase', { ecommerce: { value: 1, items: [{ item_id: 'a' }] } }]);
+  const without = push(['event', 'purchase', { currency: 'USD' }]);
+  const dl = (extra: Omit<PushSelector, 'event'>): PushSelector => ({ event: 'purchase', ...extra });
+
+  test.each(['ecommerce', 'ecommerce.items', 'ecommerce.items[*]', '**.items'])('mustNot has %s fails on a push that holds it and passes on one that does not', (path) => {
+    const bad = evaluatePushRule(rule('mustNot', dl({ has: [path] })), everywhere([withItems]));
+    expect(bad.pass).toBe(false);
+    expect(bad.evidence).toEqual([withItems.id]);
+    expect(evaluatePushRule(rule('mustNot', dl({ has: [path] })), everywhere([without])).pass).toBe(true);
+  });
+
+  test.each(['ecommerce', 'ecommerce.items'])('must has %s passes on a push that holds it and fails on one that does not', (path) => {
+    expect(evaluatePushRule(rule('must', dl({ has: [path] })), everywhere([withItems])).pass).toBe(true);
+    expect(evaluatePushRule(rule('must', dl({ has: [path] })), everywhere([without])).pass).toBe(false);
+  });
+
+  test('types reads object and array there', () => {
+    const ok = rule('must', dl({ types: { 'ecommerce.items': 'array', ecommerce: 'object', 'ecommerce.items[*]': 'object' } }));
+    expect(evaluatePushRule(ok, everywhere([withItems])).pass).toBe(true);
+    expect(evaluatePushRule(ok, everywhere([withItems, without])).pass).toBe(false);
+  });
+});
