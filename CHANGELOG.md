@@ -12,7 +12,7 @@ Not released yet. The newest release is 0.6.2, below.
 
 <!-- C11 -->
 
-<!-- K11 -->
+- Consent Mode setup check: a `consent default` pushed as a plain object with index keys, for example relayed from a sandboxed frame, now counts as pushed (#1401).
 
 <!-- D11 -->
 

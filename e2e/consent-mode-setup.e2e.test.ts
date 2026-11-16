@@ -54,3 +54,18 @@ test('a full default with no dataLayer push passes and says it was set outside t
   expect(result!.message).toContain('default set outside the dataLayer');
   expect(result!.message).toContain('(gcd letters: G-PWTEST0001 rrrr');
 }, 90_000);
+
+test('a consent default relayed from a sandboxed frame as an object is read as pushed', async () => {
+  const { code, result, records } = await setup('consent-mode-setup-relay');
+  expect(records.hits.some((h) => h.vendor === 'ga4' && h.consent.raw.gcd === '13r3r3r3r5'), 'a GA4 hit with gcd rrrr').toBe(true);
+  const relayed = records.dataLayerEvents.find((e) => {
+    const [item] = e.args as Record<string, unknown>[];
+    return typeof item === 'object' && item !== null && item['0'] === 'consent' && item['1'] === 'default';
+  });
+  expect(relayed, 'a dataLayer push with the keys 0 and 1').toBeDefined();
+  expect(relayed!.isConsentCommand).toBe(false);
+  expect(code).toBe(0);
+  expect(result!.pass).toBe(true);
+  expect(result!.message).toContain('found every signal set');
+  expect(result!.message).not.toContain('outside the dataLayer');
+}, 90_000);

@@ -24,3 +24,11 @@ test('/consent-mode-hits pushes a consent default only with push=default', async
   expect(html).toContain("window.gtag('consent', 'default'");
   expect(html).not.toContain('banner.js');
 });
+
+test('/consent-mode-hits relays a consent default from a sandboxed frame only with push=relay', async () => {
+  const html = await (await fetch(`${site.url}/consent-mode-hits`)).text();
+  expect(html).toContain("q.get('push') === 'relay'");
+  expect(html).toContain('sandbox');
+  expect(html).toContain('postMessage');
+  expect(html).not.toMatch(/shopify|web-pixels|banner\.js/i);
+});
