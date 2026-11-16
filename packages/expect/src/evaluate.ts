@@ -32,6 +32,7 @@ import {
 import { GA4_BODY_ONLY_IGNORE, type MultipartBody, bodyEntries, guardFieldName, multipartPartName, splitMultipart, META_BODY_ONLY_IGNORE, META_CAPI_BODY_ONLY_IGNORE, META_CAPI_PARAM_NAMES, metaCapiBaseParam, SGTM_BODY_ONLY_IGNORE, isSandboxPageUrl, maskValuePath, matchesIgnoreList, identifierClass, identifierSignal, type IdentifierClass } from '@tagreeve/decoders';
 import { consentModeSetup, GOOGLE_VENDORS } from './consent-mode-setup.ts';
 import { hostMatches } from './hosts.ts';
+import { evaluatePushRule, fieldGlob } from './push-rules.ts';
 import { evaluateTagRule, expectedTagsOf, type ExpectedTags } from './tags.ts';
 import { consentFields, countHolds, describeCount, type ConsentField, type Filter, type Rule, type Scenario, type BuiltinName } from './scenario.ts';
 
@@ -61,6 +62,8 @@ interface Context {
   responses: Response[];
   checkpoints: Checkpoint[];
   tagReports: TagReport[];
+  dataLayerEvents: DataLayerEvent[];
+  flags: Flag[];
   expectedTags?: ExpectedTags;
   networkMode?: Run['networkMode'];
   grace: number;
@@ -87,6 +90,8 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
     responses: records.filter((r): r is Response => r.type === 'response'),
     checkpoints: records.filter((r): r is Checkpoint => r.type === 'checkpoint'),
     tagReports: records.filter((r): r is TagReport => r.type === 'tagReport'),
+    dataLayerEvents: records.filter((r): r is DataLayerEvent => r.type === 'dataLayerEvent'),
+    flags: records.filter((r): r is Flag => r.type === 'flag'),
     expectedTags: expectedTagsOf(runRecord),
     networkMode: runRecord?.networkMode,
     grace: options.graceWindowMs ?? scenario.options.graceWindow ?? DEFAULT_GRACE_MS,
@@ -114,21 +119,21 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
       const outcome = evaluateRule(rule, ctx);
       const { pass, evidence, message } = outcome;
       const passes = (c: Context) => evaluateRuleHits(rule, c).pass;
-      const scoped = !rule.tag && isScoped(rule);
+      const scoped = !rule.tag && !rule.dataLayer && isScoped(rule);
       const failureRests = scoped && !pass && failureRestsOnProbableLink(ctx, passes, rule);
       // A nested-name note is only a hint, so it must not hide that a placement of the probable hits would flip the verdict.
       const ownNote = outcome.note === 'nestedNameOnly' ? undefined : outcome.note;
       const note = ownNote ?? (pass && scoped && passRestsOnProbableLink(ctx, passes, rule) ? 'serverSendProbableLink' : outcome.note);
       // A count rule's evidence can hold exact browser hits next to the probable ones, so the leak gate in settleServerSends must not turn it into a hard FAIL.
       const countRests = kind === 'must' && failureRests && !ownNote;
-      add(`${kind}: ${rule.description}`, pass, evidence, message, countRests ? 'warn' : undefined, countRests ? 'serverSendProbableLink' : note, scoped && (pass || failureRests));
+      add(`${kind}: ${rule.description}`, pass, evidence, message, countRests ? 'warn' : outcome.severity, countRests ? 'serverSendProbableLink' : note, scoped && (pass || failureRests));
     }
 
   builtInChecks(records, scenario, ctx, add);
   return results;
 }
 
-type RuleOutcome = { pass: boolean; evidence: string[]; message: string; note?: ResultNote };
+type RuleOutcome = { pass: boolean; evidence: string[]; message: string; note?: ResultNote; severity?: Severity };
 
 const isScoped = (rule: Rule) => Boolean(rule.before || rule.inEpoch || rule.after || rule.from || consentFields.some((f) => rule.filter.consent[f]));
 
@@ -191,7 +196,7 @@ function placementsChange(ctx: Context, rule: Rule, unlinked: readonly Hit[], pr
 
 function evaluateRule(rule: Rule, ctx: Context): RuleOutcome {
   const outcome = evaluateRuleHits(rule, ctx);
-  if (rule.cookie || rule.tag || !isScoped(rule)) return outcome;
+  if (rule.cookie || rule.tag || rule.dataLayer || !isScoped(rule)) return outcome;
   const unjudged = ctx.hits.filter((h) => isUnlinkedServerHit(h, ctx.index) && matchesFilter(h, { ...rule.filter, consent: {} }, ctx));
   if (unjudged.length === 0) return outcome;
   if (rule.kind === 'mustNot') {
@@ -296,6 +301,7 @@ function evaluateRuleHits(rule: Rule, ctx: Context): RuleOutcome {
     return evaluateTagRule(rule, { reports: ctx.tagReports, expected: ctx.expectedTags, window });
   }
   if (rule.cookie) return evaluateCookieRule(rule, rule.cookie, ctx);
+  if (rule.dataLayer) return evaluatePushRuleIn(rule, ctx);
   const scope = scopedHits(rule, ctx);
   if ('message' in scope) return scope;
   const { hits, total, narrowed } = scope;
@@ -491,6 +497,24 @@ function evaluateCookieRule(rule: Rule, patterns: string[], ctx: Context): RuleO
   };
 }
 
+/** Pushes are placed by their own time, as cookies are. */
+function evaluatePushRuleIn(rule: Rule, ctx: Context): RuleOutcome {
+  const windowStart = ruleWindowStart(rule, ctx);
+  if (windowStart && 'message' in windowStart) return windowStart;
+  const narrowed: string[] = [];
+  if (rule.before) narrowed.push('before consent');
+  if (rule.inEpoch) narrowed.push(`in epoch(${rule.inEpoch})`);
+  if (windowStart) narrowed.push(windowStart.text);
+  const inScope = (t: number) =>
+    (!rule.before || beforeConsentAt(t, ctx)) && (!rule.inEpoch || inEpochAt(t, rule.inEpoch, ctx)) && (!windowStart || t >= windowStart.at);
+  const hookIncomplete = ctx.flags.some(
+    (f) =>
+      (f.kind === 'dataLayerIncomplete' || f.kind === 'dataLayerNotHooked') &&
+      (f.recordIds.length === 0 || f.recordIds.some((id) => ctx.requests.get(id) === undefined || inScope(ctx.requests.get(id)!.t))),
+  );
+  return evaluatePushRule(rule, { pushes: ctx.dataLayerEvents, inScope, where: narrowed.length ? ` ${narrowed.join(', ')}` : '', hookIncomplete });
+}
+
 const NOT_RECORDED = 'cannot evaluate: field names not recorded';
 const BODY_CUT = 'cannot evaluate: body not fully recorded';
 const VENDOR_IGNORE: Record<string, readonly string[]> = { ga4: GA4_BODY_ONLY_IGNORE, meta: META_BODY_ONLY_IGNORE, 'meta-capi': META_CAPI_BODY_ONLY_IGNORE, sgtm: SGTM_BODY_ONLY_IGNORE };
@@ -507,12 +531,6 @@ function cannotEvaluate(unreadable: Hit[], where: string): RuleOutcome {
     message: `${notRecorded ? NOT_RECORDED : BODY_CUT}: ${unreadable.length} selected hit${unreadable.length === 1 ? '' : 's'}${where}.`,
     note: notRecorded ? 'fieldsNotRecorded' : 'cannotEvaluateBody',
   };
-}
-
-/** `**.name` matches `name` at any depth, on a dot boundary. Otherwise `*` matches any characters. */
-function fieldGlob(pattern: string): RegExp {
-  if (!pattern.startsWith('**.')) return globToRegExp(pattern);
-  return new RegExp(`^(?:.*\\.)?${globToRegExp(pattern.slice(3)).source.slice(1, -1)}$`);
 }
 
 function nestedNames(plain: string[], hits: Hit[]): string[] {

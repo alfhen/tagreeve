@@ -3,6 +3,7 @@ import type { ConsentValue, NetworkMode, RequestOutcome, Severity } from '@tagre
 import { trackerVendorKeys, vendorKeys } from '@tagreeve/decoders';
 import { LineCounter, parseDocument } from 'yaml';
 import { isHostPattern, isServerHostPattern, isSpecificServerHost } from './hosts.ts';
+import { isEventLabel, MAX_PUSH_PATH, pathProblem, PUSH_FRAME_KINDS, PUSH_KINDS, PUSH_TYPES, type PushFrameKind, type PushKind } from './push-shape.ts';
 import { PAYMENT_PROVIDERS, canonicalCard, findPaymentProvider } from './payment-providers.ts';
 
 export type ConsentField = 'analytics' | 'ads' | 'adUserData' | 'adPersonalization';
@@ -50,6 +51,19 @@ export interface Rule {
   cookie?: string[];
   /** A tag rule selects entries of tag reports, not hits. */
   tag?: TagSelector;
+  /** A dataLayer rule selects pushes, not hits. */
+  dataLayer?: PushSelector;
+}
+
+export interface PushSelector {
+  /** An event label as the --json push shapes show it. */
+  event: string;
+  /** Masked key paths with the `body.has` globs. */
+  has?: string[];
+  /** Path to one of string, number, boolean, null, object or array. */
+  types?: Record<string, string>;
+  kind?: PushKind;
+  frame?: PushFrameKind;
 }
 
 export interface TagSelector {
@@ -172,6 +186,9 @@ const VENDOR_KEYS = new Set(['vendor', 'event', 'page', 'transport', 'host', 'ou
 const GROUP_KEYS = ['consent', 'ids', 'params', 'identity', 'body'] as const;
 const COOKIE_RULE_KEYS = ['cookie', 'before', 'in', 'after', 'from'];
 const TAG_RULE_KEYS = ['tag', 'count', 'after', 'from'];
+const PUSH_RULE_KEYS = ['dataLayer', 'count', 'before', 'in', 'after', 'from'];
+const PUSH_SELECTOR_KEYS = ['event', 'has', 'types', 'kind', 'frame'];
+const MAX_PUSH_PATHS = 50;
 const TAG_SELECTOR_KEYS = ['id', 'name', 'container', 'event', 'status', 'side'];
 const MAX_TAG_TEXT = 200;
 const BODY_KEYS = ['has', 'only', 'ignore'] as const;
@@ -705,6 +722,50 @@ export function parseScenario(text: string, extraVendorKeys: readonly string[] =
     return issues.length === before ? tag : undefined;
   }
 
+  function parsePushSelector(v: unknown, path: Path): PushSelector | undefined {
+    if (!isMap(v)) {
+      fail(path, 'must be a mapping with event');
+      return undefined;
+    }
+    const before = issues.length;
+    let event: string | undefined;
+    const selector: Partial<PushSelector> = {};
+    const paths = (key: string, list: string[]): boolean => {
+      const problem = list.map(pathProblem).find((x) => x !== undefined);
+      if (problem !== undefined) fail([...path, key], problem);
+      return problem === undefined;
+    };
+    for (const [key, raw] of Object.entries(v)) {
+      const p = [...path, key];
+      if (!PUSH_SELECTOR_KEYS.includes(key)) fail(p, `unknown key, expected one of ${PUSH_SELECTOR_KEYS.join(', ')}`);
+      else if (key === 'event') {
+        if (typeof raw === 'string' && raw !== '' && raw.length <= MAX_PUSH_PATH && isEventLabel(raw)) event = raw;
+        else fail(p, 'must be an event name as the --json push shapes show it, such as purchase. A name that reads (other) there cannot be matched');
+      } else if (key === 'has') {
+        if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_PUSH_PATHS || !raw.every((x) => typeof x === 'string' && x !== '')) {
+          fail(p, `must be a list of 1 to ${MAX_PUSH_PATHS} key paths such as ecommerce.transaction_id`);
+        } else if (paths(key, raw as string[])) selector.has = raw as string[];
+      } else if (key === 'types') {
+        const entries = isMap(raw) ? Object.entries(raw) : [];
+        if (entries.length === 0 || entries.length > MAX_PUSH_PATHS) fail(p, `must be a mapping of 1 to ${MAX_PUSH_PATHS} key paths to a type, such as ecommerce.value: number`);
+        else if (paths(key, entries.map(([k]) => k))) {
+          const types: Record<string, string> = {};
+          for (const [k, t] of entries) {
+            if (typeof t === 'string' && (PUSH_TYPES as readonly string[]).includes(t)) types[k] = t;
+            else fail([...p, k], `must be one of ${PUSH_TYPES.join(', ')}`);
+          }
+          selector.types = types;
+        }
+      } else if (key === 'kind') {
+        if (typeof raw === 'string' && (PUSH_KINDS as readonly string[]).includes(raw)) selector.kind = raw as PushKind;
+        else fail(p, `must be one of ${PUSH_KINDS.join(', ')}`);
+      } else if (typeof raw === 'string' && (PUSH_FRAME_KINDS as readonly string[]).includes(raw)) selector.frame = raw as PushFrameKind;
+      else fail(p, `must be one of ${PUSH_FRAME_KINDS.join(', ')}`);
+    }
+    if (event === undefined && issues.length === before) fail(path, 'needs event');
+    return issues.length === before && event !== undefined ? { ...selector, event } : undefined;
+  }
+
   function parseRule(kind: Rule['kind'], entry: unknown, path: Path): Rule | undefined {
     if (!isMap(entry)) {
       fail(path, 'must be a mapping of filters and rule keys');
@@ -770,6 +831,9 @@ export function parseScenario(text: string, extraVendorKeys: readonly string[] =
       } else if (k === 'tag') {
         const tag = parseTagSelector(v, p);
         if (tag) rule.tag = tag;
+      } else if (k === 'dataLayer') {
+        const selector = parsePushSelector(v, p);
+        if (selector) rule.dataLayer = selector;
       } else if (k === 'vendor') {
         const l = list(k, v, [...vendorKeys, ...trackerVendorKeys, ...extraVendorKeys]);
         if (l) filter.vendor = l;
@@ -826,6 +890,11 @@ export function parseScenario(text: string, extraVendorKeys: readonly string[] =
       if (rule.before || rule.inEpoch) fail(path, 'consent scopes (before, in) on tag rules are not built; use after or from');
       const mixed = Object.keys(flat).filter((k) => !TAG_RULE_KEYS.includes(k) && k !== 'before' && k !== 'in');
       if (mixed.length) fail(path, `tag cannot be combined with ${mixed.join(', ')}; it only takes count, after and from`);
+    }
+    if (rule.dataLayer) {
+      const mixed = Object.keys(flat).filter((k) => !PUSH_RULE_KEYS.includes(k));
+      if (mixed.length) fail(path, `dataLayer cannot be combined with ${mixed.join(', ')}; it only takes count, before, in, after and from`);
+      if (kind === 'mustNot' && rule.dataLayer.types) fail([...path, 'dataLayer', 'types'], 'is only valid under must');
     }
     if (rule.from && rule.after) fail(path, 'use either from or after, not both');
     if (rule.before && rule.inEpoch) fail(path, 'use either before or in, not both');

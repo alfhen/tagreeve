@@ -48,6 +48,26 @@ const MAX_PATHS = 200;
 const GTAG_COMMANDS = new Set(['config', 'consent', 'event', 'get', 'js', 'set']);
 const GTAG_OTHER = 'gtag (other)';
 
+export const PUSH_KINDS: readonly PushKind[] = ['gtag', 'object'];
+export const PUSH_TYPES = ['string', 'number', 'boolean', 'null', 'object', 'array'] as const;
+export const MAX_PUSH_PATH = 128;
+
+/** What is wrong with a path written in a rule, or undefined. A path is a masked path as `pushShapes` prints it, with `*` globs and a leading `**.`. */
+export function pathProblem(path: string): string | undefined {
+  if (/\[\d+\]/.test(path)) return 'has a numbered index, write [*] for any item, as the --json push shapes show it';
+  if (path.length > MAX_PUSH_PATH) return `is at most ${MAX_PUSH_PATH} characters`;
+  const plain = path.startsWith('**.') ? path.slice(3) : path;
+  if (plain === '') return 'must be a key path such as ecommerce.value';
+  const segments = plain.split('.');
+  const unsafe = guardFieldName(plain) !== plain || segments.some((s) => s === '' || guardFieldName(s) !== s || isValueSegment(s.replace(/\[\*\]/g, '')));
+  return unsafe ? 'must be a key path as the --json push shapes show it, and this one reads like a value' : undefined;
+}
+
+/** True when `name` is an event label as `pushShapes` prints it: a plain event name, a command label or `(no event)`. */
+export function isEventLabel(name: string): boolean {
+  return (name !== OTHER_NAME && safeName(name) === name) || name === NO_EVENT || /^(?:consent [a-z_]+|gtag (?:config|consent|event|get|js|set))$/.test(name);
+}
+
 function safeName(name: string): string {
   return EVENT_CHARS.test(name) && !isValueSegment(name) && guardFieldName(name) === name ? name : OTHER_NAME;
 }
@@ -133,6 +153,22 @@ function collectPaths(e: DataLayerEvent, command: Command | undefined, into: Map
     return;
   }
   for (const arg of e.args) walk(arg, '', 0, into);
+}
+
+export interface PushDescription {
+  event: string;
+  kind: PushKind;
+  frame: PushFrameKind;
+  /** Each key path of the push with the types found there. */
+  paths: Map<string, Set<string>>;
+}
+
+/** The shape of one push, built as `pushShapes` builds a group. */
+export function pushShapeOf(e: DataLayerEvent): PushDescription {
+  const command = commandOf(e);
+  const paths = new Map<string, Set<string>>();
+  collectPaths(e, command, paths);
+  return { event: eventLabel(e, command), kind: command === undefined ? 'object' : 'gtag', frame: frameKind(e), paths };
 }
 
 /** Shapes of the pushes per step, event name, push kind and frame: key paths and types only. No value is read into the result, and a key or event name that looks like a value reads `(other)`. */

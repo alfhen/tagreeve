@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DataLayer rules</title>
+<script src="/assets/banner.js"></script>
+</head>
+<body>
+<h1>DataLayer rules</h1>
+<p>Pushes a <code>purchase</code> as soon as the page loads, before the banner is answered. It holds no transaction ID; <code>?complete=1</code> adds one. The pushes hold fixed sentinel strings. All values are fake.</p>
+<script>
+var q = new URLSearchParams(location.search);
+var ecommerce = {
+  value: 25.5,
+  currency: 'USD',
+  coupon: 'pw-rule-sentinel-coupon',
+  affiliation: 'pw-rule-sentinel-order',
+  items: [{ item_id: 'pw-rule-sentinel-sku', item_name: 'pw-rule-sentinel-name', price: 25.5 }],
+};
+if (q.get('complete') === '1') ecommerce.transaction_id = 'pw-rule-sentinel-order';
+window.dataLayer = window.dataLayer || [];
+window.dataLayer.push({ event: 'purchase', ecommerce: ecommerce });
+</script>
+</body>
+</html>
