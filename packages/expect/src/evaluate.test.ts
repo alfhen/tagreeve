@@ -1093,3 +1093,15 @@ test('a must dataLayer rule with only has and a lower count bound stays a plain 
     }
   }
 });
+
+test('earlyIdentityPush runs before possibleRealData and passes with a message when there is no identity', () => {
+  const epochs = [{ type: 'consentEpoch', id: newId('consentEpoch'), runId, startT: 0, endT: null, source: 'test', label: 'undecided', state: allUnknown } as EvalEpoch];
+  const push: DataLayerEvent = { type: 'dataLayerEvent', id: newId('dataLayerEvent'), runId, stepId: null, t: 10, event: 'login', gtmUniqueEventId: null, args: [{ user: { email: identity.email } }], isConsentCommand: false };
+  const named = (options: { identity?: typeof identity }) =>
+    evaluate([...epochs, push], parseScenario('start: /'), options).filter((r) => /earlyIdentityPush|possibleRealData/.test(r.expectation));
+  expect(named({ identity }).map((r) => [r.expectation, r.pass])).toEqual([['builtin: earlyIdentityPush', false], ['builtin: possibleRealData', true]]);
+  const without = named({});
+  expect(without.map((r) => r.expectation)).toEqual(['builtin: earlyIdentityPush', 'builtin: possibleRealData']);
+  expect(without[0]!.pass).toBe(true);
+  expect(without[0]!.message).toMatch(/could not check/i);
+});

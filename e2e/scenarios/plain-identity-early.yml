@@ -1,0 +1,15 @@
+start: /plain/checkout?identity=early
+steps:
+  - fill:
+      "#email": email
+      "#first-name": firstName
+      "#last-name": lastName
+      "#phone": phone
+      "#address1": address1
+      "#city": city
+      "#zip": zip
+      "#country": SE
+  - wait: 1s
+  - consent: accept
+  - wait: 1s
+options: { seed: 1 }

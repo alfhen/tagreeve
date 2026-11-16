@@ -31,6 +31,7 @@ import {
 } from '@tagreeve/core';
 import { GA4_BODY_ONLY_IGNORE, type MultipartBody, bodyEntries, guardFieldName, multipartPartName, splitMultipart, META_BODY_ONLY_IGNORE, META_CAPI_BODY_ONLY_IGNORE, META_CAPI_PARAM_NAMES, metaCapiBaseParam, SGTM_BODY_ONLY_IGNORE, isSandboxPageUrl, maskValuePath, matchesIgnoreList, identifierClass, identifierSignal, type IdentifierClass } from '@tagreeve/decoders';
 import { consentModeSetup, GOOGLE_VENDORS } from './consent-mode-setup.ts';
+import { earlyIdentityPush } from './early-identity-push.ts';
 import { hostMatches } from './hosts.ts';
 import { evaluatePushRule, fieldGlob } from './push-rules.ts';
 import { evaluateTagRule, expectedTagsOf, type ExpectedTags } from './tags.ts';
@@ -1109,7 +1110,7 @@ function countByHost(flags: readonly Flag[], ctx: Context): string {
 }
 
 /** Built-in checks whose default is not `fail`. */
-const DEFAULT_SEVERITY: Partial<Record<BuiltinName, Severity>> = { earlyIdentifiers: 'warn', consentModeSetup: 'warn' };
+const DEFAULT_SEVERITY: Partial<Record<BuiltinName, Severity>> = { earlyIdentifiers: 'warn', consentModeSetup: 'warn', earlyIdentityPush: 'warn' };
 
 function builtInChecks(
   records: readonly Input[],
@@ -1172,6 +1173,13 @@ function builtInChecks(
     records.filter((r): r is DataLayerEvent => r.type === 'dataLayerEvent'),
   );
   add('consentModeSetup', consentMode.pass, consentMode.evidence, consentMode.message);
+
+  const early = earlyIdentityPush(
+    records.filter((r): r is DataLayerEvent => r.type === 'dataLayerEvent'),
+    (t) => epochForHit(ctx.epochs, t, ctx.grace),
+    ctx.identity,
+  );
+  add('earlyIdentityPush', early.pass, early.evidence, early.message);
 
   const real = flags.filter((f) => f.kind === 'possibleRealData');
   // Flags from the recorder come from the raw records. Scanning again only adds requests the recorder did not flag.

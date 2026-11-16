@@ -1,0 +1,8 @@
+start: /datalayer-identity?after=1
+identity:
+  email: pw-fixture@example.com
+steps:
+  - wait: 1s
+  - consent: reject
+  - wait: 1s
+options: { seed: 1 }

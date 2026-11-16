@@ -47,6 +47,26 @@
   window.dataLayer.push({ 'gtm.start': Date.now(), event: 'gtm.js' });
   window.gtag('event', 'page_view', { page_location: location.href });
 
+  var early = new URLSearchParams(location.search).get('identity') === 'early';
+  var identified = false;
+  function pushIdentity() {
+    var field = document.getElementById('email');
+    if (identified || !field || !field.value) return;
+    if (!early && !(window.pwConsent && window.pwConsent.choice() === 'accept')) return;
+    identified = true;
+    window.dataLayer.push({ event: 'identify', user: { email: field.value } });
+  }
+  function identifyWhenAllowed() {
+    if (early || (window.pwConsent && window.pwConsent.choice())) pushIdentity();
+    else window.pwConsent.onAnswer(pushIdentity);
+  }
+  document.addEventListener('DOMContentLoaded', function () {
+    var field = document.getElementById('email');
+    if (!field) return;
+    field.addEventListener('change', identifyWhenAllowed);
+    field.addEventListener('blur', identifyWhenAllowed);
+  });
+
   function pushReady(name) {
     return function () {
       window.dataLayer.push({ event: name });

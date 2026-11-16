@@ -150,11 +150,11 @@ export interface ScenarioOptions {
   serverHosts?: string[];
   /** Browser viewport in CSS pixels. `--viewport` overrides it. */
   viewport?: Viewport;
-  /** Severity per built-in check. A check that is not listed is `fail`, except `earlyIdentifiers` and `consentModeSetup`, which are `warn`. */
+  /** Severity per built-in check. A check that is not listed is `fail`, except `earlyIdentifiers`, `consentModeSetup` and `earlyIdentityPush`, which are `warn`. */
   builtins?: Partial<Record<BuiltinName, Severity>>;
 }
 
-export const BUILTIN_NAMES = ['unknownDestination', 'sandboxPageUrl', 'possibleRealData', 'deniedIdentifiers', 'earlyIdentifiers', 'consentModeSetup'] as const;
+export const BUILTIN_NAMES = ['unknownDestination', 'sandboxPageUrl', 'possibleRealData', 'deniedIdentifiers', 'earlyIdentifiers', 'consentModeSetup', 'earlyIdentityPush'] as const;
 export type BuiltinName = (typeof BUILTIN_NAMES)[number];
 export const SEVERITIES = ['fail', 'warn'] as const;
 

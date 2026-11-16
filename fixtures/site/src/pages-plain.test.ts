@@ -39,6 +39,14 @@ test('/plain/checkout is a form with the fake store field IDs that goes to /plai
   expect(html).toContain('type="submit"');
 });
 
+test('plain-gtm.js pushes the typed email after the banner answer, and at once with ?identity=early', async () => {
+  const script = await (await fetch(`${site.url}/assets/plain-gtm.js`)).text();
+  expect(script).toContain("get('identity') === 'early'");
+  expect(script).toContain("event: 'identify'");
+  expect(script).toContain('pwConsent.onAnswer(pushIdentity)');
+  expect((await fetch(`${site.url}/plain/checkout?identity=early`)).status).toBe(200);
+});
+
 test('a page that is not in the plain shop is 404 next to a 200 for the product page', async () => {
   expect((await fetch(`${site.url}/plain/product`)).status).toBe(200);
   expect((await fetch(`${site.url}/plain/nope`)).status).toBe(404);

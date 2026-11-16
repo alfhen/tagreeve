@@ -92,6 +92,7 @@ const pages: Record<string, string> = {
   '/datalayer-build': 'datalayer-build.html',
   '/datalayer-renamed': 'datalayer-renamed.html',
   '/datalayer-theme': 'datalayer-theme.html',
+  '/datalayer-identity': 'datalayer-identity.html',
   '/datalayer-event-map': 'datalayer-event-map.html',
   '/datalayer-rules': 'datalayer-rules.html',
   '/container/direct': 'container-direct.html',
