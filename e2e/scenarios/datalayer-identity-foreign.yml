@@ -1,0 +1,6 @@
+start: /datalayer-identity
+steps:
+  - wait: 1s
+  - consent: accept
+  - wait: 1s
+options: { seed: 1 }

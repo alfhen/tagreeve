@@ -8,6 +8,7 @@ import {
   hashPhone,
   normalizeEmail,
   normalizePhone,
+  ownValueKinds,
   readings,
   scan,
   sha256,
@@ -693,5 +694,33 @@ describe('readings', () => {
   it('adds nothing for a token that does not decode', () => {
     const token = 'Z'.repeat(20);
     expect(readings(`t=${token}`)).toEqual([`t=${token}`]);
+  });
+});
+
+describe('ownValueKinds', () => {
+  const id = { ...createIdentity(1), extra: ['second.buyer@example.test', '+12125550142'] };
+  const kinds = (text: string) => [...ownValueKinds(text, id)].sort();
+
+  it.each([
+    ['the email', id.email, ['email']],
+    ['the phone', id.phone, ['phone']],
+    ['the national digits of a phone', normalizePhone(id.phone).slice(1), ['phone']],
+    ['an extra email', 'second.buyer@example.test', ['email']],
+    ['an extra phone', '+12125550142', ['phone']],
+    ['the email hash', hashEmail(id.email).hex, ['email hash']],
+    ['the phone hash', hashPhone(id.phone).hex, ['phone hash']],
+    ['a base64url email hash under a digest key', `sha256_email_address=${hashEmail(id.email).base64url}`, ['email hash']],
+    ['the email in a percent-encoded value', `e=${encodeURIComponent(id.email)}`, ['email']],
+  ])('finds %s', (_n, text, expected) => {
+    expect(kinds(text)).toEqual(expected);
+  });
+
+  it.each([
+    ['a foreign email', 'fake.person@example.test'],
+    ['a foreign phone', '+12125550999'],
+    ['a foreign hash', sha256('someone.else@example.test').hex],
+    ['plain text', 'hello'],
+  ])('finds nothing for %s', (_n, text) => {
+    expect(kinds(text)).toEqual([]);
   });
 });

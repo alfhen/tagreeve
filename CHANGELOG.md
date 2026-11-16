@@ -16,7 +16,7 @@ Test and chore fixes: the request ID in the identity tests holds no digits, the 
 
 <!-- D11 -->
 
-<!-- I11 -->
+- New built-in check `earlyIdentityPush`: it warns when a `dataLayer` push carries the run's own test email or phone, or a hash of either, before consent. It names the push, key path and kind and never prints the value. It is `warn` by default and can be set to `fail` (#1392, #937).
 
 <!-- H11 -->
 

@@ -34,6 +34,7 @@ const withIds = (vendor: string, ...names: string[]) => hit({ vendor, fields: na
 
 test('earlyIdentifiers is a builtin name', () => {
   expect(BUILTIN_NAMES).toContain('earlyIdentifiers');
+  expect(BUILTIN_NAMES).toContain('earlyIdentityPush');
 });
 
 test('a Meta hit with em in the undecided epoch is flagged at warn, naming vendor, field and signal', () => {

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DataLayer identity</title>
+<script src="/assets/banner.js"></script>
+</head>
+<body>
+<h1>DataLayer identity</h1>
+<p>Pushes a <code>login</code> with the fixture email, then a second <code>login</code> with its SHA-256 hex. All values are fake.</p>
+<script>
+var email = window.pwIdentity().email;
+function pushIdentity() {
+  window.dataLayer.push({ event: 'login', user: { email: email } });
+  window.pwSha256(email).then(function (hex) {
+    window.dataLayer.push({ event: 'login_hashed', user: { sha256_email_address: hex } });
+  });
+}
+if (new URLSearchParams(location.search).get('after')) window.pwConsent.onAnswer(pushIdentity);
+else pushIdentity();
+</script>
+</body>
+</html>

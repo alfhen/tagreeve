@@ -29,8 +29,9 @@ Expectations
   PASS builtin: deniedIdentifiers
   PASS builtin: earlyIdentifiers
   PASS builtin: consentModeSetup
+  PASS builtin: earlyIdentityPush
   PASS builtin: possibleRealData
-Result: fail (3 of 7)
+Result: fail (3 of 8)
 Record: tagreeve/runs/2026-11-03/run_01M66G9DA0714WFS5QHQM5A0NX.jsonl
 ```
 
@@ -95,6 +96,7 @@ Built-in checks run on every run. You do not write them:
 - `deniedIdentifiers` fails if a hit carries an identifier, such as a user ID or a hashed email, while the matching consent signal is denied. See [deniedIdentifiers](../cli.md#deniedidentifiers). It reads the fields of hits, not the `Cookie` header of a request.
 - `earlyIdentifiers` warns if a hit sent before the first consent answer carries an identifier and its consent signal is unknown. It reads hit fields only, so an identifier that goes out only in a `Cookie` header is left to the cookie rules. It does not change the exit code unless you set it to `fail`. See [earlyIdentifiers](../cli.md#earlyidentifiers).
 - `consentModeSetup` warns if a Google hit shows a Consent Mode signal that was never set, for example a default without `ad_user_data` and `ad_personalization`. It reads the `gcd` value of the hit. See [consentModeSetup](../cli.md#consentmodesetup).
+- `earlyIdentityPush` warns if a `dataLayer` push carries the fake identity's own email or phone, or a hash of either, while consent is not given. The result names the push and the key path, never the value. See [earlyIdentityPush](../cli.md#earlyidentitypush).
 - `possibleRealData` fails if the record holds an email address, a phone number or a hash that does not belong to the fake identity. A hash is a fixed code made from a value, such as an email address.
 - `possibleRealDataPush` is a flag, not a check. A `dataLayer` push that holds an email, a phone number or a hash that is not from the fake identity gets it. It is a warning and never fails a run: the `possibleRealData` check does not count it and the exit code does not change.
 
