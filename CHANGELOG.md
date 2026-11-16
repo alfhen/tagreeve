@@ -4,7 +4,7 @@
 
 Not released yet. The newest release is 0.6.2, below.
 
-<!-- S11 -->
+The fixture site has a plain GTM demo shop under `/plain/`, with no Shopify page. The docs mark `sandboxPageUrl`, `platformHost` and `options.platformHosts` as Shopify-specific.
 
 <!-- E11 -->
 

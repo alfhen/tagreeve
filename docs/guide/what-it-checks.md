@@ -71,6 +71,10 @@ Because Tagreeve knows what it typed, it can check what the site sends. Many sit
 
 Tagreeve never automates a log-in on a site on the internet. A payment there is a handoff step too: a person does it in a visible window while Tagreeve keeps recording. The one exception is an opt-in `payment` step that types a payment provider's documented test card. It runs only when you name the host on the command line, list the host in a file in your own config folder, and the provider is in test mode. You declare that for the host in the same file, or the page shows the provider's test mode inside the card form. See the Test payments paragraph in the [CLI reference](../cli.md).
 
+## Platform-specific checks
+
+Most checks work on any site. A few are specific to one platform. `sandboxPageUrl`, the flag `platformHost` and the option `platformHosts` are Shopify-specific: they look for the sandboxed iframe that Shopify custom pixels run in, and for Shopify's own hosts. On a site with no Shopify they find nothing and never fail a run. The docs mark each of them as Shopify-specific.
+
 ## Go deeper
 
 - [Your first run](./first-run.md) installs Tagreeve and runs a scenario.

@@ -50,7 +50,7 @@ This is the full output. It is not shortened. Here is how to read the less obvio
 
 - `sgtm` is a server-side Google Tag Manager container. It is a server that receives hits from the site and passes them on. `(no event)` means the hit has no event name.
 - `127.0.0.1:57305` is a host the site called that Tagreeve does not know. The test shop sends one request to it on purpose.
-- `sandboxPageUrl` is a flag for a hit that gives a sandboxed iframe's address as the page. A sandboxed iframe is a small page inside your page with limited rights. Shopify uses one for its custom pixels.
+- `sandboxPageUrl` (Shopify-specific) is a flag for a hit that gives a sandboxed iframe's address as the page. A sandboxed iframe is a small page inside your page with limited rights. Shopify uses one for its custom pixels.
 - `(2 before narrowing)` is the number of hits that matched `vendor` in the whole run. Tagreeve then kept only the hits that `before: consent` selects. Here both hits stayed.
 - `evidence` lists the IDs of the records behind the failure.
 
@@ -90,8 +90,8 @@ An expectation is a rule from your scenario. `must` needs at least one matching 
 Built-in checks run on every run. You do not write them:
 
 - `unknownDestination` fails if a request went to a host that is not your site and that Tagreeve does not know. The scenario can allow a host with `options.allowUnknownDestination`.
-  A request to a known Shopify platform host, including the hosts of Shop Pay, is not an unknown destination. It gets the flag `platformHost`, which is listed in the summary and never fails a run. With `options.platformHosts: false`, those requests are flagged `unknownDestination` again, and that fails the run by default.
-- `sandboxPageUrl` fails if a vendor received the address of a sandboxed iframe as the page address. The vendor then reports the wrong page. Shopify custom pixels run in such an iframe.
+  A request to a known Shopify platform host, including the hosts of Shop Pay, is not an unknown destination. This part is Shopify-specific. It gets the flag `platformHost`, which is listed in the summary and never fails a run. With `options.platformHosts: false`, those requests are flagged `unknownDestination` again, and that fails the run by default.
+- `sandboxPageUrl` (Shopify-specific) fails if a vendor received the address of a sandboxed iframe as the page address. The vendor then reports the wrong page. Shopify custom pixels run in such an iframe.
 - `deniedIdentifiers` fails if a hit carries an identifier, such as a user ID or a hashed email, while the matching consent signal is denied. See [deniedIdentifiers](../cli.md#deniedidentifiers). It reads the fields of hits, not the `Cookie` header of a request.
 - `earlyIdentifiers` warns if a hit sent before the first consent answer carries an identifier and its consent signal is unknown. It reads hit fields only, so an identifier that goes out only in a `Cookie` header is left to the cookie rules. It does not change the exit code unless you set it to `fail`. See [earlyIdentifiers](../cli.md#earlyidentifiers).
 - `consentModeSetup` warns if a Google hit shows a Consent Mode signal that was never set, for example a default without `ad_user_data` and `ad_personalization`. It reads the `gcd` value of the hit. See [consentModeSetup](../cli.md#consentmodesetup).

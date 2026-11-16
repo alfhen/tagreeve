@@ -227,6 +227,18 @@ For a stub-mode run, `/pwcookie` is a Stape loader request, so stub mode answers
 
 `/unload-gap-frame-nav` has the banner and an iframe of `/unload-gap-frame-nav-frame`. 0.4 s after the frame loads, it pushes `add_to_cart`, sets `window.name` and navigates to its own URL. 0.4 s after the new document loads, it sends a GA4 hit named `other_frame_ga` to `https://sgtm.tagreeve.invalid`. The two documents share one frame and one URL. The scenario does not navigate, so the run end is the unload point.
 
+## Plain GTM pages
+
+A small shop with a stand-in Google Tag Manager container and no Shopify page, host, name or frame. It needs no network. Each page loads `assets/banner.js` and `assets/plain-gtm.js` from the shop itself.
+
+| Path | Notes |
+| --- | --- |
+| `/plain/product` | A fake tee with a link to the checkout. |
+| `/plain/checkout` | A form with the field IDs `email`, `first-name`, `last-name`, `phone`, `address1`, `city`, `zip` and `country`. The submit button `#place-order` goes to `/plain/thank-you`. |
+| `/plain/thank-you` | Pushes `gtag('event', 'purchase', ...)` with an `ecommerce` object (`transaction_id`, `value`, `currency`, `items`). |
+
+`banner.js` sets a Consent Mode default of denied and pushes a `consent update` on the banner answer. `plain-gtm.js` is the stand-in for `gtm.js` and `gtag.js`. On each page it pushes `gtm.js`, a `page_view` event, `gtm.dom` and `gtm.load`. It sends a GA4 hit for each event (`tid=G-PWTEST0001`) and, for `purchase`, a Google Ads conversion for `AW-000000001`. Every hit carries `gcs` and `gcd` for the consent state at that moment. Any other path under `/plain/` is a 404.
+
 ## Stand-in server container
 
 `standInContainerPath` (from `@tagreeve/fixture-site`) is the absolute path of `src/stand-in-container.ts`, an executable Node script that stands in for the server container image. A test sets `TAGREEVE_TEST_SERVER_CONTAINER_CMD` to it. The runner then starts it in place of `docker run`, with `PORT`, `HTTP_PROXY` and `NODE_EXTRA_CA_CERTS`. It needs no Docker and no network.
