@@ -13,7 +13,7 @@ interface Seen {
   sid: string | undefined;
 }
 
-interface Context {
+interface HitContext {
   label: string;
   seen: Seen[];
 }
@@ -39,7 +39,7 @@ export function idHandover(hits: readonly Hit[], requests: ReadonlyMap<string, R
     byRequest.set(hit.requestId, [...(byRequest.get(hit.requestId) ?? []), hit]);
   }
 
-  const byTid = new Map<string, Map<string, Context>>();
+  const byTid = new Map<string, Map<string, HitContext>>();
   for (const [requestId, group] of byRequest) {
     const req = requests.get(requestId);
     if (!req?.frame) continue;
@@ -48,7 +48,7 @@ export function idHandover(hits: readonly Hit[], requests: ReadonlyMap<string, R
       const cid = ids[i]?.cid;
       if (!cid || !hit.params.tid || hit.consent.analytics === 'denied') return;
       const label = contextLabel(req, hit);
-      const contexts = byTid.get(hit.params.tid!) ?? new Map<string, Context>();
+      const contexts = byTid.get(hit.params.tid!) ?? new Map<string, HitContext>();
       const context = contexts.get(label) ?? { label, seen: [] };
       context.seen.push({ hitId: hit.id, cid, sid: ids[i]?.sid });
       contexts.set(label, context);
@@ -58,7 +58,7 @@ export function idHandover(hits: readonly Hit[], requests: ReadonlyMap<string, R
 
   const problems: string[] = [];
   const evidence = new Set<string>();
-  const flag = (text: string, a: Context, b: Context) => {
+  const flag = (text: string, a: HitContext, b: HitContext) => {
     problems.push(text);
     for (const s of [...a.seen, ...b.seen]) evidence.add(s.hitId);
   };
@@ -74,7 +74,7 @@ export function idHandover(hits: readonly Hit[], requests: ReadonlyMap<string, R
           flag(`${tid}: client ID differs between ${a.label} and ${b.label}`, a, b);
           continue;
         }
-        const sidsOf = (c: Context) => new Set(c.seen.filter((s) => shared.has(s.cid) && s.sid).map((s) => s.sid!));
+        const sidsOf = (c: HitContext) => new Set(c.seen.filter((s) => shared.has(s.cid) && s.sid).map((s) => s.sid!));
         const sidsA = sidsOf(a);
         const sidsB = sidsOf(b);
         if (sidsA.size > 0 && sidsB.size > 0 && ![...sidsA].some((v) => sidsB.has(v))) flag(`${tid}: session ID differs between ${a.label} and ${b.label}`, a, b);

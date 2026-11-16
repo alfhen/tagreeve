@@ -61,7 +61,7 @@ test('plain-gtm.js links the product page to the checkout on 127.0.0.1 with ?che
 });
 
 test('the offsite checkout page returns 200 and no served text holds a Shopify string or an iframe', async () => {
-  const res = await fetch(`${site.url}/plain/checkout?cid=rotate`);
+  const res = await fetch(`${site.url.replace('localhost', '127.0.0.1')}/plain/checkout?cid=rotate`);
   expect(res.status).toBe(200);
   const texts = [await res.text()];
   for (const asset of ['banner.js', 'plain-gtm.js']) texts.push(await (await fetch(`${site.url}/assets/${asset}`)).text());

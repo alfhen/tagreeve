@@ -30,9 +30,11 @@ Expectations
   PASS builtin: earlyIdentifiers
   PASS builtin: consentModeSetup
   PASS builtin: earlyIdentityPush
-  PASS builtin: idHandover
+  WARN builtin: idHandover
+       Expected the GA4 client and session ID to carry over between contexts, found 1 difference: G-PWTEST0001: client ID differs between main frame on localhost and sub frame on localhost.
+       evidence: hit_01M66G9M2S992B5DF1MZ15ZQ05, hit_01M66G9M2S992B5DF1MZ15ZQ06
   PASS builtin: possibleRealData
-Result: fail (3 of 9)
+Result: fail (3 of 9) with 1 warning
 Record: tagreeve/runs/2026-11-03/run_01M66G9DA0714WFS5QHQM5A0NX.jsonl
 ```
 
