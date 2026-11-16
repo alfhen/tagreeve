@@ -924,6 +924,17 @@ test('a mustNot dataLayer rule that passes while the hook is incomplete warns, a
   expect(scoped(afterEnd)).toMatchObject({ pass: false, severity: 'warn' });
 });
 
+test('an unhooked layer stays in scope after a later non-visit step, until the next navigation', () => {
+  const waits = `steps:\n  - { visit: /, label: first }\n  - { wait: 1s, label: later }\n  - { visit: /, label: next }\n`;
+  const text = `${waits}expect:\n  mustNot:\n    - { dataLayer: { event: purchase }, after: later }`;
+  const loader = request({ t: 100 });
+  const recs = (over: Step[]) => [...over, loader, hookFlag('dataLayerNotHooked', [loader.id])];
+  const sameDocument = rule(text, recs([stepAt('first', 0, 50), stepAt('later', 1000, 2000), stepAt('next', 3000, 4000)]));
+  expect(sameDocument).toMatchObject({ pass: false, severity: 'warn' });
+  const nextDocument = rule(text, recs([stepAt('first', 0, 50), stepAt('later', 1000, 2000), stepAt('next', 500, 600)]));
+  expect(nextDocument.severity).toBeUndefined();
+});
+
 test('a failing mustNot dataLayer rule stays a fail with the hook incomplete, and a must rule is not changed', () => {
   const failing = rule(purchaseRule(), [stepAt('first', 0, 1000), pushAt(100), hookFlag('dataLayerIncomplete')]);
   expect(failing.pass).toBe(false);

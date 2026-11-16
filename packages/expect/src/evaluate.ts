@@ -64,6 +64,8 @@ interface Context {
   tagReports: TagReport[];
   dataLayerEvents: DataLayerEvent[];
   flags: Flag[];
+  /** Times at which a visit step started. A main-frame document request is a navigation too. */
+  visitTimes: number[];
   expectedTags?: ExpectedTags;
   networkMode?: Run['networkMode'];
   grace: number;
@@ -92,6 +94,10 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
     tagReports: records.filter((r): r is TagReport => r.type === 'tagReport'),
     dataLayerEvents: records.filter((r): r is DataLayerEvent => r.type === 'dataLayerEvent'),
     flags: records.filter((r): r is Flag => r.type === 'flag'),
+    visitTimes: records
+      .filter((r): r is Step => r.type === 'step')
+      .filter((st) => scenario.steps.some((s) => s.kind === 'visit' && s.label === st.label))
+      .map((st) => st.startedAt),
     expectedTags: expectedTagsOf(runRecord),
     networkMode: runRecord?.networkMode,
     grace: options.graceWindowMs ?? scenario.options.graceWindow ?? DEFAULT_GRACE_MS,
@@ -510,9 +516,21 @@ function evaluatePushRuleIn(rule: Rule, ctx: Context): RuleOutcome {
   const hookIncomplete = ctx.flags.some(
     (f) =>
       (f.kind === 'dataLayerIncomplete' || f.kind === 'dataLayerNotHooked') &&
-      (f.recordIds.length === 0 || f.recordIds.some((id) => ctx.requests.get(id) === undefined || inScope(ctx.requests.get(id)!.t))),
+      (f.recordIds.length === 0 || f.recordIds.some((id) => loaderReachesScope(ctx.requests.get(id), ctx, inScope, windowStart?.at))),
   );
   return evaluatePushRule(rule, { pushes: ctx.dataLayerEvents, inScope, where: narrowed.length ? ` ${narrowed.join(', ')}` : '', hookIncomplete });
+}
+
+/** A loader that is missing or unhooked leaves its document unread until the next navigation, not only at the loader's own time. */
+function loaderReachesScope(loader: Request | undefined, ctx: Context, inScope: (t: number) => boolean, windowStartAt: number | undefined): boolean {
+  if (!loader || inScope(loader.t)) return true;
+  const navigations = [
+    ...ctx.visitTimes,
+    ...[...ctx.requests.values()].filter((r) => r.resourceType === 'document' && r.frame?.main !== false).map((r) => r.t),
+  ].filter((t) => t > loader.t);
+  const end = Math.min(Infinity, ...navigations);
+  const candidates = [windowStartAt, ...ctx.epochs.map((e) => e.startT)].filter((t): t is number => t !== undefined && t > loader.t && t < end);
+  return candidates.some(inScope);
 }
 
 const NOT_RECORDED = 'cannot evaluate: field names not recorded';
