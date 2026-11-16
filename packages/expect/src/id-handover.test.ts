@@ -4,6 +4,7 @@ import { decodeRequest } from '@tagreeve/decoders';
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { idHandover } from './id-handover.ts';
+import { evaluate } from './evaluate.ts';
 import { BUILTIN_NAMES, parseScenario } from './scenario.ts';
 
 const TID = 'G-PWTEST0001';
@@ -22,6 +23,7 @@ interface Spec {
   sid?: string;
   gcs?: string;
   gcd?: string;
+  server?: boolean;
 }
 
 function build(spec: Spec, n: number): { hit: Hit; request: Request } {
@@ -52,6 +54,7 @@ function build(spec: Spec, n: number): { hit: Hit; request: Request } {
     postData: null,
     outcome: 'stubbed',
     frame: { main: spec.main ?? true, n: spec.main === false ? 2 : 1 },
+    ...(spec.server ? { captured: 'serverContainer' as const } : {}),
   };
   const [hit] = decodeRequest(request, () => `hit_FIXED${n}` as Hit['id']);
   return { hit: hit!, request };
@@ -149,6 +152,20 @@ describe('no throw and pass when there is nothing to compare', () => {
     expect(check([ctxA, { ...ctxA, cid: CID_B, port: 4000 }]).pass).toBe(true);
   });
 
+  test('two ports of 127.0.0.1 are one context, and one host changed to localhost warns without a port', () => {
+    const one: Spec = { ...ctxA, host: '127.0.0.1', port: 3000 };
+    const two: Spec = { ...ctxA, host: '127.0.0.1', port: 4000, cid: CID_B };
+    const { hits, requests } = run([one, two]);
+    const ports = hits.map((h) => new URL(h.page!).port);
+    expect(ports[0]).not.toBe(ports[1]);
+    expect(one.cid).not.toBe(two.cid);
+    expect(idHandover(hits, requests).pass).toBe(true);
+    const changed = check([one, { ...two, host: 'localhost' }]);
+    expect(changed.pass).toBe(false);
+    expect(changed.message).toContain(TID);
+    expect(changed.message).not.toMatch(/(localhost|127\.0\.0\.1):\d/);
+  });
+
   test('a hit whose request is missing is skipped', () => {
     const { hits } = run([ctxA, { ...ctxB, cid: CID_B }]);
     expect(() => idHandover(hits, new Map())).not.toThrow();
@@ -219,9 +236,14 @@ describe('grouping and contexts', () => {
     expect(r.message).toContain('127.0.0.1');
   });
 
-  test('a server container hit is left out by the caller, so the pair passes', () => {
-    const { hits, requests } = run([a, { ...b, host: '127.0.0.1' }]);
-    expect(idHandover(hits.slice(0, 1), requests).pass).toBe(true);
+  test('a server container hit is left out, so the pair passes', () => {
+    const verdict = (specs: Spec[]) => {
+      const { hits, requests } = run(specs);
+      const records = [...hits, ...requests.values()];
+      return evaluate(records, parseScenario('start: /')).find((r) => r.expectation === 'builtin: idHandover')!;
+    };
+    expect(verdict([a, { ...b, host: '127.0.0.1' }]).pass).toBe(false);
+    expect(verdict([a, { ...b, host: '127.0.0.1', server: true }]).pass).toBe(true);
   });
 });
 
@@ -241,7 +263,7 @@ describe('no ID in the result', () => {
       for (const e of r.result.evidence) expect(ids.has(e)).toBe(true);
     }
     const json = JSON.stringify(long.result);
-    for (const fake of ['99120384756123.1739999999888', '77700011223344.1738888888777']) {
+    for (const fake of ['99120384756123.1739999999888', '77700011223344.1738888888777', '1739999900011122', '1739999900033344']) {
       expect(long.hits.some((h) => long.requests.get(h.requestId)!.url.includes(fake))).toBe(true);
       expect(json).not.toContain(fake);
       expect(json).not.toContain(fake.slice(0, 6));
@@ -255,7 +277,13 @@ describe('no ID in the result', () => {
     expect(one.result.pass).toBe(false);
     expect(one.result.message).toBe(two.result.message);
     expect(one.result.evidence).toEqual(two.result.evidence);
-    expect(JSON.stringify(two.result)).not.toContain('1739999900');
+    const json = JSON.stringify(two.result);
+    for (const fake of ['1739999900011122', '1739999900033344']) {
+      expect(two.hits.some((h) => two.requests.get(h.requestId)!.url.includes(`sid=${fake}`))).toBe(true);
+      expect(json).not.toContain(fake);
+      expect(json).not.toContain(fake.slice(0, 6));
+      expect(json).not.toContain(sha(fake));
+    }
   });
 
   test('the module reads GA4 IDs only through ga4HitIds', () => {

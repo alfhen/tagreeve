@@ -42,6 +42,7 @@ test('offsite checkout with a rotated cid warns, names the ID and both contexts,
   expect(result.pass).toBe(false);
   expect(result.severity).toBe('warn');
   for (const part of [TID, 'localhost', '127.0.0.1', 'main frame']) expect(result.message).toContain(part);
+  expect(result.message).not.toMatch(/(localhost|127\.0\.0\.1):\d/);
   expect(result.evidence.every((id) => id.startsWith('hit_'))).toBe(true);
   expect(r.code).toBe(0);
 }, 150_000);
