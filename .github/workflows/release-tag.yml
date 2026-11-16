@@ -47,12 +47,14 @@ jobs:
           "$PW_BIN" run e2e/scenarios/reject.yml --site "$url" --out "$RUNNER_TEMP/runs" --json > summary.json
           code=$?
           set -e
-          # The fixture's sandboxed pixel fails the built-in sandbox check, so exit 1 is expected.
+          # The fixture's sandboxed pixel fails the built-in sandbox check, so exit 1 is expected. Warnings, such as idHandover, do not count as failures.
           test "$code" = 1
           node -e '
             const s = JSON.parse(require("fs").readFileSync("summary.json", "utf8"));
-            const failed = s.results.filter((r) => !r.pass).map((r) => r.expectation);
-            const ok = JSON.stringify(failed) === JSON.stringify(["builtin: sandboxPageUrl"])
+            const failed = s.results.filter((r) => !r.pass);
+            const hard = failed.filter((r) => r.severity === "fail").map((r) => r.expectation);
+            const softOk = failed.filter((r) => r.severity !== "fail").every((r) => r.severity === "warn");
+            const ok = JSON.stringify(hard) === JSON.stringify(["builtin: sandboxPageUrl"]) && softOk
               && s.hits.ga4 && s.hits.meta && require("fs").existsSync(s.path);
             if (!ok) { console.error(JSON.stringify(s, null, 2)); process.exit(1); }
           '
