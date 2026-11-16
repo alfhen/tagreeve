@@ -1,8 +1,9 @@
 import { newId, type ConsentEpoch, type Flag, type Hit, type Request, type RunRecords, type Step } from '@tagreeve/core';
 import { describe, expect, test } from 'vitest';
 import type { DataLayerEvent } from '@tagreeve/core';
+import type { PushGroup } from './push-shape.ts';
 import { parseEventMap, type EventMap } from './event-map.ts';
-import { diffPushes, diffRuns, diffShapes, hitShape, kindsMerged, neighbourEpochs, pairNames, pushGroups, type PushGroup, type ShapeKey, type ShapeTuple } from './diff.ts';
+import { diffPushes, diffRuns, diffShapes, hitShape, kindsMerged, neighbourEpochs, pairNames, pushGroups, type ShapeKey, type ShapeTuple } from './diff.ts';
 
 const state = { analytics: 'denied', ads: 'denied', adUserData: 'denied', adPersonalization: 'denied' } as const;
 const consent = { ...state, raw: { gcs: 'G100' } };
@@ -889,6 +890,118 @@ describe('renamed pairs in diffPushes', () => {
     expect(d.moved).toEqual([{ event: 'purchase', renamedFrom: second, kind: 'epoch', pushKind: 'object', frame: 'main', from: 'denied', to: 'granted' }]);
     expect(d.eventsRemoved).toEqual([{ epoch: 'undecided', event: first, kind: 'object', frame: 'main' }]);
     expect(d.eventsAdded).toEqual([]);
+  });
+
+  describe('four epoch labels', () => {
+    const L = ['undecided', 'granted', 'denied', 'withdrawn'];
+    const mv = (event: string, from: string, to: string, renamedFrom?: string) => ({ event, ...(renamedFrom === undefined ? {} : { renamedFrom }), kind: 'epoch', pushKind: 'object', frame: 'main', from, to });
+    const ref = (epoch: string, event: string) => ({ epoch, event, kind: 'object', frame: 'main' });
+
+    test('each renamed move goes to the epoch pairNames chose', () => {
+      const a = [g('undecided', 'checkout_completed'), g('denied', 'order_done')];
+      const b = [g('granted', 'purchase'), g('withdrawn', 'purchase')];
+      const d = diffPushes(a, b, { epochOrder: L, eventMap: map });
+      expect(d.moved).toHaveLength(2);
+      expect(d.moved).toContainEqual(mv('purchase', 'undecided', 'granted', 'checkout_completed'));
+      expect(d.moved).toContainEqual(mv('purchase', 'denied', 'withdrawn', 'order_done'));
+      expect(d.eventsRemoved).toEqual([]);
+      expect(d.eventsAdded).toEqual([]);
+      expect(d.changed).toBe(false);
+    });
+
+    test('a joinedTo key on an input is ignored', () => {
+      const s1 = { ...g('undecided', 'purchase'), joinedTo: 'withdrawn' };
+      expect(s1.joinedTo).toBe('withdrawn');
+      const d1 = diffPushes([s1], [g('granted', 'purchase')], { epochOrder: L });
+      expect(d1).toEqual(diffPushes([g('undecided', 'purchase')], [g('granted', 'purchase')], { epochOrder: L }));
+      expect(d1.moved).toEqual([mv('purchase', 'undecided', 'granted')]);
+      expect(d1.eventsRemoved).toEqual([]);
+      expect(d1.eventsAdded).toEqual([]);
+      const s2 = { ...g('undecided', 'purchase'), joinedTo: 'denied' };
+      expect(s2.joinedTo).toBe('denied');
+      const o3 = ['undecided', 'granted', 'denied'];
+      const d2 = diffPushes([s2], [g('denied', 'purchase')], { epochOrder: o3 });
+      expect(d2).toEqual(diffPushes([g('undecided', 'purchase')], [g('denied', 'purchase')], { epochOrder: o3 }));
+      expect(d2.moved).toEqual([]);
+      expect(d2.eventsRemoved).toEqual([ref('undecided', 'purchase')]);
+      expect(d2.eventsAdded).toEqual([ref('denied', 'purchase')]);
+    });
+
+    test('pairNames records the target epoch of a cross-epoch join', () => {
+      const a = [g('undecided', 'checkout_completed'), g('denied', 'order_done')];
+      const b = [g('granted', 'purchase'), g('withdrawn', 'purchase')];
+      const named = pairNames(a, b, map, { epochOrder: L });
+      expect(named.find((n) => n.renamedFrom === 'checkout_completed')).toMatchObject({ epoch: 'undecided', joinedTo: 'granted' });
+      expect(named.find((n) => n.renamedFrom === 'order_done')).toMatchObject({ epoch: 'denied', joinedTo: 'withdrawn' });
+      for (const n of pairNames(a, b, map, {})) {
+        expect(n.renamedFrom).toBeUndefined();
+        expect(n.joinedTo).toBeUndefined();
+      }
+      const s = { ...g('undecided', 'purchase'), joinedTo: 'denied' };
+      expect(s.joinedTo).toBe('denied');
+      const out = pairNames([s], [g('denied', 'purchase')], map, { epochOrder: ['undecided', 'granted', 'denied'] });
+      expect(out).toHaveLength(1);
+      expect(out[0]).toMatchObject({ epoch: 'undecided', event: 'purchase' });
+      expect(out[0]!.renamedFrom).toBeUndefined();
+      expect(out[0]!.joinedTo).toBeUndefined();
+    });
+
+    test('a same-name move with no join keeps the greedy order', () => {
+      const d = diffPushes([g('undecided', 'purchase'), g('denied', 'purchase')], [g('granted', 'purchase'), g('withdrawn', 'purchase')], { epochOrder: L });
+      expect(d.moved).toEqual([mv('purchase', 'denied', 'granted')]);
+      expect(d.eventsRemoved).toEqual([ref('undecided', 'purchase')]);
+      expect(d.eventsAdded).toEqual([ref('withdrawn', 'purchase')]);
+    });
+
+    test('epoch moves are the joins pairNames made, on every small input', () => {
+      const labels = L;
+      const events = ['checkout_completed', 'order_done', 'purchase'];
+      const singles = labels.flatMap((l) => events.map((e) => g(l, e)));
+      const sides: PushGroup[][] = [[], ...singles.map((x) => [x])];
+      for (let i = 0; i < singles.length; i++) for (let j = i + 1; j < singles.length; j++) sides.push([singles[i]!, singles[j]!]);
+      expect(sides).toHaveLength(79);
+      let withJoin = 0;
+      let withTwo = 0;
+      for (const a of sides) {
+        for (const b of sides) {
+          const named = pairNames(a, b, map, { epochOrder: L });
+          const expected = named.filter((n) => n.joinedTo !== undefined && n.joinedTo !== n.epoch).map((n) => ({ event: n.event, renamedFrom: n.renamedFrom, from: n.epoch, to: n.joinedTo! }));
+          if (expected.length > 0) withJoin++;
+          if (expected.length === 2 && expected[0]!.to !== expected[1]!.to) withTwo++;
+          const d = diffPushes(a, b, { epochOrder: L, eventMap: map });
+          const epochMoves = d.moved.filter((m) => m.kind === 'epoch');
+          const key = (m: { event: string; renamedFrom?: string; from: string; to: string }) => JSON.stringify([m.event, m.renamedFrom ?? null, m.from, m.to]);
+          expect(new Set(epochMoves.filter((m) => m.renamedFrom !== undefined).map(key))).toEqual(new Set(expected.map(key)));
+          for (const m of expected) expect(d.eventsRemoved.some((r) => r.epoch === m.from && r.event === m.renamedFrom)).toBe(false);
+          const targets = epochMoves.map((m) => JSON.stringify([m.to, m.event, m.pushKind, m.frame]));
+          expect(new Set(targets).size).toBe(targets.length);
+          for (const t of epochMoves) expect(d.eventsAdded.some((x) => x.epoch === t.to && x.event === t.event && x.kind === t.pushKind && x.frame === t.frame)).toBe(false);
+          expect(epochMoves.length + d.eventsRemoved.length).toBeLessThanOrEqual(a.length);
+        }
+      }
+      expect(withJoin).toBeGreaterThan(0);
+      expect(withTwo).toBeGreaterThan(0);
+    });
+
+    test('a large input with many joins stays fast', () => {
+      const a: PushGroup[] = [];
+      const b: PushGroup[] = [];
+      const events: Record<string, string> = {};
+      for (let i = 0; i < 1000; i++) {
+        const k = i % 4;
+        const t = k === 3 ? 2 : k + 1;
+        a.push(g(L[k]!, `r${i}`), g(L[k]!, `s${i}`));
+        b.push(g(L[t]!, `p${i}`), g(L[t]!, `s${i}`));
+        events[`r${i}`] = `p${i}`;
+      }
+      const big = parseEventMap(JSON.stringify({ events }), 'big.json');
+      const start = performance.now();
+      const d = diffPushes(a, b, { epochOrder: L, eventMap: big });
+      expect(performance.now() - start).toBeLessThan(4000);
+      expect(d.moved.filter((m) => m.kind === 'epoch')).toHaveLength(2000);
+      expect(d.eventsRemoved).toEqual([]);
+      expect(d.eventsAdded).toEqual([]);
+    });
   });
 
   const pathMap = parseEventMap(JSON.stringify({ events: { checkout_completed: 'purchase', order_done: 'purchase' }, paths: { purchase: { y: 'x' } } }), 'm.json');

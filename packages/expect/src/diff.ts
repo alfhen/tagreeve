@@ -5,8 +5,6 @@ import { epochForHit, judgeIndex, judgedAt } from './evaluate.ts';
 import { builtInEventName, keepPushGroups, mappedEventName, normalizePushGroups, type EventMap } from './event-map.ts';
 import { pushShapes, type PushGroup, type PushKind } from './push-shape.ts';
 
-export type { PushGroup };
-
 export interface DiffOptions {
   /** Adds the page path to the match key, with the Shopify sandbox prefix stripped. */
   byPage?: boolean;
@@ -248,9 +246,17 @@ interface PushNode {
   frames: string[];
   types: Map<string, string[]>;
   renamedFrom?: string;
+  joinedTo?: string;
 }
 
-export type NamedGroup = PushGroup & { renamedFrom?: string };
+export type NamedGroup = PushGroup & { renamedFrom?: string; joinedTo?: string };
+
+/** An input group may carry a stray `joinedTo`; only `pairNames` may set it. */
+const withoutJoin = (g: PushGroup): NamedGroup => {
+  const copy: NamedGroup = { ...g };
+  delete copy.joinedTo;
+  return copy;
+};
 
 function pushNodes(groups: NamedGroup[], acrossFrames: boolean, mergeKinds: boolean): Map<string, PushNode> {
   const nodes = new Map<string, PushNode>();
@@ -258,7 +264,7 @@ function pushNodes(groups: NamedGroup[], acrossFrames: boolean, mergeKinds: bool
     const frame = acrossFrames ? 'any' : g.frame;
     const kind = mergeKinds ? undefined : g.kind;
     const id = JSON.stringify([g.epoch, g.event, kind ?? null, frame]);
-    const node: PushNode = nodes.get(id) ?? { epoch: g.epoch, event: g.event, ...(kind === undefined ? {} : { kind }), frame, frames: [], types: new Map(), ...(g.renamedFrom === undefined ? {} : { renamedFrom: g.renamedFrom }) };
+    const node: PushNode = nodes.get(id) ?? { epoch: g.epoch, event: g.event, ...(kind === undefined ? {} : { kind }), frame, frames: [], types: new Map(), ...(g.renamedFrom === undefined ? {} : { renamedFrom: g.renamedFrom }), ...(g.joinedTo === undefined ? {} : { joinedTo: g.joinedTo }) };
     if (!node.frames.includes(g.frame)) node.frames.push(g.frame);
     for (const p of g.paths) node.types.set(p.path, [...new Set([...(node.types.get(p.path) ?? []), ...p.types])].sort());
     nodes.set(id, node);
@@ -305,6 +311,7 @@ export function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap, co
   const taken = new Set(inA);
   const claimed = new Set<string>();
   const joined = new Map<string, string>();
+  const joinedEpoch = new Map<string, string>();
   const pair = (sameEpoch: boolean): void => {
     for (const from of onlyA) {
       if (joined.has(epochEventId(from)) || (!sameEpoch && movedNames.has(from.event))) continue;
@@ -316,6 +323,7 @@ export function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap, co
       claimed.add(epochEventId(to));
       taken.add(JSON.stringify([from.epoch, to.event]));
       joined.set(epochEventId(from), to.event);
+      joinedEpoch.set(epochEventId(from), to.epoch);
     }
   };
   pair(true);
@@ -324,7 +332,9 @@ export function pairNames(a: PushGroup[], b: PushGroup[], userMap?: EventMap, co
   return normalized.map((g, i) => {
     const recorded = a[i]!;
     const to = joined.get(epochEventId(recorded));
-    return to === undefined ? kept[i]! : { ...g, event: to, renamedFrom: recorded.event };
+    if (to === undefined) return withoutJoin(kept[i]!);
+    const target = joinedEpoch.get(epochEventId(recorded))!;
+    return { ...withoutJoin(g), event: to, renamedFrom: recorded.event, ...(target === recorded.epoch ? {} : { joinedTo: target }) };
   });
 }
 function typesId(n: PushNode): string {
@@ -339,7 +349,7 @@ function withoutEventName(n: PushNode, other: PushNode): PushNode {
   return { ...n, types };
 }
 
-/** Compares push shapes. Nothing here is drift: the caller reports the changes as warnings. */
+/** Compares push shapes. Nothing here is drift: the caller reports the changes as warnings. A cross-epoch join made by `pairNames` is kept as a move to its epoch. Same-name moves with no join use a greedy match in node order: a known limit. */
 export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOptions = {}): PushDiff {
   const result: PushDiff = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], typeChanges: [], moved: [], kindChanged: [], changed: false };
   const mergeKinds = kindsMerged(a, b);
@@ -379,7 +389,17 @@ export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOpti
   }
 
   const taken = new Set<PushNode>();
+  const moveEpoch = (g: PushNode, to: PushNode): void => {
+    taken.add(to);
+    result.moved.push({ event: g.event, ...(g.renamedFrom === undefined ? {} : { renamedFrom: g.renamedFrom }), kind: 'epoch', ...(g.kind === undefined ? {} : { pushKind: g.kind }), frame: g.frame, from: g.epoch, to: to.epoch });
+  };
+  const loose: PushNode[] = [];
   for (const g of gone) {
+    const bound = g.joinedTo === undefined ? undefined : fresh.find((f) => !taken.has(f) && f.epoch === g.joinedTo && f.event === g.event && f.kind === g.kind && f.frame === g.frame);
+    if (bound) moveEpoch(g, bound);
+    else loose.push(g);
+  }
+  for (const g of loose) {
     const match = fresh.find(
       (f) => !taken.has(f) && f.event === g.event && f.kind === g.kind && f.frame === g.frame && typesId(f) === typesId(g) && neighbourEpochs(order, g.epoch, f.epoch),
     );
@@ -387,8 +407,7 @@ export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOpti
       result.eventsRemoved.push({ ...nodeRef({ ...g, renamedFrom: undefined }), event: g.renamedFrom ?? g.event });
       continue;
     }
-    taken.add(match);
-    result.moved.push({ event: g.event, ...(g.renamedFrom === undefined ? {} : { renamedFrom: g.renamedFrom }), kind: 'epoch', ...(g.kind === undefined ? {} : { pushKind: g.kind }), frame: g.frame, from: g.epoch, to: match.epoch });
+    moveEpoch(g, match);
   }
   for (const f of fresh) if (!taken.has(f)) result.eventsAdded.push(nodeRef(f));
   result.changed = result.eventsAdded.length + result.eventsRemoved.length + result.pathsAdded.length + result.pathsRemoved.length + result.typeChanges.length + result.kindChanged.length > 0;
