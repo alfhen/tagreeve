@@ -64,12 +64,15 @@ export function evaluatePushRule(rule: Rule, input: PushRuleInput): PushRuleOutc
     const found = offenders.length === 0 ? 'found none' : `found ${plural(offenders.length, 'push')}`;
     const pass = offenders.length === 0;
     const warn = pass && input.hookIncomplete;
-    return {
-      pass,
-      evidence: offenders.map((p) => p.id),
-      message: `Expected no ${subject}${holding}${where}, ${found} (${before}).${warn ? ' The pushes could not all be read: the dataLayer hook is incomplete here, so a push may have been missed.' : ''}`,
-      ...(warn && { severity: 'warn' as const }),
-    };
+    if (warn) {
+      return {
+        pass: false,
+        evidence: [],
+        message: `Expected no ${subject}${holding}${where}, found none (${before}), but the pushes could not all be read: the dataLayer hook is incomplete here, so a push may have been missed.`,
+        severity: 'warn',
+      };
+    }
+    return { pass, evidence: offenders.map((p) => p.id), message: `Expected no ${subject}${holding}${where}, ${found} (${before}).` };
   }
 
   if (sel.types) {

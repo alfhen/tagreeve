@@ -557,6 +557,12 @@ describe('dataLayer rules', () => {
     expect(rule.dataLayer?.has).toEqual(['ecommerce.items[*].item_id', 'ecommerce.items[*].price']);
   });
 
+  test('paths with a * glob parse in has and types', () => {
+    const rule = parse('{ dataLayer: { event: purchase, has: ["ecommerce.*", "ecommerce.items[*].item_*", "**.item_*"], types: { "ecommerce.items[*].pri*": number } } }').expect.must[0]!;
+    expect(rule.dataLayer?.has).toEqual(['ecommerce.*', 'ecommerce.items[*].item_*', '**.item_*']);
+    expect(rule.dataLayer?.types).toEqual({ 'ecommerce.items[*].pri*': 'number' });
+  });
+
   const bad: [string, string, RegExp[]][] = [
     ['a numbered index', `dataLayer: { event: purchase, has: ["ecommerce.items[3].item_id"] }`, [/dataLayer\.has/, /\[\*\]/]],
     ['a numbered index in types', `dataLayer: { event: purchase, types: { "ecommerce.items[0].price": number } }`, [/dataLayer\.types/, /\[\*\]/]],

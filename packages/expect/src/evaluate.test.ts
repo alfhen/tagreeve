@@ -910,7 +910,7 @@ test('a mustNot dataLayer rule that passes while the hook is incomplete warns, a
   const loader = request({ t: 100 });
   for (const flag of [hookFlag('dataLayerIncomplete'), hookFlag('dataLayerNotHooked', [loader.id])]) {
     const warned = rule(purchaseRule(), [stepAt('first', 0, 1000), loader, flag]);
-    expect(warned).toMatchObject({ pass: true, severity: 'warn' });
+    expect(warned).toMatchObject({ pass: false, severity: 'warn' });
     expect(warned.message).toContain('could not all be read');
   }
 
@@ -921,7 +921,7 @@ test('a mustNot dataLayer rule that passes while the hook is incomplete warns, a
   const scoped = (loader: Request) => rule(purchaseRule(', after: first'), [first, second, loader, hookFlag('dataLayerNotHooked', [loader.id])]);
   expect(scoped(beforeEnd).severity).toBeUndefined();
   expect(scoped(beforeEnd).pass).toBe(true);
-  expect(scoped(afterEnd)).toMatchObject({ pass: true, severity: 'warn' });
+  expect(scoped(afterEnd)).toMatchObject({ pass: false, severity: 'warn' });
 });
 
 test('a failing mustNot dataLayer rule stays a fail with the hook incomplete, and a must rule is not changed', () => {

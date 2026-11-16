@@ -1,7 +1,7 @@
 import type { DataLayerEvent } from '@tagreeve/core';
 import { describe, expect, test } from 'vitest';
 import { evaluatePushRule, type PushRuleInput } from './push-rules.ts';
-import { labelKind, pushShapes, NO_EVENT, type PushFrameKind, type PushKind } from './push-shape.ts';
+import { labelKind, pushShapes, NO_EVENT } from './push-shape.ts';
 import { parseScenario, type Count, type PushSelector, type Rule } from './scenario.ts';
 
 let n = 0;
@@ -165,7 +165,9 @@ describe('a path copied from the shapes matches', () => {
 
   test.each(pageEvents.flatMap((s) => s.paths.map((p) => [s.event, s.kind, s.frame, p.path] as const)))('%s %s %s has %s', (event, kind, frame, path) => {
     const shape = pageEvents.find((s) => s.event === event && s.kind === kind && s.frame === frame)!;
-    const r = evaluatePushRule(rule('must', { event, kind: kind as PushKind, frame: frame as PushFrameKind, has: [path] }), everywhere(step));
+    const selector = { event, kind, frame, has: [path] };
+    const parsed = parseScenario(`start: /\nexpect:\n  must:\n    - { dataLayer: ${JSON.stringify(selector)} }\n`).expect.must[0]!;
+    const r = evaluatePushRule(parsed, everywhere(step));
     expect(r.pass).toBe(true);
     expect(r.evidence.length).toBeGreaterThan(0);
     for (const id of r.evidence) expect(shape.ids).toContain(id);
@@ -191,4 +193,10 @@ describe('the rule text through the parser', () => {
     const r = evaluatePushRule(scenario.expect.mustNot[0]!, everywhere([withId, withoutId]));
     expect(r.evidence).toEqual([withId.id]);
   });
+});
+
+test("a mustNot that would pass with the hook incomplete is a warn that cannot be evaluated, with no evidence", () => {
+  const rule = { kind: "mustNot", dataLayer: { event: "purchase" } } as Rule;
+  expect(evaluatePushRule(rule, everywhere([], { hookIncomplete: true }))).toMatchObject({ pass: false, severity: "warn", evidence: [] });
+  expect(evaluatePushRule(rule, everywhere([]))).toMatchObject({ pass: true });
 });

@@ -299,7 +299,7 @@ expect:
 - `kind` is `gtag` (a `gtag()` call) or `object` (any other push). `frame` is `main`, `embedded` or `unknown`. Without them, any kind and frame match.
 - `before`, `in`, `after`, `from` and `count` stay at rule level and select the same windows as for cookie rules, by the time of the push. `count` is only valid under `must`.
 - A `dataLayer` rule cannot be combined with `vendor`, a hit filter or a `body.*` key. It exits 2 and names the key.
-- When the `dataLayer` hook is incomplete in the rule's scope (`dataLayerIncomplete` or `dataLayerNotHooked`), a `mustNot` that would pass warns that the pushes could not all be read. A failing `mustNot` stays a fail.
+- When the `dataLayer` hook is incomplete in the rule's scope (`dataLayerIncomplete` or `dataLayerNotHooked`), a `mustNot` that would pass shows as `WARN` with a message that the pushes could not all be read, and the exit code stays 0. A failing `mustNot` stays a fail.
 - A `dataLayer` rule never gets the `serverSendProbableLink` or `serverSendUnlinked` note: it reads pushes, not hits.
 - To write a rule, copy the event, kind, frame and paths from `dataLayer.steps[].events[]` in a run's `--json` output.
 

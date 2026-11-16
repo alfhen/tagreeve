@@ -58,9 +58,9 @@ export function pathProblem(path: string): string | undefined {
   if (path.length > MAX_PUSH_PATH) return `is at most ${MAX_PUSH_PATH} characters`;
   const plain = path.startsWith('**.') ? path.slice(3) : path;
   if (plain === '') return 'must be a key path such as ecommerce.value';
-  const segments = plain.split('.');
-  const bare = plain.replace(/\[\*\]/g, '');
-  const unsafe = guardFieldName(bare) !== bare || segments.some((s) => s === '' || guardFieldName(s.replace(/\[\*\]/g, '')) !== s.replace(/\[\*\]/g, '') || isValueSegment(s.replace(/\[\*\]/g, '')));
+  // A `*` glob stands for name characters, so it is checked as a plain letter.
+  const reading = (s: string) => s.replace(/\[\*\]/g, '').replace(/\*/g, 'x');
+  const unsafe = guardFieldName(reading(plain)) !== reading(plain) || plain.split('.').some((s) => reading(s) === '' || guardFieldName(reading(s)) !== reading(s) || isValueSegment(reading(s)));
   return unsafe ? 'must be a key path as the --json push shapes show it, and this one reads like a value' : undefined;
 }
 
