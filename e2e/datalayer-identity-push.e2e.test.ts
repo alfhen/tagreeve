@@ -120,6 +120,10 @@ test('on the plain shop an email typed after a reject is pushed once the visitor
   const records = r.records!;
   const email = records.run.identity!.email;
   const granted = answerAt(records, 'granted');
+  const denied = records.consentEpochs.find((e) => e.label === 'denied');
+  expect(r.code).toBe(0);
+  expect(denied).toBeDefined();
+  expect(denied!.startT).toBeLessThan(granted);
   const pushes = pushesOf(records, email);
   expect(pushes.length).toBeGreaterThan(0);
   expect(pushes.every((p) => p.t >= granted)).toBe(true);
