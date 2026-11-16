@@ -8,7 +8,7 @@ Not released yet. The newest release is 0.6.2, below.
 
 - `diff` keeps a cross-epoch join of a renamed event. Before, a second search could move it to another epoch or report it as removed and added. The greedy order of same-name moves with no join is a known limit (#1457, #1465).
 
-<!-- X11 -->
+Test and chore fixes: the request ID in the identity tests holds no digits, the docs test strip takes quoted and spaced placeholders, and the node-forge release-age exception is gone (#1498, #1453, #1275).
 
 - Docs: the 0.6.2 notes are corrected, and the card fill ends "at the step deadline" in `docs/cli.md` (#1483, #1490, #1491, #1492, #1493, #1494, #1495, #1496).
 

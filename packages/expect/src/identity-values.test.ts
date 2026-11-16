@@ -121,9 +121,11 @@ test('hashesMatch passes a decoded Meta hit with the identity hash and fails a w
   expect(run(hashEmail('other@example.com').hex).pass).toBe(false);
 });
 
+const fixedRequestId = 'req_QAAAAAAAAAAAAAAAAAAAAAAAAA';
+
 function rawRequest(url: string, postData: string | null = null): Request {
   return {
-    type: 'request', id: newId('request'), runId, stepId: null, t: 0, method: postData ? 'POST' : 'GET', url,
+    type: 'request', id: fixedRequestId, runId, stepId: null, t: 0, method: postData ? 'POST' : 'GET', url,
     resourceType: 'fetch', frameUrl: null, initiator: null, headers: {}, postData, outcome: 'stubbed',
   };
 }
