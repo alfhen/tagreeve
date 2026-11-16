@@ -4,7 +4,7 @@ import { decodeRequest } from '@tagreeve/decoders';
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { idHandover } from './id-handover.ts';
-import { BUILTIN_NAMES } from './scenario.ts';
+import { BUILTIN_NAMES, parseScenario } from './scenario.ts';
 
 const TID = 'G-PWTEST0001';
 const CID_A = '4821907365.1730000001';
@@ -86,6 +86,11 @@ describe('same IDs', () => {
 
   test('idHandover is a builtin name', () => {
     expect(BUILTIN_NAMES).toContain('idHandover');
+  });
+
+  test('a scenario accepts builtins: { idHandover: fail }', () => {
+    const s = parseScenario('start: /\noptions: { builtins: { idHandover: fail } }');
+    expect(s.options.builtins).toMatchObject({ idHandover: 'fail' });
   });
 });
 
