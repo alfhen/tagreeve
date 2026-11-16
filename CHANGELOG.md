@@ -8,7 +8,7 @@ Not released yet. The newest release is 0.6.2, below.
 
 <!-- E11 -->
 
-<!-- X11 -->
+Test and chore fixes: the request ID in the identity tests holds no digits, the docs test strip takes quoted and spaced placeholders, and the node-forge release-age exception is gone (#1498, #1453, #1275).
 
 <!-- C11 -->
 

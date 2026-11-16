@@ -27,7 +27,7 @@ export function unsafeFileTargets(markdown: string): string[] {
   for (const snippet of snippets) {
     const text = snippet
       .replace(/\\\n/g, ' ')
-      .replace(/(?<=[?&][\w-]+=)<[A-Za-z][A-Za-z ]*>(?=&|$)/g, ' ')
+      .replace(/(?<=(?:^|[?&\s"'])[\w-]+=)<[A-Za-z][A-Za-z ]*>(?=[&"']|$)/gm, ' ')
       .replace(/\d*>&\s*(?:\d+|-)(?=[\s;|&)<>"'`]|$)/g, ' ')
       .replace(/(?<!<)<(?!<)\s*[^\s;|&)<>]+/g, ' ');
     for (const m of text.matchAll(/(?:^|[^<>])>[>|]?\s*([^\s;|&)<>]+)/g)) targets.push(m[1]!);
@@ -102,6 +102,8 @@ test.each([
   ['a chmod after a continuation', '```bash\nchmod \\\n  600 sgtm-config.txt\n```', ['sgtm-config.txt']],
   ['a clobber redirect', '```bash\necho x >| out.txt\n```', ['out.txt']],
   ['a >& redirect with no space before it', '```bash\ncat x>&out.txt\n```', ['out.txt']],
+  ['a double-quoted URL that ends in <auth>', '```bash\ncurl "https://example.test/?id=<id>&auth=<auth>"\n```', []],
+  ['a snippet that starts with a placeholder pair', '```bash\nid=<env id>&auth=<auth>\n```', []],
   ['a placeholder before &', 'use `id=GTM-PWTEST1&env=<env id>&auth=<auth>` here', []],
   ['a process substitution after a flag', '```bash\ntagreeve run --server-container-config=<(pbpaste) > out.txt\n```', ['out.txt']],
   ['an input redirect after an assignment', '```bash\nFOO=<in.txt; cat > out.txt\n```', ['out.txt']],
