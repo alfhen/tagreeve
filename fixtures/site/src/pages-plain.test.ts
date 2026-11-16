@@ -51,3 +51,20 @@ test('a page that is not in the plain shop is 404 next to a 200 for the product 
   expect((await fetch(`${site.url}/plain/product`)).status).toBe(200);
   expect((await fetch(`${site.url}/plain/nope`)).status).toBe(404);
 });
+
+test('plain-gtm.js links the product page to the checkout on 127.0.0.1 with ?checkout=offsite and rotates the cid with ?cid=rotate', async () => {
+  const script = await (await fetch(`${site.url}/assets/plain-gtm.js`)).text();
+  expect(script).toContain("get('checkout') === 'offsite'");
+  expect(script).toContain("'//127.0.0.1:'");
+  expect(script).toContain("get('cid') === 'rotate'");
+  expect(script).toContain("'&sid=' + SID");
+});
+
+test('the offsite checkout page returns 200 and no served text holds a Shopify string or an iframe', async () => {
+  const res = await fetch(`${site.url}/plain/checkout?cid=rotate`);
+  expect(res.status).toBe(200);
+  const texts = [await res.text()];
+  for (const asset of ['banner.js', 'plain-gtm.js']) texts.push(await (await fetch(`${site.url}/assets/${asset}`)).text());
+  expect((await fetch(`${site.url}/plain/product?checkout=offsite&cid=rotate`)).status).toBe(200);
+  for (const text of texts) for (const re of forbidden) expect(text).not.toMatch(re);
+});

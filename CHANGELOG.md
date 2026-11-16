@@ -18,7 +18,7 @@ Test and chore fixes: the request ID in the identity tests holds no digits, the 
 
 - New built-in check `earlyIdentityPush`: it warns when a `dataLayer` push carries the run's own test email or phone, or a hash of either, before consent. It names the push, key path and kind and never prints the value. It is `warn` by default and can be set to `fail` (#1392, #937).
 
-<!-- H11 -->
+- New built-in check `idHandover`: it warns when the GA4 client ID, or the session ID where the client ID matches, differs between two contexts of one measurement ID, such as a checkout in a frame or on another host. It names the measurement ID and both contexts and never prints an ID. It is `warn` by default and can be set to `fail` (#934).
 
 <!-- R17 -->
 

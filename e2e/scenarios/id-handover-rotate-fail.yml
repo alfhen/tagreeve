@@ -1,0 +1,18 @@
+start: /plain/product?checkout=offsite&cid=rotate
+steps:
+  - consent: accept
+  - visit: /plain/product?checkout=offsite&cid=rotate
+  - click: "#to-checkout"
+  - consent: accept
+  - fill:
+      "#email": email
+      "#first-name": firstName
+      "#last-name": lastName
+      "#phone": phone
+      "#address1": address1
+      "#city": city
+      "#zip": zip
+      "#country": SE
+  - click: "#place-order"
+  - wait: 3s
+options: { seed: 1, builtins: { idHandover: fail } }

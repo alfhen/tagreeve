@@ -52,7 +52,7 @@ test('the annotated summary follows the mouse and the arrow keys', async () => {
   expect(await shownNote(page)).toEqual([[hits.title, hits.body]]);
 
   await page.locator('.annotated-line', { hasText: 'Result: fail' }).hover();
-  const result = annotationOf('Result: fail (3 of 8)');
+  const result = annotationOf('Result: fail (3 of 9)');
   expect(await shownNote(page)).toEqual([[result.title, result.body]]);
 
   await page.locator('.annotated-line').first().focus();

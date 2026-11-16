@@ -107,7 +107,7 @@ export function rewriteHosts(text: string, origins: FixtureOrigins): string {
     out = out.replace(new RegExp(`${escape(origin)}(?!\\d)`, 'g'), `https://${demoHosts[key]}`);
     out = out.replace(new RegExp(`${escape(host)}(?!\\d)`, 'g'), demoHosts[key]);
   }
-  return out.replace(/http:\/\/localhost(?![:\w])/g, `https://${demoHosts.url}`);
+  return out.replace(/http:\/\/localhost(?![:\w])/g, `https://${demoHosts.url}`).replace(/\blocalhost(?![:\w-]|\.\w)/g, demoHosts.url);
 }
 
 /** Every form of one seed's fake email and phone that must never be in a demo file. */
