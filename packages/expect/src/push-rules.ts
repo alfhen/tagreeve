@@ -99,6 +99,15 @@ export function evaluatePushRule(rule: Rule, input: PushRuleInput): PushRuleOutc
   const count = rule.count ?? { op: '>=' as const, n: 1 };
   const pass = countHolds(count, holders.length);
   const holding = sel.has ? ` holding ${sel.has.join(', ')}` : '';
+  const unseenPushCouldBreak = sel.types !== undefined || count.op === '<=' || count.op === '<' || count.op === '=';
+  if (pass && input.hookIncomplete && unseenPushCouldBreak) {
+    return {
+      pass: false,
+      evidence: holders.map((p) => p.id),
+      message: `Expected ${describeCount(count)} ${subject}${holding}${where}, found ${holders.length} of ${selected.length} (${before}), but the pushes could not all be read: the dataLayer hook is incomplete here, so a push may have been missed.`,
+      severity: 'warn',
+    };
+  }
   return {
     pass,
     evidence: (pass ? holders : selected).map((p) => p.id),
