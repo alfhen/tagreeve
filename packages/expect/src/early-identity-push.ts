@@ -20,6 +20,8 @@ function ownLeaves(value: unknown, path: string, key: string, identity: Identity
   if (depth > MAX_DEPTH) return;
   if (typeof value === 'string' || typeof value === 'number') {
     const kinds = ownValueKinds(`${key}=${value}`, identity);
+    for (const k of ownValueKinds(String(value), identity)) kinds.add(k);
+    for (const k of ownValueKinds(String(value), identity)) kinds.add(k);
     if (kinds.size === 0) return;
     const name = path || '(value)';
     const found = out.get(name) ?? new Set<OwnValueKind>();

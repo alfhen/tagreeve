@@ -80,6 +80,16 @@ test('with no identity it passes and says it could not check', () => {
   expect(r.message).not.toContain(identity.email);
 });
 
+test('the phone as digits, as a string or a number, is found without the value', () => {
+  const digits = identity.phone.replace(/\D/g, '');
+  for (const value of [digits, Number(digits)]) {
+    const r = check([...undecided, push(100, { user: { phone_number: value } })]);
+    expect(r.pass).toBe(false);
+    expect(r.message).toContain('user.phone_number: phone');
+    expect(r.message).not.toContain(digits);
+  }
+});
+
 test('a fail override sets the severity', () => {
   const r = check([...undecided, push(100, { user: { email: identity.email } })], { identity }, 'start: /\noptions:\n  builtins: { earlyIdentityPush: fail }');
   expect(r.severity).toBe('fail');
