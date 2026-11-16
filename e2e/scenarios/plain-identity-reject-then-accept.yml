@@ -1,0 +1,17 @@
+start: /plain/checkout
+steps:
+  - consent: reject
+  - fill:
+      "#email": email
+      "#first-name": firstName
+      "#last-name": lastName
+      "#phone": phone
+      "#address1": address1
+      "#city": city
+      "#zip": zip
+      "#country": SE
+  - wait: 1s
+  - click: "#pw-cookie-settings"
+  - consent: accept
+  - wait: 1s
+options: { seed: 1 }

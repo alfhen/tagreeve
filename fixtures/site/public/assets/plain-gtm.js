@@ -57,7 +57,7 @@
     window.dataLayer.push({ event: 'identify', user: { email: field.value } });
   }
   function identifyWhenAllowed() {
-    if (early || (window.pwConsent && window.pwConsent.choice())) pushIdentity();
+    if (early || (window.pwConsent && window.pwConsent.choice() === 'accept')) pushIdentity();
     else window.pwConsent.onAnswer(pushIdentity);
   }
   document.addEventListener('DOMContentLoaded', function () {
