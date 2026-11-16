@@ -552,6 +552,11 @@ describe('dataLayer rules', () => {
     expect(parse('{ dataLayer: { event: "consent update" } }').expect.must[0]!.dataLayer?.event).toBe('consent update');
   });
 
+  test('paths with [*] parse as the --json shapes print them', () => {
+    const rule = parse('{ dataLayer: { event: purchase, has: ["ecommerce.items[*].item_id", "ecommerce.items[*].price"], types: { "ecommerce.items[*].price": number } } }').expect.must[0]!;
+    expect(rule.dataLayer?.has).toEqual(['ecommerce.items[*].item_id', 'ecommerce.items[*].price']);
+  });
+
   const bad: [string, string, RegExp[]][] = [
     ['a numbered index', `dataLayer: { event: purchase, has: ["ecommerce.items[3].item_id"] }`, [/dataLayer\.has/, /\[\*\]/]],
     ['a numbered index in types', `dataLayer: { event: purchase, types: { "ecommerce.items[0].price": number } }`, [/dataLayer\.types/, /\[\*\]/]],

@@ -59,7 +59,8 @@ export function pathProblem(path: string): string | undefined {
   const plain = path.startsWith('**.') ? path.slice(3) : path;
   if (plain === '') return 'must be a key path such as ecommerce.value';
   const segments = plain.split('.');
-  const unsafe = guardFieldName(plain) !== plain || segments.some((s) => s === '' || guardFieldName(s) !== s || isValueSegment(s.replace(/\[\*\]/g, '')));
+  const bare = plain.replace(/\[\*\]/g, '');
+  const unsafe = guardFieldName(bare) !== bare || segments.some((s) => s === '' || guardFieldName(s.replace(/\[\*\]/g, '')) !== s.replace(/\[\*\]/g, '') || isValueSegment(s.replace(/\[\*\]/g, '')));
   return unsafe ? 'must be a key path as the --json push shapes show it, and this one reads like a value' : undefined;
 }
 
