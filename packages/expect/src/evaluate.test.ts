@@ -5,6 +5,7 @@ import {
   hashPhone,
   newId,
   type ConsentState,
+  type DataLayerEvent,
   type Flag,
   type Hit,
   type Request,
@@ -881,4 +882,16 @@ test('a possibleRealDataPush flag leaves the possibleRealData check passing', ()
   const flag: Flag = { type: 'flag', id: newId('flag'), runId, kind: 'possibleRealDataPush', recordIds: ['dle_P1'], detail: 'dataLayer push dle_P1 carries 1 email value(s)' };
   const check = evaluate([flag], parseScenario('start: /'), { identity }).find((r) => r.expectation === 'builtin: possibleRealData')!;
   expect(check.pass).toBe(true);
+});
+
+test('earlyIdentityPush runs before possibleRealData and passes with a message when there is no identity', () => {
+  const epochs = [{ type: 'consentEpoch', id: newId('consentEpoch'), runId, startT: 0, endT: null, source: 'test', label: 'undecided', state: allUnknown } as EvalEpoch];
+  const push: DataLayerEvent = { type: 'dataLayerEvent', id: newId('dataLayerEvent'), runId, stepId: null, t: 10, event: 'login', gtmUniqueEventId: null, args: [{ user: { email: identity.email } }], isConsentCommand: false };
+  const named = (options: { identity?: typeof identity }) =>
+    evaluate([...epochs, push], parseScenario('start: /'), options).filter((r) => /earlyIdentityPush|possibleRealData/.test(r.expectation));
+  expect(named({ identity }).map((r) => [r.expectation, r.pass])).toEqual([['builtin: earlyIdentityPush', false], ['builtin: possibleRealData', true]]);
+  const without = named({});
+  expect(without.map((r) => r.expectation)).toEqual(['builtin: earlyIdentityPush', 'builtin: possibleRealData']);
+  expect(without[0]!.pass).toBe(true);
+  expect(without[0]!.message).toMatch(/could not check/i);
 });

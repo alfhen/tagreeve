@@ -61,6 +61,7 @@ export const ANNOT: Annotation[] = [
       '  PASS builtin: deniedIdentifiers',
       '  PASS builtin: earlyIdentifiers',
       '  PASS builtin: consentModeSetup',
+      '  PASS builtin: earlyIdentityPush',
       '  PASS builtin: possibleRealData',
     ],
   },
@@ -77,8 +78,8 @@ export const ANNOT: Annotation[] = [
   {
     key: 'res',
     title: 'Result',
-    body: '3 of 7 checks failed. The exit code is 1.',
-    lines: ['Result: fail (3 of 7)'],
+    body: '3 of 8 checks failed. The exit code is 1.',
+    lines: ['Result: fail (3 of 8)'],
   },
   {
     key: 'rec',

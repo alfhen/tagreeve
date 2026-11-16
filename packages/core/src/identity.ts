@@ -442,6 +442,56 @@ export function valueKinds(text: string): Set<LeakKind> {
   return kinds;
 }
 
+export type OwnValueKind = 'email' | 'phone' | 'email hash' | 'phone hash';
+
+/**
+ * The kinds of the identity's own values found in text: its email, phone, `extra` emails and phones, and the hex,
+ * base64 and base64url SHA-256 of those. A hash reads as an email or phone hash by what it hashes.
+ */
+export function ownValueKinds(text: string, identity: Identity): Set<OwnValueKind> {
+  const { own, emailHashes, phoneHashes } = ownMatcher(identity);
+  const kinds = new Set<OwnValueKind>();
+  const isPhone = (digits: string) => digits.includes(own.phoneDigits) || digits.includes(own.nationalDigits) || own.extraPhones.includes(digits);
+  const addHash = (value: string) => {
+    const bare = value.replace(/=+$/, '');
+    if (emailHashes.has(bare)) kinds.add('email hash');
+    if (phoneHashes.has(bare)) kinds.add('phone hash');
+  };
+  for (const c of candidates(text)) {
+    if (c.kind === 'email') {
+      const email = normalizeEmail(c.value);
+      if (email.includes(own.email) || own.extraEmails.includes(email)) kinds.add('email');
+    } else if (c.kind === 'phone') {
+      if (isPhone(c.value.replace(/\D/g, ''))) kinds.add('phone');
+    } else addHash(c.value.toLowerCase());
+  }
+  if (/^[+\d\s().-]+$/.test(text) && isPhone(text.replace(/\D/g, ''))) kinds.add('phone');
+  const trimmed = text.trim();
+  addHash(trimmed);
+  addHash(trimmed.toLowerCase());
+  for (const variant of variants(text)) {
+    for (const token of hasUrlEscapes(variant) ? [] : keyedDigests(variant)) addHash(token);
+  }
+  return kinds;
+}
+
+const matchers = new WeakMap<Identity, { own: ReturnType<typeof ownValues>; emailHashes: Set<string>; phoneHashes: Set<string> }>();
+
+function ownMatcher(identity: Identity) {
+  let matcher = matchers.get(identity);
+  if (!matcher) {
+    const own = ownValues(identity);
+    const phoneExtras = (identity.extra ?? []).filter((v) => /^[+\d\s().-]+$/.test(v) && own.extraPhones.includes(v.replace(/\D/g, '')));
+    matcher = {
+      own,
+      emailHashes: fieldHashes(own.email, ...own.extraEmails),
+      phoneHashes: fieldHashes('+' + own.phoneDigits, own.phoneDigits, ...phoneExtras, ...phoneExtras.map((v) => v.replace(/\D/g, '')), ...phoneExtras.map((v) => '+' + v.replace(/\D/g, ''))),
+    };
+    matchers.set(identity, matcher);
+  }
+  return matcher;
+}
+
 /** Finds emails, phone numbers and SHA-256 hex strings in text that do not belong to the identity. */
 export function scan(text: string, identity: Identity, options: { stableHashes?: ReadonlySet<string> } = {}): LeakMatch[] {
   const own = ownValues(identity);
