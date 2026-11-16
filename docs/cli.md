@@ -293,7 +293,7 @@ expect:
 ```
 
 - `dataLayer` holds `event` (required) and, optionally, `has`, `types`, `kind` and `frame`. `event` is the name the `--json` push shapes show, with no Shopify-to-GA4 mapping. A command shows as `consent update` or `gtag config`. A name that reads `(other)` in the shapes exits 2.
-- `has` lists key paths, as the `--json` push shapes print them: `ecommerce.items[*].item_id`. The globs of `body.has` work: `*` matches any characters and a leading `**.` matches a name at any depth. A numbered index such as `items[3]` exits 2 with a hint to write `[*]`.
+- `has` lists key paths, as the `--json` push shapes print them: `ecommerce.items[*].item_id`. The globs of `body.has` work: `*` matches any characters and a leading `**.` matches a name at any depth. A path that names an object or array, such as `ecommerce` or `ecommerce.items`, matches a push that holds it, and `types` reads `object` or `array` there. A numbered index such as `items[3]` exits 2 with a hint to write `[*]`.
 - `must` with `has` passes when at least the counted pushes (`count`, default `>=1`) of that event in scope hold every listed path. `mustNot` with `has` passes when no push of that event in scope holds any listed path. `mustNot` with no `has` passes when no push of that event is in scope.
 - `types` maps a path to one of `string`, `number`, `boolean`, `null`, `object` or `array`, and any other type exits 2. It holds when every matching push has exactly that type at the path. A push with no such path does not hold it. `types` is only valid under `must`.
 - `kind` is `gtag` (a `gtag()` call) or `object` (any other push). `frame` is `main`, `embedded` or `unknown`. Without them, any kind and frame match.
