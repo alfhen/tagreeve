@@ -521,15 +521,18 @@ function evaluatePushRuleIn(rule: Rule, ctx: Context): RuleOutcome {
   return evaluatePushRule(rule, { pushes: ctx.dataLayerEvents, inScope, where: narrowed.length ? ` ${narrowed.join(', ')}` : '', hookIncomplete });
 }
 
-/** A loader that is missing or unhooked leaves its document unread until the next navigation, not only at the loader's own time. */
+/** An unhooked loader leaves its whole document unread: from the last navigation at or before it to the next one. */
 function loaderReachesScope(loader: Request | undefined, ctx: Context, inScope: (t: number) => boolean, windowStartAt: number | undefined): boolean {
-  if (!loader || inScope(loader.t)) return true;
+  if (!loader) return true;
   const navigations = [
     ...ctx.visitTimes,
     ...[...ctx.requests.values()].filter((r) => r.resourceType === 'document' && r.frame?.main !== false).map((r) => r.t),
-  ].filter((t) => t > loader.t);
-  const end = Math.min(Infinity, ...navigations);
-  const candidates = [windowStartAt, ...ctx.epochs.map((e) => e.startT)].filter((t): t is number => t !== undefined && t > loader.t && t < end);
+  ];
+  const start = Math.max(-Infinity, ...navigations.filter((t) => t <= loader.t));
+  const end = Math.min(Infinity, ...navigations.filter((t) => t > loader.t));
+  const candidates = [start, loader.t, windowStartAt, ...ctx.epochs.flatMap((e) => [e.startT, e.startT - ctx.grace])].filter(
+    (t): t is number => t !== undefined && t >= start && t < end,
+  );
   return candidates.some(inScope);
 }
 
