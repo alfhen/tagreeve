@@ -1,0 +1,20 @@
+start: /plain/product
+steps:
+  - consent: accept
+  - visit: /plain/checkout
+  - fill:
+      "#email": email
+      "#first-name": firstName
+      "#last-name": lastName
+      "#phone": phone
+      "#address1": address1
+      "#city": city
+      "#zip": zip
+      "#country": SE
+  - click: "#place-order"
+  - wait: 3s
+expect:
+  must:
+    - { vendor: ga4, event: purchase, consent.analytics: granted }
+    - { vendor: google-ads, event: conversion, consent.ads: granted }
+options: { seed: 1 }

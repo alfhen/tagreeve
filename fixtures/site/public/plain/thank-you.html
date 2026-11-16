@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Plain shop: thank you</title>
+<script src="/assets/banner.js"></script>
+<script src="/assets/plain-gtm.js"></script>
+</head>
+<body>
+<h1>Thank you</h1>
+<p id="order">Order plain-order-0001</p>
+<script>
+  gtag('event', 'purchase', {
+    ecommerce: {
+      transaction_id: 'plain-order-0001',
+      value: 19,
+      currency: 'USD',
+      items: [{ item_id: 'fake-tee', item_name: 'Fake tee', price: 19, quantity: 1 }],
+    },
+  });
+</script>
+</body>
+</html>

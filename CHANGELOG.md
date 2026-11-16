@@ -4,7 +4,7 @@
 
 Not released yet. The newest release is 0.6.2, below.
 
-<!-- S11 -->
+The fixture site has a plain GTM demo shop under `/plain/`, with no Shopify page. The docs mark `sandboxPageUrl`, `platformHost` and `options.platformHosts` as Shopify-specific.
 
 - `diff` keeps a cross-epoch join of a renamed event. Before, a second search could move it to another epoch or report it as removed and added. The greedy order of same-name moves with no join is a known limit (#1457, #1465).
 
