@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0-rc.2
+
+- Rules on dataLayer pushes: messages read `found 2 pushes` and `b should be string, found number in 1 push`, and a passing rule names the types it checked (#1536).
+
 ## 0.7.0-rc.1
 
 Release candidate. Install it with `npm i -g tagreeve@next`.

@@ -49,7 +49,7 @@ function withContainers(leaves: Map<string, Set<string>>): Map<string, Set<strin
   return all;
 }
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : /(s|x|ch|sh)$/.test(word) ? 'es' : 's'}`;
 
 function holdsPath(push: Push, matcher: RegExp): boolean {
   for (const path of push.paths.keys()) if (matcher.test(path)) return true;
@@ -109,17 +109,18 @@ export function evaluatePushRule(rule: Rule, input: PushRuleInput): PushRuleOutc
         const label = types.join(' or ');
         found.set(label, (found.get(label) ?? 0) + 1);
       }
-      if (found.size) problems.push(`${path} is ${type} but found ${[...found].map(([label, n]) => `${label} in ${plural(n, 'push')}`).join(', ')}`);
+      if (found.size) problems.push(`${path} should be ${type}, found ${[...found].map(([label, n]) => `${label} in ${plural(n, 'push')}`).join(', ')}`);
     }
     if (problems.length) {
-      return { pass: false, evidence: [...evidence], message: `Expected every ${subject}${where} to have the types in dataLayer.types, but ${problems.join('; ')} (${before}).` };
+      return { pass: false, evidence: [...evidence], message: `Expected every ${subject}${where} to have the types in dataLayer.types: ${problems.join('; ')} (${before}).` };
     }
   }
 
   const holders = matchers.length ? selected.filter((p) => matchers.every((m) => holdsPath(p, m))) : selected;
   const count = rule.count ?? { op: '>=' as const, n: 1 };
   const pass = countHolds(count, holders.length);
-  const holding = sel.has ? ` holding ${sel.has.join(', ')}` : '';
+  const typed = sel.types ? ` with types ${Object.entries(sel.types).map(([path, type]) => `${path}: ${type}`).join(', ')}` : '';
+  const holding = `${sel.has ? ` holding ${sel.has.join(', ')}` : ''}${typed}`;
   const unseenPushCouldBreak = sel.types !== undefined || count.op === '<=' || count.op === '<' || count.op === '=';
   if (pass && input.hookIncomplete && unseenPushCouldBreak) {
     return {

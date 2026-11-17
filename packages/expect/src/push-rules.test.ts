@@ -224,3 +224,52 @@ describe('a path that names an object or array', () => {
     expect(evaluatePushRule(ok, everywhere([withItems, without])).pass).toBe(false);
   });
 });
+
+describe('message wording', () => {
+  const x = () => push(['event', 'X', { a: 1, b: 2 }]);
+  const typed: PushSelector = { event: 'X', has: ['a', 'b'], types: { b: 'number' } };
+
+  test('a mustNot with two offending pushes says found 2 pushes', () => {
+    const ys = [push(['event', 'Y', { user: { email: 'fake' } }]), push(['event', 'Y', { user: { email: 'fake' } }])];
+    const r = evaluatePushRule(rule('mustNot', { event: 'Y', has: ['**.email'] }), everywhere(ys));
+    expect(r.pass).toBe(false);
+    expect(r.severity).toBeUndefined();
+    expect(r.evidence).toEqual(ys.map((p) => p.id));
+    expect(r.message).toContain('found 2 pushes');
+    expect(r.message).not.toContain('pushs');
+  });
+
+  test('a types failure reads should be, found', () => {
+    const e = x();
+    const r = evaluatePushRule(rule('must', { event: 'X', types: { b: 'string' } }), everywhere([e]));
+    expect(r.pass).toBe(false);
+    expect(r.severity).toBeUndefined();
+    expect(r.evidence).toEqual([e.id]);
+    expect(r.message).toContain('b should be string, found number in 1 push');
+    expect(r.message).not.toContain('is string but found');
+  });
+
+  test('a passing must names the types it checked', () => {
+    const e = x();
+    const r = evaluatePushRule(rule('must', typed), everywhere([e]));
+    expect(r).toMatchObject({ pass: true, evidence: [e.id] });
+    expect(r.severity).toBeUndefined();
+    expect(r.message).toContain('b: number');
+  });
+
+  test('a types-only pass names the types', () => {
+    const r = evaluatePushRule(rule('must', { event: 'X', types: { b: 'number' } }), everywhere([x()]));
+    expect(r.pass).toBe(true);
+    expect(r.message).toContain('b: number');
+  });
+
+  test('the incomplete-hook warn names the types, with and without has', () => {
+    for (const sel of [typed, { event: 'X', types: { b: 'number' } }]) {
+      const e = x();
+      const r = evaluatePushRule(rule('must', sel), everywhere([e], { hookIncomplete: true }));
+      expect(r).toMatchObject({ pass: false, severity: 'warn', evidence: [e.id] });
+      expect(r.message).toContain('b: number');
+      expect(r.message).toContain('could not all be read');
+    }
+  });
+});
