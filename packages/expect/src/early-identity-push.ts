@@ -12,11 +12,27 @@ type Leaves = Map<string, Set<OwnValueKind>>;
 const MAX_DEPTH = 8;
 const MAX_LISTED = 5;
 
+const MIN_BARE_LOCAL = 6;
+const AT_MARKERS = ['@', '_at_', '%40', '(at)'];
+
+const holdsLocalPart = (key: string, identity: Identity): boolean => {
+  const [local = '', domain = ''] = identity.email.toLowerCase().split('@');
+  if (local === '') return false;
+  const k = key.toLowerCase();
+  if (local.length >= MIN_BARE_LOCAL && k.includes(local)) return true;
+  const label = domain.split('.')[0] ?? '';
+  const next = [...AT_MARKERS, ...(label === '' ? [] : [`_${label}`, `-${label}`, `.${label}`, label])];
+  for (let at = k.indexOf(local); at !== -1; at = k.indexOf(local, at + 1)) {
+    const rest = k.slice(at + local.length);
+    if (next.some((m) => rest.startsWith(m))) return true;
+  }
+  return false;
+};
+
 // A key can itself hold a value, so only a plain name is shown.
 const safeKey = (key: string, identity: Identity) => {
   if (guardFieldName(key) !== key || isValueSegment(key)) return OTHER_NAME;
-  const local = identity.email.split('@')[0]?.toLowerCase() ?? '';
-  return (local.length >= 3 && key.toLowerCase().includes(local)) || ownValueKinds(key, identity).size > 0 ? OTHER_NAME : key;
+  return holdsLocalPart(key, identity) || ownValueKinds(key, identity).size > 0 ? OTHER_NAME : key;
 };
 
 /** Collects the key path and kinds of every leaf that holds one of the identity's own values. Never keeps a value. */
