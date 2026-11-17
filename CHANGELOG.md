@@ -2,6 +2,8 @@
 
 ## 0.7.0-rc.2
 
+Tests and cleanup: the diff test for many joins counts reads at two sizes and no longer depends on the clock. No change in output. Issues: #1526.
+
 - `earlyIdentityPush` masks a key in its message only when the key holds the email or its local part (next to an at-marker or the domain, or a local part of 6 characters or more), so `user.email` shows with `user@example.test` (#1517).
 
 ## 0.7.0-rc.1
