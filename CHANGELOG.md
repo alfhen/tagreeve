@@ -1,26 +1,62 @@
 # Changelog
 
-## 0.7.0
+## 0.7.0-rc.1
 
-Not released yet. The newest release is 0.6.2, below.
+Release candidate. Install it with `npm i -g tagreeve@next`.
 
-The fixture site has a plain GTM demo shop under `/plain/`, with no Shopify page. The docs mark `sandboxPageUrl`, `platformHost` and `options.platformHosts` as Shopify-specific.
+0.7.0-rc.1 adds two built-in checks and a rule kind for `dataLayer` pushes, fixes `diff` and the Consent Mode setup check, and adds a plain GTM demo shop to the fixture site. It has no new command. The record stays at schema version 5.
 
+### What 0.7.0-rc.1 fixes and adds
+
+- The fixture site has a plain GTM demo shop under `/plain/`, with no Shopify page. The docs mark `sandboxPageUrl`, `platformHost` and `options.platformHosts` as Shopify-specific.
 - `diff` keeps a cross-epoch join of a renamed event. Before, a second search could move it to another epoch or report it as removed and added. The greedy order of same-name moves with no join is a known limit (#1457, #1465).
-
-Test and chore fixes: the request ID in the identity tests holds no digits, the docs test strip takes quoted and spaced placeholders, and the node-forge release-age exception is gone (#1498, #1453, #1275).
-
+- Consent Mode setup check: a `consent default` pushed as a plain object with index keys, for example relayed from a sandboxed frame, now counts as pushed (#1401).
+- Rules on dataLayer pushes: `dataLayer: { event, has, types, kind, frame }` in `must` and `mustNot` checks which pushes a page makes, by event name, key paths and types. It never reads or prints a pushed value, takes `before`, `in`, `after`, `from` and `count`, and warns when the dataLayer hook is incomplete in scope (#936).
+- New built-in check `earlyIdentityPush`: it warns when a `dataLayer` push carries the run's own test email or phone, or a hash of either, before consent. It names the push, key path and kind and never prints the value. It is `warn` by default and can be set to `fail` (#1392, #937).
+- New built-in check `idHandover`: it warns when the GA4 client ID, or the session ID where the client ID matches, differs between two contexts of one measurement ID, such as a checkout in a frame or on another host. It names the measurement ID and both contexts and never prints an ID. It is `warn` by default and can be set to `fail` (#934).
 - Docs: the 0.6.2 notes are corrected, and the card fill ends "at the step deadline" in `docs/cli.md` (#1483, #1490, #1491, #1492, #1493, #1494, #1495, #1496).
 
-- Consent Mode setup check: a `consent default` pushed as a plain object with index keys, for example relayed from a sandboxed frame, now counts as pushed (#1401).
+Tests and cleanup: the request ID in the identity tests holds no digits, the docs test strip takes quoted and spaced placeholders, and the node-forge release-age exception is gone. No change in output. Issues: #1498, #1453, #1275.
 
-- Rules on dataLayer pushes: `dataLayer: { event, has, types, kind, frame }` in `must` and `mustNot` checks which pushes a page makes, by event name, key paths and types. It never reads or prints a pushed value, takes `before`, `in`, `after`, `from` and `count`, and warns when the dataLayer hook is incomplete in scope (#936).
+### Upgrading from 0.6.2
 
-- New built-in check `earlyIdentityPush`: it warns when a `dataLayer` push carries the run's own test email or phone, or a hash of either, before consent. It names the push, key path and kind and never prints the value. It is `warn` by default and can be set to `fail` (#1392, #937).
+- **Two new built-in checks can warn.** `earlyIdentityPush` and `idHandover` warn by default, so a run that passed cleanly in 0.6.2 can now show a warning. Set either to `fail` in `builtins` to make it fail the run. A warning does not change the exit code.
+- **A `consent default` pushed as a plain object now counts for `consentModeSetup`.** A run that warned on it in 0.6.2 can pass.
+- **`dataLayer:` is a new rule kind.** An existing scenario is not affected.
+- **`diff` keeps a cross-epoch join.** A renamed event that 0.6.2 showed as moved or as removed and added can now show as one joined pair.
+- **The record stays at version 5.** A 0.6.2 record reads as before.
 
-- New built-in check `idHandover`: it warns when the GA4 client ID, or the session ID where the client ID matches, differs between two contexts of one measurement ID, such as a checkout in a frame or on another host. It names the measurement ID and both contexts and never prints an ID. It is `warn` by default and can be set to `fail` (#934).
+### Known in 0.7.0-rc.1
 
-<!-- R17 -->
+Issues still open that you can meet:
+
+- `network: stub` and `server` mode can still let a hit reach a real vendor account, for an unknown destination in `stub` and for a hosted `serverHosts` host in `server`.
+- Records keep the full flag detail, including query values. Do not share a record from a page that sends an identifier in a query.
+- `--server-container` needs Docker. The container downloads its configuration from Google at every start, so a run needs the network for three Google paths, and Google sees the container's request with your `gtm_auth`.
+- The local container is Google's image. Stape-only features are missing, and with the live config it serves the published version. To test an unpublished server workspace, use a config from its preview environment.
+- On a multi-page run a server container call rarely links `exact` by client ID, because later calls see several hits with the same client ID. `serverContainer.notExact` counts these calls.
+- Sends from `pagehide` or `visibilitychange` are answered in the page, also to your `serverHosts`, so the container never gets them.
+- The Meta Conversions API, Pinterest and Criteo template tags are not yet proven to reach the recording proxy.
+- The `payment` step is not confirmed on a real Shopify checkout. The test-mode marker on the page, the expiry format and the card frame paths are inferred. If one does not match, the step fails closed and the error names the frame path and the inputs' attributes. It checks the card host before each short fill try, which narrows the window in which typing could go to another host but cannot close it.
+- The payment hang fix (#1339) and the server-mode link fixes (#1029, #1223) are covered by tests. They were not tried on a real store.
+- The Shopify platform-host list holds only hosts that a Shopify docs page names. Other Shopify hosts stay `unknownDestination`.
+- Playwright's request interception sometimes misses a redirect hop. The `possibleRedirectHop` flag marks a likely miss in `stub` and `server` mode. `live` mode has no such flag.
+- With `--net-log`, requests seen only in the net log are labelled by timing, and an early `srcdoc` iframe request can still read `unload`.
+- `--viewport` takes `<W>x<H>` only. A `mobile` preset is not built.
+- `identity.country` has local formats for US, SE, GB and DE. Other countries keep US-shaped data and the run warns.
+- Page code that sabotages itself on purpose can still hide the untrapped list of the `dataLayer` count check (#1442).
+- `diff` moves events of the same name with no join in a greedy order, so with several of them the pairing can differ from the one you expect.
+- A consent update pushed as a plain object does not move the consent epoch. Only the Consent Mode setup check reads it, so a later hit can still be labelled with the earlier epoch.
+- The reporter's own entry is in `tags[]` once for each event. The timeout status and the version string of a published container are field checks.
+- A report sent while the page navigates can be lost, so `notFired` can list a tag that fired.
+- Any page script can call the binding or change what the tally reads, so a tag report and the count check are what the page said, not proof.
+- The server tag reporter is not built.
+- The `dataLayer` hook after real `gtm.js` re-wraps, and `gtm.uniqueEventId` on real pushes, are field checks (#922). Arguments-like pushes from the pixel sandbox are read as `gtag` commands in shapes only.
+- The count check compares only the document each frame holds when the run closes. A page that replaced `push` on an earlier page of the run only is not flagged, and a page that edits its `dataLayer` in place can be flagged.
+- `consentModeSetup` reads the `gcd` letters, whose format is documented only by the community.
+- Hits and pushes are not joined per frame (#931, #932).
+- A blocking control with no `aria-label`, `name` or `id` has no name in a `wait` timeout message.
+- Other `review-minor` issues are open. They are test gaps, wording, build edge cases and a vendor name table.
 
 ## 0.6.2
 

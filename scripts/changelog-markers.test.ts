@@ -124,6 +124,26 @@ describe('CHANGELOG.md', () => {
     expect(markerProblems(text, pkg.version)).toEqual([]);
   });
 
+  describe('released section 0.7.0-rc.1', () => {
+    const section = (() => {
+      const start = text.indexOf('## 0.7.0-rc.1\n');
+      const next = text.indexOf('\n## ', start + 1);
+      return start === -1 ? '' : text.slice(start, next === -1 ? undefined : next);
+    })();
+
+    it('exists with the install line, the upgrade section and its Known heading', () => {
+      expect(section).not.toBe('');
+      expect(section).toContain('Install it with `npm i -g tagreeve@next`.');
+      expect(section).toContain('### Upgrading from 0.6.2\n');
+      expect(section).toContain('### Known in 0.7.0-rc.1\n');
+    });
+
+    it('has no marker and no "Not released yet" line', () => {
+      expect(section).not.toMatch(/^<!-- [A-Z]\d{2} -->$/m);
+      expect(section).not.toContain('Not released yet');
+    });
+  });
+
   describe('released section 0.6.2', () => {
     const section = (() => {
       const start = text.indexOf('## 0.6.2\n');
