@@ -161,6 +161,10 @@ describe('plain GTM journey, reject', () => {
     const { dataLayerEvents, hits } = result.records!;
     const ga4 = ga4Hits(hits);
     expect(ga4.length).toBeGreaterThanOrEqual(1);
+    const purchase = ga4.find((h) => h.event === 'purchase');
+    expect(purchase, 'GA4 purchase hit').toBeDefined();
+    expect(purchase!.consent.analytics).toBe('denied');
+    expect(conversions(hits).length).toBeGreaterThanOrEqual(1);
     for (const h of ga4) {
       expect(h.consent.raw.gcs, h.id).toBeTruthy();
       expect(h.consent.analytics, h.id).toBe('denied');
