@@ -2,7 +2,9 @@ import { expect, test } from 'vitest';
 import { run } from './cli-helpers.ts';
 
 test("a hit from a frame's next document does not cover a push from its earlier document", async () => {
-  const { records } = await run('unload-gap-frame-nav');
+  const { code, stderr, records } = await run('unload-gap-frame-nav');
+  expect(code, stderr).toBe(1);
+  expect(records).toBeDefined();
   const push = records!.dataLayerEvents.find((e) => e.event === 'add_to_cart');
   expect(push).toBeDefined();
   const other = records!.hits.find((h) => h.vendor === 'ga4' && h.event === 'other_frame_ga');
@@ -19,7 +21,9 @@ test("a hit from a frame's next document does not cover a push from its earlier 
 }, 90_000);
 
 test('a push from the main frame right before a navigation is not an unload gap', async () => {
-  const { records } = await run('unload-gap-main-nav');
+  const { code, stderr, records } = await run('unload-gap-main-nav');
+  expect(code, stderr).toBe(1);
+  expect(records).toBeDefined();
   const push = records!.dataLayerEvents.find((e) => e.event === 'add_to_cart');
   expect(push).toBeDefined();
   expect(push!.frame?.main).toBe(true);
