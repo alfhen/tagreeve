@@ -77,7 +77,7 @@ Tagreeve never automates a log-in on a site on the internet. A payment there is 
 
 ## Platform-specific checks
 
-Most checks work on any site. A few are specific to one platform. `sandboxPageUrl`, the flag `platformHost` and the option `platformHosts` are Shopify-specific: they look for the sandboxed iframe that Shopify custom pixels run in, and for Shopify's own hosts. On a site with no Shopify they find nothing and never fail a run. The docs mark each of them as Shopify-specific.
+Most checks work on any site. A few are specific to one platform. `sandboxPageUrl`, the flag `platformHost` and the option `platformHosts` are Shopify-specific: they look for the sandboxed iframe that Shopify custom pixels run in, and for Shopify's own hosts. On a site with no Shopify, `platformHost` and `platformHosts` find nothing and never fail a run. `sandboxPageUrl` matches the page path `/web-pixels@…/sandbox/` or `/wpm@…/sandbox/` on any host, so it can fail a run on any site. The docs mark each of them as Shopify-specific.
 
 ## Go deeper
 
