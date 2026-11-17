@@ -258,8 +258,11 @@ describe('message wording', () => {
   });
 
   test('a types-only pass names the types', () => {
-    const r = evaluatePushRule(rule('must', { event: 'X', types: { b: 'number' } }), everywhere([x()]));
+    const e = x();
+    const r = evaluatePushRule(rule('must', { event: 'X', types: { b: 'number' } }), everywhere([e]));
     expect(r.pass).toBe(true);
+    expect(r.evidence).toEqual([e.id]);
+    expect(r.severity).toBeUndefined();
     expect(r.message).toContain('b: number');
   });
 
