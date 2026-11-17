@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0-rc.2
+
+- `earlyIdentityPush` masks a key in its message only when the key holds the email or its local part (next to an at-marker or the domain, or a local part of 6 characters or more), so `user.email` shows with `user@example.test` (#1517).
+
 ## 0.7.0-rc.1
 
 Release candidate. Install it with `npm i -g tagreeve@next`.
