@@ -633,7 +633,7 @@ options:
 
 ### earlyIdentityPush
 
-The `earlyIdentityPush` check warns when a `dataLayer` push carries the run's own test email or phone, a hash of either, or one of the `extra` values of the identity, while consent is not given. A push counts when it falls in an `undecided`, `denied` or `withdrawn` epoch, or in a `mixed` epoch where `ad_user_data` or `analytics_storage` is denied. The grace window of the run applies as it does for hits, so a push just before an accept is not early. A hash is read as a hash of the email or of the phone, in hex, base64 or base64url.
+The `earlyIdentityPush` check warns when a `dataLayer` push carries the run's own test email or phone, a hash of either, or an extra email or phone of the identity, or its hash, while consent is not given. A push counts when it falls in an `undecided`, `denied` or `withdrawn` epoch, or in a `mixed` epoch where `ad_user_data` or `analytics_storage` is denied. The grace window of the run applies as it does for hits, so a push just before an accept is not early. A hash is read as a hash of the email or of the phone, in hex, base64 or base64url.
 
 The result names each push by its `dle_` ID, the key path and the kind: `email`, `phone`, `email hash` or `phone hash`. It never prints a value. The push records hold the values, as they hold every push. A foreign value is not this check's business: it stays a `possibleRealDataPush` flag. With no identity in the options or in the run record, the check passes and says it could not check.
 
