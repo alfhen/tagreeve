@@ -127,10 +127,10 @@ test('the hero copies the setup prompt and the npm command', async () => {
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(PROMPT);
 
   const npmButton = page.locator('button[data-copy-text]');
-  expect(await npmButton.textContent()).toBe('$ npm i -g tagreeve');
+  expect(await npmButton.textContent()).toBe('$ npm i -g tagreeve@next');
   await npmButton.click();
   await expect.poll(() => npmButton.textContent()).toBe('✓ copied');
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('npm i -g tagreeve');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('npm i -g tagreeve@next');
   await context.close();
 });
 

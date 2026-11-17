@@ -1,12 +1,12 @@
 # Changelog
 
-## 0.7.0
+## 0.7.0-rc.1
 
-`npm i -g tagreeve` installs this release.
+Release candidate. Install it with `npm i -g tagreeve@next`.
 
-0.7.0 adds two built-in checks and a rule kind for `dataLayer` pushes, fixes `diff` and the Consent Mode setup check, and adds a plain GTM demo shop to the fixture site. It has no new command. The record stays at schema version 5.
+0.7.0-rc.1 adds two built-in checks and a rule kind for `dataLayer` pushes, fixes `diff` and the Consent Mode setup check, and adds a plain GTM demo shop to the fixture site. It has no new command. The record stays at schema version 5.
 
-### What 0.7.0 fixes and adds
+### What 0.7.0-rc.1 fixes and adds
 
 - The fixture site has a plain GTM demo shop under `/plain/`, with no Shopify page. The docs mark `sandboxPageUrl`, `platformHost` and `options.platformHosts` as Shopify-specific.
 - `diff` keeps a cross-epoch join of a renamed event. Before, a second search could move it to another epoch or report it as removed and added. The greedy order of same-name moves with no join is a known limit (#1457, #1465).
@@ -26,7 +26,7 @@ Tests and cleanup: the request ID in the identity tests holds no digits, the doc
 - **`diff` keeps a cross-epoch join.** A renamed event that 0.6.2 showed as moved or as removed and added can now show as one joined pair.
 - **The record stays at version 5.** A 0.6.2 record reads as before.
 
-### Known in 0.7.0
+### Known in 0.7.0-rc.1
 
 Issues still open that you can meet:
 
