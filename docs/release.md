@@ -9,7 +9,7 @@ Releases are git tags. Each tag points at a commit that carries a built `dist/`.
 
 5. Wait for the `release-tag` workflow on the tag. It checks the tag against `package.json`, packs the tarball, installs it, runs `tagreeve --version` and a fixture scenario, and runs `npm publish --dry-run`. It holds no npm token. It never publishes and never creates a GitHub release.
 6. Publish by hand from the tag commit, with your own one-time password. For a release candidate (`-rc.N`) run `npm publish --tag next`. For a final release run `npm publish`, which moves `latest`.
-7. Check the result with `npm view tagreeve dist-tags`. Install with `npm i -g tagreeve@next` (release candidate) or `npm i -g tagreeve` (final).
+7. Check the result with `node scripts/check-npm-dist-tag.ts <version>`. It reads `npm view tagreeve dist-tags --json` and exits non-zero unless npm serves the version under its dist-tag. Install with `npm i -g tagreeve@next` (release candidate) or `npm i -g tagreeve` (final).
 
 There is no provenance yet. `npm publish --provenance` needs a publish from CI, and publishing stays manual.
 
