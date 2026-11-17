@@ -983,24 +983,31 @@ describe('renamed pairs in diffPushes', () => {
       expect(withTwo).toBeGreaterThan(0);
     });
 
-    test('a large input with many joins stays fast', () => {
-      const a: PushGroup[] = [];
-      const b: PushGroup[] = [];
-      const events: Record<string, string> = {};
-      for (let i = 0; i < 1000; i++) {
-        const k = i % 4;
-        const t = k === 3 ? 2 : k + 1;
-        a.push(g(L[k]!, `r${i}`), g(L[k]!, `s${i}`));
-        b.push(g(L[t]!, `p${i}`), g(L[t]!, `s${i}`));
-        events[`r${i}`] = `p${i}`;
-      }
-      const big = parseEventMap(JSON.stringify({ events }), 'big.json');
-      const start = performance.now();
-      const d = diffPushes(a, b, { epochOrder: L, eventMap: big });
-      expect(performance.now() - start).toBeLessThan(4000);
-      expect(d.moved.filter((m) => m.kind === 'epoch')).toHaveLength(2000);
-      expect(d.eventsRemoved).toEqual([]);
-      expect(d.eventsAdded).toEqual([]);
+    test('a large input with many joins grows no faster than quadratic in reads', () => {
+      const run = (size: number) => {
+        let reads = 0;
+        const counted = (x: PushGroup): PushGroup => new Proxy(x, { get: (t, k, r) => (reads++, Reflect.get(t, k, r)) });
+        const a: PushGroup[] = [];
+        const b: PushGroup[] = [];
+        const events: Record<string, string> = {};
+        for (let i = 0; i < size; i++) {
+          const k = i % 4;
+          const t = k === 3 ? 2 : k + 1;
+          a.push(counted(g(L[k]!, `r${i}`)), counted(g(L[k]!, `s${i}`)));
+          b.push(counted(g(L[t]!, `p${i}`)), counted(g(L[t]!, `s${i}`)));
+          events[`r${i}`] = `p${i}`;
+        }
+        const big = parseEventMap(JSON.stringify({ events }), 'big.json');
+        reads = 0;
+        const d = diffPushes(a, b, { epochOrder: L, eventMap: big });
+        expect(d.moved.filter((m) => m.kind === 'epoch')).toHaveLength(2 * size);
+        expect(d.eventsRemoved).toEqual([]);
+        expect(d.eventsAdded).toEqual([]);
+        return reads;
+      };
+      const small = run(250);
+      expect(small).toBeGreaterThan(0);
+      expect(run(500)).toBeLessThanOrEqual(6 * small);
     });
   });
 
