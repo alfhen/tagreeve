@@ -1,6 +1,4 @@
 import { spawnSync } from 'node:child_process';
-import { realpathSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
 const release = /^\d+\.\d+\.\d+$/;
 const candidate = /^\d+\.\d+\.\d+-rc\.\d+$/;
@@ -47,7 +45,4 @@ function main(version: string | undefined): number {
   }
 }
 
-const entry = process.argv[1];
-if (entry && realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url))) {
-  process.exit(main(process.argv[2]));
-}
+if (import.meta.main) process.exit(main(process.argv[2]));
