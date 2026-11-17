@@ -1,7 +1,11 @@
 (function () {
   var GA4 = 'G-PWTEST0001';
   var ADS = '000000001';
-  var CID = '3333333333.4444444444';
+  var SID = '1730000000';
+  var query = new URLSearchParams(location.search);
+  // The page that links to the offsite checkout keeps its own client ID.
+  var rotated = query.get('cid') === 'rotate' && query.get('checkout') !== 'offsite';
+  var CID = rotated ? '5555555555.6666666666' : '3333333333.4444444444';
 
   window.dataLayer = window.dataLayer || [];
 
@@ -17,7 +21,7 @@
   }
 
   function sendGa4(name, params) {
-    var url = 'https://www.google-analytics.com/g/collect?v=2&tid=' + GA4 + '&cid=' + CID + '&en=' + encodeURIComponent(name) + '&dl=' + encodeURIComponent(location.href);
+    var url = 'https://www.google-analytics.com/g/collect?v=2&tid=' + GA4 + '&cid=' + CID + '&sid=' + SID + '&en=' + encodeURIComponent(name) + '&dl=' + encodeURIComponent(location.href);
     var ecommerce = (params && params.ecommerce) || {};
     if (ecommerce.transaction_id) url += '&ep.transaction_id=' + encodeURIComponent(ecommerce.transaction_id);
     if (ecommerce.value !== undefined) url += '&epn.value=' + encodeURIComponent(ecommerce.value);
@@ -47,7 +51,22 @@
   window.dataLayer.push({ 'gtm.start': Date.now(), event: 'gtm.js' });
   window.gtag('event', 'page_view', { page_location: location.href });
 
-  var early = new URLSearchParams(location.search).get('identity') === 'early';
+  document.addEventListener('DOMContentLoaded', function () {
+    var link = document.getElementById('to-checkout');
+    if (link && query.get('checkout') === 'offsite') {
+      link.href = location.protocol + '//127.0.0.1:' + location.port + '/plain/checkout' + (query.get('cid') === 'rotate' ? '?cid=rotate' : '');
+    }
+    var form = document.getElementById('identity-form');
+    if (form && rotated) {
+      var hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = 'cid';
+      hidden.value = 'rotate';
+      form.appendChild(hidden);
+    }
+  });
+
+  var early = query.get('identity') === 'early';
   var identified = false;
   function pushIdentity() {
     var field = document.getElementById('email');

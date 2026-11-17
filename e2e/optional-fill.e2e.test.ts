@@ -1,9 +1,11 @@
 import { expect, test } from 'vitest';
 import { run, runText, SANDBOX } from './cli-helpers.ts';
 
+const HANDOVER = 'builtin: idHandover';
+
 test('an optional fill skips a field that is not on the page and says so', async () => {
   const r = await run('optional-fill');
-  expect(r.failed.filter((f) => f !== SANDBOX), r.stderr).toEqual([]);
+  expect(r.failed.filter((f) => f !== SANDBOX && f !== HANDOVER), r.stderr).toEqual([]);
   const step = r.records!.steps.find((s) => s.skippedFields);
   expect(step?.skippedFields).toEqual(['#phone']);
   expect(JSON.parse(r.stdout).skippedFields).toEqual([{ step: step!.label, selector: '#phone' }]);

@@ -32,6 +32,7 @@ import {
 import { GA4_BODY_ONLY_IGNORE, type MultipartBody, bodyEntries, guardFieldName, multipartPartName, splitMultipart, META_BODY_ONLY_IGNORE, META_CAPI_BODY_ONLY_IGNORE, META_CAPI_PARAM_NAMES, metaCapiBaseParam, SGTM_BODY_ONLY_IGNORE, isSandboxPageUrl, maskValuePath, matchesIgnoreList, identifierClass, identifierSignal, type IdentifierClass } from '@tagreeve/decoders';
 import { consentModeSetup, GOOGLE_VENDORS } from './consent-mode-setup.ts';
 import { earlyIdentityPush } from './early-identity-push.ts';
+import { idHandover } from './id-handover.ts';
 import { hostMatches } from './hosts.ts';
 import { evaluatePushRule, fieldGlob } from './push-rules.ts';
 import { evaluateTagRule, expectedTagsOf, type ExpectedTags } from './tags.ts';
@@ -1110,7 +1111,7 @@ function countByHost(flags: readonly Flag[], ctx: Context): string {
 }
 
 /** Built-in checks whose default is not `fail`. */
-const DEFAULT_SEVERITY: Partial<Record<BuiltinName, Severity>> = { earlyIdentifiers: 'warn', consentModeSetup: 'warn', earlyIdentityPush: 'warn' };
+const DEFAULT_SEVERITY: Partial<Record<BuiltinName, Severity>> = { earlyIdentifiers: 'warn', consentModeSetup: 'warn', earlyIdentityPush: 'warn', idHandover: 'warn' };
 
 function builtInChecks(
   records: readonly Input[],
@@ -1180,6 +1181,9 @@ function builtInChecks(
     ctx.identity,
   );
   add('earlyIdentityPush', early.pass, early.evidence, early.message);
+
+  const handover = idHandover(ctx.hits.filter((h) => !ctx.serverHitIds.has(h.id)), ctx.requests);
+  add('idHandover', handover.pass, handover.evidence, handover.message);
 
   const real = flags.filter((f) => f.kind === 'possibleRealData');
   // Flags from the recorder come from the raw records. Scanning again only adds requests the recorder did not flag.

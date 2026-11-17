@@ -12,18 +12,21 @@ Flags
 Expectations
   FAIL mustNot: {"vendor":["meta","google-ads"],"before":"consent"}
        Expected no matching hits before consent, found 5 matching hits (5 before narrowing).
-       evidence: hit_01M7JGP2JC04R7MA77Y4KDRWWB, hit_01M7JGP2JC04R7MA77Y4KDRWWD, hit_01M7JGP2JDB7AW8ES8Q2Y0DNXA, hit_01M7JGP2JDB7AW8ES8Q2Y0DNXC, hit_01M7JGP2JDB7AW8ES8Q2Y0DNXD
+       evidence: hit_01M7K167WC5NF23C7KYVJ42E1M, hit_01M7K167WC5NF23C7KYVJ42E1P, hit_01M7K167WD1Y3F49D9BF0AZQY8, hit_01M7K167WD1Y3F49D9BF0AZQYA, hit_01M7K167WD1Y3F49D9BF0AZQYB
   PASS must: {"vendor":"ga4","event":"page_view","count":">=2"}
-       evidence: hit_01M7JGP2JA9MF7GT5810PGZAZ4, hit_01M7JGP2JB4NQFMJW55DS9RHXG, hit_01M7JGP2JC04R7MA77Y4KDRWWC, hit_01M7JGP2JC04R7MA77Y4KDRWWE, hit_01M7JGP2JC04R7MA77Y4KDRWWG and 1 more
+       evidence: hit_01M7K167WA0FQV63DA4PE47K0E, hit_01M7K167WB9WWNX9HTS39XCC3R, hit_01M7K167WC5NF23C7KYVJ42E1N, hit_01M7K167WC5NF23C7KYVJ42E1Q, hit_01M7K167WD1Y3F49D9BF0AZQY7 and 1 more
   PASS builtin: unknownDestination
-       evidence: flg_01M7JGP2JEC24WFS8GPBZ39S6D, flg_01M7JGP2JF7Y08N6FPDX6YRPRS
+       evidence: flg_01M7K167WE6RS2P6817BJ1R8WV, flg_01M7K167WFCDWH6CEHT4GQ4Z4P
   WARN builtin: sandboxPageUrl
        Expected no hit to carry a sandbox URL as its page, found 2: staging.northwind.example/web-pixels@0.0.0-fixture/sandbox/modern/.
-       evidence: hit_01M7JGP2JB4NQFMJW55DS9RHXG, hit_01M7JGP2JC04R7MA77Y4KDRWWG
+       evidence: hit_01M7K167WB9WWNX9HTS39XCC3R, hit_01M7K167WD1Y3F49D9BF0AZQY7
   PASS builtin: deniedIdentifiers
   PASS builtin: earlyIdentifiers
   PASS builtin: consentModeSetup
   PASS builtin: earlyIdentityPush
+  WARN builtin: idHandover
+       Expected the GA4 client and session ID to carry over between contexts, found 1 difference: G-PWTEST0001: client ID differs between main frame on staging.northwind.example and sub frame on staging.northwind.example.
+       evidence: hit_01M7K167WA0FQV63DA4PE47K0E, hit_01M7K167WC5NF23C7KYVJ42E1Q, hit_01M7K167WB9WWNX9HTS39XCC3R, hit_01M7K167WD1Y3F49D9BF0AZQY7
   PASS builtin: possibleRealData
-Result: fail (1 of 9) with 1 warning
-Record: tagreeve/runs/2026-01-15/run_01M7JGNWKZBSGTB94VZ5RKM9G2.jsonl
+Result: fail (1 of 10) with 2 warnings
+Record: tagreeve/runs/2026-01-15/run_01M7K160WZ075J2D2X2E4PQK90.jsonl

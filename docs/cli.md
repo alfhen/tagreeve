@@ -75,7 +75,7 @@ First-party hosts: the registrable domain of `--site` is first party, so `--site
 | `unloadGapIgnore` | List of dataLayer event names or `*` globs, for example `['consent_*']`, that the `unloadGap` warning never reports. The warning covers frame pushes shortly before a navigation and before the run ends. Use it for custom events that are not meant to produce a hit. |
 | `serverHosts` | List of hosts or `*.domain` wildcards for `--network server`. Collection requests to them pass through, and every other one is still stubbed. A host other than `localhost`, `127.0.0.1` or `::1` prints a warning on stderr. A wildcard on a public suffix (`*.com`), a vendor host (Google, Meta, Pinterest) and a tracker-list host are scenario errors. `server` mode without `serverHosts` exits 2. A `pagehide` or `visibilitychange` send to a server host is answered in the page, so the cookies it would set are not seen. A passing cookie rule in `server` mode can miss them. |
 | `allowUnknownDestination` | `true` allows every unknown destination. A list of hosts or wildcards allows only those, and every other unknown destination still fails. |
-| `builtins` | Severity per built-in check: `fail` (the default) or `warn`. The names are `unknownDestination`, `sandboxPageUrl` (Shopify-specific), `possibleRealData`, `deniedIdentifiers`, `earlyIdentifiers`, `consentModeSetup` and `earlyIdentityPush`. `earlyIdentifiers`, `consentModeSetup` and `earlyIdentityPush` are `warn` by default and every other check is `fail`. Any other name or severity is a scenario error. See [Exit codes](#exit-codes). |
+| `builtins` | Severity per built-in check: `fail` (the default) or `warn`. The names are `unknownDestination`, `sandboxPageUrl` (Shopify-specific), `possibleRealData`, `deniedIdentifiers`, `earlyIdentifiers`, `consentModeSetup`, `earlyIdentityPush` and `idHandover`. `earlyIdentifiers`, `consentModeSetup`, `earlyIdentityPush` and `idHandover` are `warn` by default and every other check is `fail`. Any other name or severity is a scenario error. See [Exit codes](#exit-codes). |
 | `dataLayerNames` | List of up to 8 global names, for example `[myLayer]`, that the recorder hooks besides `dataLayer`. Use it when the container loads with a custom `l=` name. Each name is a plain identifier of up to 64 characters (letters, digits, `_`, `$`), and not `location`, `Shopify`, `__proto__`, `constructor` or `prototype`. A push to a named layer is recorded with `layer` set to its name. A global is hooked only when it is absent or a configurable array. Without the option, a Google loader with an `l=` name that is not hooked gives one `dataLayerNotHooked` flag that names the option. The flag lists each missed name once, at most five, and says how many more there are. A name that is not a plain identifier, or that looks like a value, reads `(other)`. |
 | `identifierFields` | List of field names or `*` globs, for example `['visitor_key', 'x_*']`, that `deniedIdentifiers` and `earlyIdentifiers` treat as analytics identifiers, matched against the field names of each hit. |
 
@@ -642,5 +642,18 @@ It reads the stored records, so `evaluate` on an older run runs it too. The defa
 ```yaml
 options:
   builtins: { earlyIdentityPush: fail }
+```
+
+### idHandover
+
+The `idHandover` check warns when the GA4 client ID (`cid`) does not carry over between contexts. Hits are grouped by measurement ID (`tid`). A context is the frame kind, main frame or sub frame, plus the host of the page. A checkout in a frame, or on another host, is a second context. When two contexts of one measurement ID share no client ID, the result warns and names the measurement ID and both contexts.
+
+The session ID (`sid`) is compared only where the client ID matches. When it differs, the result warns with the label `session ID differs`. A hit is left out when its analytics consent is denied (`gcs=G100` or `G110`, or a denied analytics letter in `gcd`), because a cookieless ping gets its own client ID. A hit with no consent signal is counted. Server container hits and hits without a client ID are left out. A run with one context passes.
+
+The result never prints an ID, a hash, a length or a prefix. Its evidence holds hit IDs only. The default severity is `warn`. To make the check fail a run, set it to `fail`:
+
+```yaml
+options:
+  builtins: { idHandover: fail }
 ```
 
