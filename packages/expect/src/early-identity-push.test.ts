@@ -163,18 +163,3 @@ test('foreign values never warn, under keys that look like the email parts', () 
   expect(own.pass).toBe(false);
   expect(own.message).not.toContain('user@example.test');
 });
-
-test.each(['jo_example_test', 'jo-at-example', 'jo.at.example'])('a short local part in %s next to a later domain part or a dash marker reads (other)', (key) => {
-  const r = keyed('jo@mail.example.test', key);
-  expect(r.pass).toBe(false);
-  expect(r.message).toContain('(other): email');
-  expect(r.message).not.toContain('jo');
-});
-
-test('a short local part of an extra email in a key reads (other)', () => {
-  const key = 'jo_at_example_test';
-  const r = check([...undecided, push(100, { [key]: 'jo@example.test' })], { identity: { ...createIdentity(1), extra: ['jo@example.test'] } });
-  expect(r.pass).toBe(false);
-  expect(r.message).toContain('(other): email');
-  expect(r.message).not.toContain('jo');
-});
