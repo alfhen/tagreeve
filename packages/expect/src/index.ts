@@ -8,3 +8,4 @@ export * from './project-config.ts';
 export * from './push-shape.ts';
 export * from './tags.ts';
 export { parseEventMap, type EventMap } from './event-map.ts';
+export * from './push-rules.ts';

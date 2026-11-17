@@ -279,6 +279,30 @@ expect:
 - Names are shown through the value guard: an email or phone in a tag name reads `(other)`. So does a name with a hex or digest token, also when `.`, `_`, `+`, a bracket or a quote joins it to a word (`thanks_<32 hex>`). A plain name such as `GA4 page_view` is shown as it is.
 - "Did not fire" does not fail a run. `notFired` in `tags` lists the expected tags with no entry in a web report. Use a `must` rule to fail on one tag. A full tag list holds tags that a given scenario never triggers, and a report lost at a navigation looks the same as a tag that did not fire.
 
+### Rules on dataLayer pushes
+
+`dataLayer` checks the pushes a page makes to its data layer. A match is one recorded push, and the evidence is its `dle_` record ID. The rule reads key paths and types only, so no pushed value is in a message or in evidence.
+
+```yaml
+expect:
+  must:
+    - { dataLayer: { event: purchase, has: [ecommerce.transaction_id], types: { ecommerce.value: number } } }
+  mustNot:
+    - { dataLayer: { event: purchase }, before: consent }
+    - { dataLayer: { event: purchase, has: [ecommerce.coupon] }, after: checkout }
+```
+
+- `dataLayer` holds `event` (required) and, optionally, `has`, `types`, `kind` and `frame`. `event` is the name the `--json` push shapes show, with no Shopify-to-GA4 mapping. A command shows as `consent update` or `gtag config`. A name that reads `(other)` in the shapes exits 2.
+- `has` lists key paths, as the `--json` push shapes print them: `ecommerce.items[*].item_id`. The globs of `body.has` work: `*` matches any characters and a leading `**.` matches a name at any depth. A path that names an object or array, such as `ecommerce` or `ecommerce.items`, matches a push that holds it, and `types` reads `object` or `array` there. A numbered index such as `items[3]` exits 2 with a hint to write `[*]`.
+- `must` with `has` passes when at least the counted pushes (`count`, default `>=1`) of that event in scope hold every listed path. `mustNot` with `has` passes when no push of that event in scope holds any listed path. `mustNot` with no `has` passes when no push of that event is in scope.
+- `types` maps a path to one of `string`, `number`, `boolean`, `null`, `object` or `array`, and any other type exits 2. It holds when every matching push has exactly that type at the path. A push with no such path does not hold it. `types` is only valid under `must`.
+- `kind` is `gtag` (a `gtag()` call) or `object` (any other push). `frame` is `main`, `embedded` or `unknown`. Without them, any kind and frame match.
+- `before`, `in`, `after`, `from` and `count` stay at rule level and select the same windows as for cookie rules, by the time of the push. `count` is only valid under `must`.
+- A `dataLayer` rule cannot be combined with `vendor`, a hit filter or a `body.*` key. It exits 2 and names the key.
+- When the `dataLayer` hook is incomplete in the rule's scope (`dataLayerIncomplete` or `dataLayerNotHooked`), a `mustNot`, or a `must` with `types` or an upper or exact `count` (`<=`, `<`, `=`), that would pass shows as `WARN` with a message that the pushes could not all be read, and the exit code stays 0. A `must` that only asks for a push stays a plain pass. A failing rule stays a fail. A `dataLayerNotHooked` loader counts for its whole document, up to the next navigation (a `visit` step or a main-frame document request).
+- A `dataLayer` rule never gets the `serverSendProbableLink` or `serverSendUnlinked` note: it reads pushes, not hits.
+- To write a rule, copy the event, kind, frame and paths from `dataLayer.steps[].events[]` in a run's `--json` output.
+
 ### GTM override
 
 `--gtm-override <file>` takes JSON with the values of a GTM preview. Tagreeve never calls the GTM API, so you supply them.

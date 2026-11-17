@@ -530,3 +530,75 @@ describe('tag rules', () => {
     expect(() => parse('{ tag: { id: "1" }, count: 2 }', 'mustNot')).toThrow(/only valid under must/);
   });
 });
+
+describe('dataLayer rules', () => {
+  const base = 'dataLayer: { event: purchase, has: [ecommerce.transaction_id], types: { ecommerce.value: number } }';
+
+  function parse(rule: string, kind: 'must' | 'mustNot' = 'must') {
+    return parseScenario(`start: /\nsteps:\n  - visit: /\n    label: go\nexpect:\n  ${kind}:\n    - ${rule}`);
+  }
+
+  // The invariant: a dataLayer rule parses exactly when its selector is plain and nothing but count, before, in, after and from sits beside it.
+  test('the base rule parses alone and with each rule-level key it takes', () => {
+    for (const extra of ['', ', count: ">=1"', ', before: consent', ', in: epoch(granted)', ', after: go', ', from: go']) {
+      const rule = parse(`{ ${base}${extra} }`).expect.must[0]!;
+      expect(rule.dataLayer).toEqual({ event: 'purchase', has: ['ecommerce.transaction_id'], types: { 'ecommerce.value': 'number' } });
+    }
+  });
+
+  test('kind and frame are read, and mustNot takes has without types', () => {
+    expect(parse('{ dataLayer: { event: purchase, kind: gtag, frame: embedded } }').expect.must[0]!.dataLayer).toMatchObject({ kind: 'gtag', frame: 'embedded' });
+    expect(parse('{ dataLayer: { event: purchase, has: ["**.item_id"] }, before: consent }', 'mustNot').expect.mustNot[0]!.dataLayer?.has).toEqual(['**.item_id']);
+    expect(parse('{ dataLayer: { event: "consent update" } }').expect.must[0]!.dataLayer?.event).toBe('consent update');
+  });
+
+  test('paths with [*] parse as the --json shapes print them', () => {
+    const rule = parse('{ dataLayer: { event: purchase, has: ["ecommerce.items[*].item_id", "ecommerce.items[*].price"], types: { "ecommerce.items[*].price": number } } }').expect.must[0]!;
+    expect(rule.dataLayer?.has).toEqual(['ecommerce.items[*].item_id', 'ecommerce.items[*].price']);
+  });
+
+  test('paths with a * glob parse in has and types', () => {
+    const rule = parse('{ dataLayer: { event: purchase, has: ["ecommerce.*", "ecommerce.items[*].item_*", "**.item_*"], types: { "ecommerce.items[*].pri*": number } } }').expect.must[0]!;
+    expect(rule.dataLayer?.has).toEqual(['ecommerce.*', 'ecommerce.items[*].item_*', '**.item_*']);
+    expect(rule.dataLayer?.types).toEqual({ 'ecommerce.items[*].pri*': 'number' });
+  });
+
+  const bad: [string, string, RegExp[]][] = [
+    ['a numbered index', `dataLayer: { event: purchase, has: ["ecommerce.items[3].item_id"] }`, [/dataLayer\.has/, /\[\*\]/]],
+    ['a numbered index in types', `dataLayer: { event: purchase, types: { "ecommerce.items[0].price": number } }`, [/dataLayer\.types/, /\[\*\]/]],
+    ['a type outside the six', `dataLayer: { event: purchase, types: { ecommerce.value: int } }`, [/dataLayer\.types/]],
+    ['an unknown sub-key', `dataLayer: { event: purchase, colour: red }`, [/colour/]],
+    ['no event', `dataLayer: { has: [a] }`, [/dataLayer: needs event/]],
+    ['(other) as the event', `dataLayer: { event: "(other)" }`, [/dataLayer\.event/]],
+    ['a kind that does not exist', `dataLayer: { event: purchase, kind: array }`, [/dataLayer\.kind/]],
+    ['a frame that does not exist', `dataLayer: { event: purchase, frame: top }`, [/dataLayer\.frame/]],
+    ['an empty has', `dataLayer: { event: purchase, has: [] }`, [/dataLayer\.has/]],
+    ['vendor', `${base}, vendor: ga4`, [/vendor/]],
+    ['a rule-level event', `${base}, event: purchase`, [/event/]],
+    ['a consent filter', `${base}, consent.analytics: granted`, [/consent\.analytics/]],
+    ['body.has', `${base}, body.has: [x]`, [/body\.has/]],
+    ['a cookie', `${base}, cookie: _ga`, [/cookie/]],
+  ];
+  test.each(bad)('%s is a scenario error that names the key', (_name, rule, patterns) => {
+    const message = errorOf(`start: /\nexpect:\n  must:\n    - { ${rule} }`);
+    for (const pattern of patterns) expect(message).toMatch(pattern);
+  });
+
+  test('types is only valid under must', () => {
+    expect(() => parse(`{ ${base} }`, 'mustNot')).toThrow(/dataLayer\.types: is only valid under must/);
+  });
+
+  test('a value in the file is never in the message', () => {
+    const email = 'fake.person@example.test';
+    const text = `start: /\nexpect:\n  must:\n    - { dataLayer: { event: "${email}" } }`;
+    expect(text).toContain(email);
+    const message = errorOf(text);
+    expect(message).toContain('dataLayer.event');
+    expect(message).not.toContain(email);
+    for (const field of [`has: ["${email}"]`, `types: { "${email}": number }`]) {
+      const other = `start: /\nexpect:\n  must:\n    - { dataLayer: { event: purchase, ${field} } }`;
+      expect(other).toContain(email);
+      expect(errorOf(other)).not.toContain(email);
+    }
+  });
+});

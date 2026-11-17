@@ -14,7 +14,7 @@ Test and chore fixes: the request ID in the identity tests holds no digits, the 
 
 - Consent Mode setup check: a `consent default` pushed as a plain object with index keys, for example relayed from a sandboxed frame, now counts as pushed (#1401).
 
-<!-- D11 -->
+- Rules on dataLayer pushes: `dataLayer: { event, has, types, kind, frame }` in `must` and `mustNot` checks which pushes a page makes, by event name, key paths and types. It never reads or prints a pushed value, takes `before`, `in`, `after`, `from` and `count`, and warns when the dataLayer hook is incomplete in scope (#936).
 
 - New built-in check `earlyIdentityPush`: it warns when a `dataLayer` push carries the run's own test email or phone, or a hash of either, before consent. It names the push, key path and kind and never prints the value. It is `warn` by default and can be set to `fail` (#1392, #937).
 

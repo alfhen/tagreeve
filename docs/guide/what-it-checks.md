@@ -25,6 +25,8 @@ A scenario is a short YAML file. It lists what the visitor does and what you exp
 
 Tagreeve reads each tracking request and turns it into a hit. A hit has the vendor, the event and the consent values the request carries. An event is the action the site reports, such as `page_view`. Consent values are the consent signals that a Google hit carries in its own parameters. Tagreeve decodes hits for GA4 (Google Analytics 4), Google Ads, Meta, Pinterest and `sgtm`. An `sgtm` hit goes to a server-side Google Tag Manager container, for example one hosted by Stape. It also recognises a short list of other trackers.
 
+A page also pushes events to its `dataLayer`. A `dataLayer` rule checks those pushes by event name, key paths and types, never by value. `must` with `has` needs a push that holds every listed path, for example `{ dataLayer: { event: purchase, has: [ecommerce.transaction_id] } }`. `mustNot` fails when a push of that event in scope holds a listed path, or, with no `has`, when there is any such push. It takes `before`, `in`, `after` and `from` like a cookie rule. See [Rules on dataLayer pushes](../cli.md#rules-on-datalayer-pushes).
+
 ## Consent states
 
 The visitor's consent changes over time. Tagreeve calls each period an epoch. A period starts when the consent state changes.
