@@ -13,20 +13,25 @@ const MAX_DEPTH = 8;
 const MAX_LISTED = 5;
 
 const MIN_BARE_LOCAL = 6;
-const AT_MARKERS = ['@', '_at_', '%40', '(at)'];
+const AT_MARKERS = ['@', '_at_', '-at-', '.at.', '%40', '(at)'];
 
-const holdsLocalPart = (key: string, identity: Identity): boolean => {
-  const [local = '', domain = ''] = identity.email.toLowerCase().split('@');
+const holdsLocalPartOf = (k: string, email: string): boolean => {
+  const [local = '', domain = ''] = email.toLowerCase().split('@');
   if (local === '') return false;
-  const k = key.toLowerCase();
   if (local.length >= MIN_BARE_LOCAL && k.includes(local)) return true;
-  const label = domain.split('.')[0] ?? '';
-  const next = [...AT_MARKERS, ...(label === '' ? [] : [`_${label}`, `-${label}`, `.${label}`, label])];
+  const labels = domain.split('.').filter((l) => l !== '');
+  const suffixes = labels.map((_, i) => labels.slice(i).join('.'));
+  const next = [...AT_MARKERS, ...[...labels, ...suffixes].flatMap((l) => [`_${l}`, `-${l}`, `.${l}`, l])];
   for (let at = k.indexOf(local); at !== -1; at = k.indexOf(local, at + 1)) {
     const rest = k.slice(at + local.length);
     if (next.some((m) => rest.startsWith(m))) return true;
   }
   return false;
+};
+
+const holdsLocalPart = (key: string, identity: Identity): boolean => {
+  const k = key.toLowerCase();
+  return [identity.email, ...(identity.extra ?? []).filter((v) => v.includes('@'))].some((email) => holdsLocalPartOf(k, email));
 };
 
 // A key can itself hold a value, so only a plain name is shown.
