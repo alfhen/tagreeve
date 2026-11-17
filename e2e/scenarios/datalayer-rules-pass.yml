@@ -1,0 +1,10 @@
+start: /datalayer-rules?complete=1
+steps:
+  - wait: 1s
+  - consent: accept
+    label: answer
+  - wait: 1s
+expect:
+  must:
+    - dataLayer: { event: purchase, has: [ecommerce.transaction_id] }
+options: { seed: 1, allowUnknownDestination: true }

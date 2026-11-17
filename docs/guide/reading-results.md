@@ -30,8 +30,11 @@ Expectations
   PASS builtin: earlyIdentifiers
   PASS builtin: consentModeSetup
   PASS builtin: earlyIdentityPush
+  WARN builtin: idHandover
+       Expected the GA4 client and session ID to carry over between contexts, found 1 difference: G-PWTEST0001: client ID differs between main frame on localhost and sub frame on localhost.
+       evidence: hit_01M66G9M2S992B5DF1MZ15ZQ05, hit_01M66G9M2S992B5DF1MZ15ZQ06
   PASS builtin: possibleRealData
-Result: fail (3 of 8)
+Result: fail (3 of 9) with 1 warning
 Record: tagreeve/runs/2026-11-03/run_01M66G9DA0714WFS5QHQM5A0NX.jsonl
 ```
 
@@ -91,12 +94,13 @@ An expectation is a rule from your scenario. `must` needs at least one matching 
 Built-in checks run on every run. You do not write them:
 
 - `unknownDestination` fails if a request went to a host that is not your site and that Tagreeve does not know. The scenario can allow a host with `options.allowUnknownDestination`.
-  A request to a known Shopify platform host, including the hosts of Shop Pay, is not an unknown destination. Such a request is Shopify-specific and gets the flag `platformHost`, which is listed in the summary and never fails a run. With `options.platformHosts: false`, those requests are flagged `unknownDestination` again, and that fails the run by default.
+  A request to a known Shopify platform host, including the hosts of Shop Pay, is not an unknown destination. Such a request is Shopify-specific and gets the flag `platformHost`, which is listed in the summary and never fails a run. With `options.platformHosts: false`, those requests are flagged `unknownDestination` again, and that fails the run by default. The exemption covers browser requests only. A call from a server container to a platform host is still flagged `unknownDestination`, and that fails the run by default.
 - `sandboxPageUrl` (Shopify-specific) fails if a vendor received the address of a sandboxed iframe as the page address. The vendor then reports the wrong page. Shopify custom pixels run in such an iframe.
 - `deniedIdentifiers` fails if a hit carries an identifier, such as a user ID or a hashed email, while the matching consent signal is denied. See [deniedIdentifiers](../cli.md#deniedidentifiers). It reads the fields of hits, not the `Cookie` header of a request.
 - `earlyIdentifiers` warns if a hit sent before the first consent answer carries an identifier and its consent signal is unknown. It reads hit fields only, so an identifier that goes out only in a `Cookie` header is left to the cookie rules. It does not change the exit code unless you set it to `fail`. See [earlyIdentifiers](../cli.md#earlyidentifiers).
 - `consentModeSetup` warns if a Google hit shows a Consent Mode signal that was never set, for example a default without `ad_user_data` and `ad_personalization`. It reads the `gcd` value of the hit. See [consentModeSetup](../cli.md#consentmodesetup).
 - `earlyIdentityPush` warns if a `dataLayer` push carries the fake identity's own email or phone, or a hash of either, while consent is not given. The result names the push and the key path, never the value. See [earlyIdentityPush](../cli.md#earlyidentitypush).
+- `idHandover` warns if the GA4 client ID, or the session ID where the client ID matches, differs between two contexts, such as a checkout on another host or in a frame. The result names the measurement ID and both contexts, never an ID. See [idHandover](../cli.md#idhandover).
 - `possibleRealData` fails if the record holds an email address, a phone number or a hash that does not belong to the fake identity. A hash is a fixed code made from a value, such as an email address.
 - `possibleRealDataPush` is a flag, not a check. A `dataLayer` push that holds an email, a phone number or a hash that is not from the fake identity gets it. It is a warning and never fails a run: the `possibleRealData` check does not count it and the exit code does not change.
 

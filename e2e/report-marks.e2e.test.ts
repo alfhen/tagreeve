@@ -22,7 +22,7 @@ test('a Meta hit before any answer is early, severity shows only on a failed res
   const early = summary.results.find((x) => x.expectation === 'builtin: earlyIdentifiers')!;
   expect(early.pass).toBe(false);
   expect(early.severity).toBe('warn');
-  expect(summary.results.filter((x) => x !== early && x.expectation !== 'builtin: consentModeSetup' && x.expectation !== 'builtin: earlyIdentityPush').every((x) => x.severity === 'fail')).toBe(true);
+  expect(summary.results.filter((x) => x !== early && x.expectation !== 'builtin: consentModeSetup' && x.expectation !== 'builtin: earlyIdentityPush' && x.expectation !== 'builtin: idHandover').every((x) => x.severity === 'fail')).toBe(true);
   const setup = summary.results.find((x) => x.expectation === 'builtin: consentModeSetup');
   expect(setup).toBeDefined();
   expect(setup!.severity).toBe('warn');

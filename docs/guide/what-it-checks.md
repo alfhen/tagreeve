@@ -25,6 +25,8 @@ A scenario is a short YAML file. It lists what the visitor does and what you exp
 
 Tagreeve reads each tracking request and turns it into a hit. A hit has the vendor, the event and the consent values the request carries. An event is the action the site reports, such as `page_view`. Consent values are the consent signals that a Google hit carries in its own parameters. Tagreeve decodes hits for GA4 (Google Analytics 4), Google Ads, Meta, Pinterest and `sgtm`. An `sgtm` hit goes to a server-side Google Tag Manager container, for example one hosted by Stape. It also recognises a short list of other trackers.
 
+A page also pushes events to its `dataLayer`. A `dataLayer` rule checks those pushes by event name, key paths and types, never by value. `must` with `has` needs a push that holds every listed path, for example `{ dataLayer: { event: purchase, has: [ecommerce.transaction_id] } }`. `mustNot` fails when a push of that event in scope holds a listed path, or, with no `has`, when there is any such push. It takes `before`, `in`, `after` and `from` like a cookie rule. See [Rules on dataLayer pushes](../cli.md#rules-on-datalayer-pushes).
+
 ## Consent states
 
 The visitor's consent changes over time. Tagreeve calls each period an epoch. A period starts when the consent state changes.
@@ -43,6 +45,8 @@ You write expectations per state. For example: "Meta must send nothing while the
 [Reading a run's results](./reading-results.md) shows how epochs appear in the output.
 
 Google tags also send the Consent Mode signals they were set up with. Tagreeve warns when a Google hit shows a signal that was never set, for example a setup that misses `ad_user_data` and `ad_personalization`.
+
+Tracking also needs the same visitor ID in every part of the site. Google Analytics keeps a client ID and a session ID. A checkout on another host or in a frame can start with new ones, and the visit then looks like two visitors. Tagreeve warns when the IDs do not carry over. The warning names the measurement ID and the two places, and never prints an ID. See [idHandover](../cli.md#idhandover).
 
 ## Stub mode
 
@@ -73,7 +77,7 @@ Tagreeve never automates a log-in on a site on the internet. A payment there is 
 
 ## Platform-specific checks
 
-Most checks work on any site. A few are specific to one platform. `sandboxPageUrl`, the flag `platformHost` and the option `platformHosts` are Shopify-specific: they look for the sandboxed iframe that Shopify custom pixels run in, and for Shopify's own hosts. On a site with no Shopify they find nothing and never fail a run. The docs mark each of them as Shopify-specific.
+Most checks work on any site. A few are specific to one platform. `sandboxPageUrl`, the flag `platformHost` and the option `platformHosts` are Shopify-specific: they look for the sandboxed iframe that Shopify custom pixels run in, and for Shopify's own hosts. On a site with no Shopify, `platformHost` and `platformHosts` find nothing and never fail a run. `sandboxPageUrl` matches the page path `/web-pixels@…/sandbox/` or `/wpm@…/sandbox/` on any host, so it can fail a run on any site. The docs mark each of them as Shopify-specific.
 
 ## Go deeper
 

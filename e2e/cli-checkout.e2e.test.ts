@@ -1,9 +1,11 @@
 import { expect, test } from 'vitest';
 import { ga4, run, SANDBOX } from './cli-helpers.ts';
 
+const HANDOVER = 'builtin: idHandover';
+
 test('checkout after accept: purchase carries user_id with consent granted', async () => {
   const r = await run('checkout');
-  expect(r.failed).toEqual([SANDBOX]);
+  expect(r.failed).toEqual([SANDBOX, HANDOVER]);
   const purchase = ga4(r.records!.hits, 'purchase');
   expect(purchase.length).toBeGreaterThan(0);
   expect(purchase.every((h) => h.consent.analytics === 'granted' && h.ids.user_id)).toBe(true);
@@ -25,14 +27,14 @@ test('checkout after reject: the user_id mustNot rule fails and the run exits 1'
 
 test('checkout pattern: Meta Purchase carries the hashed email and hashesMatch passes', async () => {
   const r = await run('checkout-pattern');
-  expect(r.failed).toEqual([SANDBOX]);
+  expect(r.failed).toEqual([SANDBOX, HANDOVER]);
   const purchase = r.records!.hits.filter((h) => h.vendor === 'meta' && h.event === 'Purchase');
   expect(purchase.some((h) => h.params.hashedEmail)).toBe(true);
 }, 120_000);
 
 test('checkout sgtm pattern: hashesMatch passes on the server-container hit, and a literal city is not real data', async () => {
   const r = await run('checkout-sgtm');
-  expect(r.failed).toEqual([SANDBOX]);
+  expect(r.failed).toEqual([SANDBOX, HANDOVER]);
   const purchase = r.records!.hits.filter((h) => h.vendor === 'sgtm' && h.event === 'purchase');
   expect(purchase.some((h) => h.params['user_data.email_address'] && h.params['user_data.city'])).toBe(true);
   expect(r.records!.run.identity).toMatchObject({ phone: '+46701740620', extra: expect.arrayContaining(['Berlin']) });
@@ -52,7 +54,7 @@ const dataTagPurchase = (r: Awaited<ReturnType<typeof run>>) => r.records!.hits.
 
 test('sgtm-data-tag-top: an empty phone and hashed postal code and country pass hashesMatch', async () => {
   const r = await run('sgtm-data-tag-top');
-  expect(r.failed).toEqual([SANDBOX]);
+  expect(r.failed).toEqual([SANDBOX, HANDOVER]);
   const hit = dataTagPurchase(r).find((h) => h.params['user_data.email_address']);
   expect(hit).toBeDefined();
   expect(hit!.params['user_data.phone_number'] ?? '').toBe('');
@@ -81,7 +83,7 @@ test.each([
 
 test('sgtm-data-tag-list: the first address object supplies street and city', async () => {
   const r = await run('sgtm-data-tag-list');
-  expect(r.failed).toEqual([SANDBOX]);
+  expect(r.failed).toEqual([SANDBOX, HANDOVER]);
   const hit = dataTagPurchase(r).find((h) => h.params['user_data.email_address']);
   expect(hit).toBeDefined();
   expect(hit!.params['user_data.first_name']).toBeTruthy();

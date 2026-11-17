@@ -75,7 +75,7 @@ First-party hosts: the registrable domain of `--site` is first party, so `--site
 | `unloadGapIgnore` | List of dataLayer event names or `*` globs, for example `['consent_*']`, that the `unloadGap` warning never reports. The warning covers frame pushes shortly before a navigation and before the run ends. Use it for custom events that are not meant to produce a hit. |
 | `serverHosts` | List of hosts or `*.domain` wildcards for `--network server`. Collection requests to them pass through, and every other one is still stubbed. A host other than `localhost`, `127.0.0.1` or `::1` prints a warning on stderr. A wildcard on a public suffix (`*.com`), a vendor host (Google, Meta, Pinterest) and a tracker-list host are scenario errors. `server` mode without `serverHosts` exits 2. A `pagehide` or `visibilitychange` send to a server host is answered in the page, so the cookies it would set are not seen. A passing cookie rule in `server` mode can miss them. |
 | `allowUnknownDestination` | `true` allows every unknown destination. A list of hosts or wildcards allows only those, and every other unknown destination still fails. |
-| `builtins` | Severity per built-in check: `fail` (the default) or `warn`. The names are `unknownDestination`, `sandboxPageUrl` (Shopify-specific), `possibleRealData`, `deniedIdentifiers`, `earlyIdentifiers`, `consentModeSetup` and `earlyIdentityPush`. `earlyIdentifiers`, `consentModeSetup` and `earlyIdentityPush` are `warn` by default and every other check is `fail`. Any other name or severity is a scenario error. See [Exit codes](#exit-codes). |
+| `builtins` | Severity per built-in check: `fail` (the default) or `warn`. The names are `unknownDestination`, `sandboxPageUrl` (Shopify-specific), `possibleRealData`, `deniedIdentifiers`, `earlyIdentifiers`, `consentModeSetup`, `earlyIdentityPush` and `idHandover`. `earlyIdentifiers`, `consentModeSetup`, `earlyIdentityPush` and `idHandover` are `warn` by default and every other check is `fail`. Any other name or severity is a scenario error. See [Exit codes](#exit-codes). |
 | `dataLayerNames` | List of up to 8 global names, for example `[myLayer]`, that the recorder hooks besides `dataLayer`. Use it when the container loads with a custom `l=` name. Each name is a plain identifier of up to 64 characters (letters, digits, `_`, `$`), and not `location`, `Shopify`, `__proto__`, `constructor` or `prototype`. A push to a named layer is recorded with `layer` set to its name. A global is hooked only when it is absent or a configurable array. Without the option, a Google loader with an `l=` name that is not hooked gives one `dataLayerNotHooked` flag that names the option. The flag lists each missed name once, at most five, and says how many more there are. A name that is not a plain identifier, or that looks like a value, reads `(other)`. |
 | `identifierFields` | List of field names or `*` globs, for example `['visitor_key', 'x_*']`, that `deniedIdentifiers` and `earlyIdentifiers` treat as analytics identifiers, matched against the field names of each hit. |
 
@@ -278,6 +278,30 @@ expect:
 - A name pattern needs a name. A tag's name is the one in the report, else the one in the override file's `expectedTags` for that container. If a tag has neither and the verdict depends on it, the rule cannot be evaluated and fails with `note: tagNameUnknown`. The HTML report shows it as CANNOT EVALUATE too.
 - Names are shown through the value guard: an email or phone in a tag name reads `(other)`. So does a name with a hex or digest token, also when `.`, `_`, `+`, a bracket or a quote joins it to a word (`thanks_<32 hex>`). A plain name such as `GA4 page_view` is shown as it is.
 - "Did not fire" does not fail a run. `notFired` in `tags` lists the expected tags with no entry in a web report. Use a `must` rule to fail on one tag. A full tag list holds tags that a given scenario never triggers, and a report lost at a navigation looks the same as a tag that did not fire.
+
+### Rules on dataLayer pushes
+
+`dataLayer` checks the pushes a page makes to its data layer. A match is one recorded push, and the evidence is its `dle_` record ID. The rule reads key paths and types only, so no pushed value is in a message or in evidence.
+
+```yaml
+expect:
+  must:
+    - { dataLayer: { event: purchase, has: [ecommerce.transaction_id], types: { ecommerce.value: number } } }
+  mustNot:
+    - { dataLayer: { event: purchase }, before: consent }
+    - { dataLayer: { event: purchase, has: [ecommerce.coupon] }, after: checkout }
+```
+
+- `dataLayer` holds `event` (required) and, optionally, `has`, `types`, `kind` and `frame`. `event` is the name the `--json` push shapes show, with no Shopify-to-GA4 mapping. A command shows as `consent update` or `gtag config`. A name that reads `(other)` in the shapes exits 2.
+- `has` lists key paths, as the `--json` push shapes print them: `ecommerce.items[*].item_id`. The globs of `body.has` work: `*` matches any characters and a leading `**.` matches a name at any depth. A path that names an object or array, such as `ecommerce` or `ecommerce.items`, matches a push that holds it, and `types` reads `object` or `array` there. A numbered index such as `items[3]` exits 2 with a hint to write `[*]`.
+- `must` with `has` passes when at least the counted pushes (`count`, default `>=1`) of that event in scope hold every listed path. `mustNot` with `has` passes when no push of that event in scope holds any listed path. `mustNot` with no `has` passes when no push of that event is in scope.
+- `types` maps a path to one of `string`, `number`, `boolean`, `null`, `object` or `array`, and any other type exits 2. It holds when every matching push has exactly that type at the path. A push with no such path does not hold it. `types` is only valid under `must`.
+- `kind` is `gtag` (a `gtag()` call) or `object` (any other push). `frame` is `main`, `embedded` or `unknown`. Without them, any kind and frame match.
+- `before`, `in`, `after`, `from` and `count` stay at rule level and select the same windows as for cookie rules, by the time of the push. `count` is only valid under `must`.
+- A `dataLayer` rule cannot be combined with `vendor`, a hit filter or a `body.*` key. It exits 2 and names the key.
+- When the `dataLayer` hook is incomplete in the rule's scope (`dataLayerIncomplete` or `dataLayerNotHooked`), a `mustNot`, or a `must` with `types` or an upper or exact `count` (`<=`, `<`, `=`), that would pass shows as `WARN` with a message that the pushes could not all be read, and the exit code stays 0. A `must` that only asks for a push stays a plain pass. A failing rule stays a fail. A `dataLayerNotHooked` loader counts for its whole document, up to the next navigation (a `visit` step or a main-frame document request).
+- A `dataLayer` rule never gets the `serverSendProbableLink` or `serverSendUnlinked` note: it reads pushes, not hits.
+- To write a rule, copy the event, kind, frame and paths from `dataLayer.steps[].events[]` in a run's `--json` output.
 
 ### GTM override
 
@@ -598,7 +622,7 @@ The `consentModeSetup` check warns when a Google hit (`ga4` or `google-ads`) sho
 
 The result names the Google tag ID and the signals, groups them per tag ID, and links to [Google's Consent Mode page](https://developers.google.com/tag-platform/security/guides/consent). Its evidence is the hit IDs. It prints the four signal letters of the `gcd` per tag ID (for example `gcd letters: rrll`), at most five tag IDs and three letter sets per tag ID, with `and <n> more` after the fifth tag ID. When the check fails, the letter sets that hold an `l` come first. A letter the decoder does not know reads `?`. It never prints the full `gcd` value. A GA4 hit is named by its `tid`, a Google Ads hit as `AW-` and its conversion ID when that is digits only. A hit with no tag ID is grouped by vendor as `GA4 (no tag ID)` or `Google Ads (no tag ID)`. A conversion ID comes from the hit's own parameters and never from a page parameter such as `ep.conversionId`. The check counts the Google hits that carry a `gcd`: when none does, it says so and that the setup could not be read, and when some do not, it says how many. Those hits do not change the result. Server container hits are not judged: their consent signals come from the browser hit they link to.
 
-A `consent default` counts as pushed in the array form and as a plain object with the keys `0`, `1` and `2`, which is what a frame relays when it posts its `arguments` object to the page.
+A `consent default` counts as pushed in the array form and as a plain object with the keys `0`, `1` and `2`, which is what a frame relays: it copies its arguments into such an object and posts that object to the page.
 
 When every signal is set, the hits show a default and no frame pushed a `consent default` to the dataLayer, the check passes and says "default set outside the dataLayer (template API, TCF or other)". That is information, not a warning. The `gcd` letters are documented only by the community, not by Google, so treat the result as a hint to look at the setup. The default severity is `warn`. To make the check fail a run, set it to `fail`:
 
@@ -618,5 +642,18 @@ It reads the stored records, so `evaluate` on an older run runs it too. The defa
 ```yaml
 options:
   builtins: { earlyIdentityPush: fail }
+```
+
+### idHandover
+
+The `idHandover` check warns when the GA4 client ID (`cid`) does not carry over between contexts. Hits are grouped by measurement ID (`tid`). A context is the frame kind, main frame or sub frame, plus the host of the page. A checkout in a frame, or on another host, is a second context. When two contexts of one measurement ID share no client ID, the result warns and names the measurement ID and both contexts.
+
+The session ID (`sid`) is compared only where the client ID matches. When it differs, the result warns with the label `session ID differs`. A hit is left out when its analytics consent is denied (`gcs=G100` or `G110`, or a denied analytics letter in `gcd`), because a cookieless ping gets its own client ID. A hit with no consent signal is counted. Server container hits and hits without a client ID are left out. A run with one context passes.
+
+The result never prints an ID, a hash, a length or a prefix. Its evidence holds hit IDs only. The default severity is `warn`. To make the check fail a run, set it to `fail`:
+
+```yaml
+options:
+  builtins: { idHandover: fail }
 ```
 

@@ -1,9 +1,11 @@
 import { expect, test } from 'vitest';
 import { run, SANDBOX } from './cli-helpers.ts';
 
+const HANDOVER = 'builtin: idHandover';
+
 test('identity.country SE gives a Swedish phone and zip, typed into the form and not flagged when a hit carries them in plain text', async () => {
   const r = await run('identity-country-se');
-  expect(r.failed.filter((f) => f !== SANDBOX), r.stderr).toEqual([]);
+  expect(r.failed.filter((f) => f !== SANDBOX && f !== HANDOVER), r.stderr).toEqual([]);
   const identity = r.records!.run.identity!;
   expect(identity.country).toBe('SE');
   expect(identity.phone).toMatch(/^\+4670174\d{4}$/);

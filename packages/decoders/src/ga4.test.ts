@@ -1,6 +1,6 @@
 import { newId, type Request } from '@tagreeve/core';
 import { expect, test } from 'vitest';
-import { decodeRequest, decoders, gcdLetters, gcdSignals, isCollectionEndpoint, isSandboxPageUrl } from './index.ts';
+import { decodeRequest, decoders, ga4HitIds, gcdLetters, gcdSignals, isCollectionEndpoint, isSandboxPageUrl } from './index.ts';
 
 const PAGE = 'http://localhost:3000/products/fake-tee';
 const SANDBOX = 'http://localhost:3000/web-pixels@0.0.0-fixture/sandbox/modern/';
@@ -262,4 +262,35 @@ test.each([
 
 test('gcdLetters shows ? for an unknown letter', () => {
   expect(gcdLetters('13p3q3r3z5')).toEqual(['p', 'q', 'r', '?']);
+});
+
+const FAKE_CID = '4821907365.1730000001';
+const FAKE_SID = '1730000002';
+
+test('ga4HitIds reads the cid and sid of a hit behind the Stape custom loader, as decode sees it', () => {
+  const inner = `/g/collect?v=2&tid=G-PWTEST0001&cid=${FAKE_CID}&sid=${FAKE_SID}&en=page_view`;
+  const wrapped = req(`http://127.0.0.1:4000/pwstape?pk=${encodeURIComponent(Buffer.from(inner).toString('base64'))}`, { resourceType: 'fetch' });
+  expect(ga4HitIds(wrapped)).toEqual([{ cid: FAKE_CID, sid: FAKE_SID }]);
+  const hits = decodeRequest(wrapped);
+  expect(hits).toHaveLength(1);
+  expect(hits[0]!.vendor).toBe('ga4');
+});
+
+test('ga4HitIds returns one entry per hit in decode order, with undefined for a missing id', () => {
+  const body = [`en=page_view&sid=${FAKE_SID}`, 'en=scroll&cid=9990000001.1730000009&sid=1730000010', 'en=click'].join('\n');
+  const r = req(`https://region1.google-analytics.com/g/collect?${BASE}`, { method: 'POST', postData: body });
+  const ids = ga4HitIds(r);
+  expect(ids).toEqual([
+    { cid: '1111111111.2222222222', sid: FAKE_SID },
+    { cid: '9990000001.1730000009', sid: '1730000010' },
+    { cid: '1111111111.2222222222', sid: undefined },
+  ]);
+  expect(ids).toHaveLength(decodeRequest(r).map((h) => h.event).length);
+  expect(decodeRequest(r).map((h) => h.event)).toEqual(['page_view', 'scroll', 'click']);
+});
+
+test('ga4HitIds returns an empty list for a request that is not GA4 or has an unparsable URL', () => {
+  expect(ga4HitIds(req('https://example.com/other?cid=1'))).toEqual([]);
+  expect(() => ga4HitIds(req('not a url'))).not.toThrow();
+  expect(ga4HitIds(req('not a url'))).toEqual([]);
 });

@@ -57,7 +57,7 @@ test('the verdict names the failed built-in check and the run count, not failed 
 
 test('the verdict names leaking vendors by their plain name', () => {
   expect(html).toContain(
-    '<li><strong>published:</strong> identifiers go out to Google Analytics 4, Meta and server container in the denied state; 1 rule failed; built-in check sandboxPageUrl failed in 2 runs</li>',
+    '<li><strong>published:</strong> identifiers go out to Google Analytics 4, Meta and server container in the denied state; 1 rule failed; built-in check sandboxPageUrl failed in 2 runs; built-in check idHandover warned in 2 runs</li>',
   );
 });
 

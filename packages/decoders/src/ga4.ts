@@ -1,6 +1,7 @@
 import type { ConsentValue, Hit, HitConsent, Request } from '@tagreeve/core';
 import { defaultHitId, type Decoder, type NewHitId } from './decoder.ts';
 import { bodyComplete, queryEntries, withFields } from './fields.ts';
+import { unwrapStapeLoader } from './stape-custom-loader.ts';
 
 function parseUrl(url: string): URL | undefined {
   try {
@@ -113,6 +114,18 @@ function eventParams(p: URLSearchParams): Record<string, string> {
     else if (k.startsWith('epn.')) out[k.slice(4)] = v;
   }
   return out;
+}
+
+export interface Ga4HitIds {
+  cid?: string;
+  sid?: string;
+}
+
+/** The `cid` and `sid` of each hit `decode` returns for `req`, in the same order. Empty when `req` is not GA4, directly or behind the Stape custom loader. */
+export function ga4HitIds(req: Request): Ga4HitIds[] {
+  const real = isGa4Collect(req) ? req : unwrapStapeLoader(req);
+  if (!real || !isGa4Collect(real)) return [];
+  return eventLines(real).map((p) => ({ cid: p.get('cid') || undefined, sid: p.get('sid') || undefined }));
 }
 
 export const ga4: Decoder = {

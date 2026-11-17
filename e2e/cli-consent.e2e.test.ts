@@ -2,10 +2,12 @@ import { expect, test } from 'vitest';
 import { RECORD_SCHEMA_VERSION } from '../packages/core/src/index.ts';
 import { ga4, outDir, run, runCli, SANDBOX, scenario, site } from './cli-helpers.ts';
 
+const HANDOVER = 'builtin: idHandover';
+
 test('undecided: hits per vendor, denied consent, flags, one epoch', async () => {
   const r = await run('undecided');
   expect(r.code).toBe(1);
-  expect(r.failed).toEqual([SANDBOX]);
+  expect(r.failed).toEqual([SANDBOX, HANDOVER]);
   const { hits, consentEpochs, flags, results } = r.records!;
   expect(results.length).toBeGreaterThan(0);
   expect(r.records!.run.recordSchemaVersion).toBe(RECORD_SCHEMA_VERSION);
@@ -25,7 +27,7 @@ test('undecided: hits per vendor, denied consent, flags, one epoch', async () =>
 
 test('accept: granted epoch, add_to_cart granted', async () => {
   const r = await run('accept');
-  expect(r.failed).toEqual([SANDBOX]);
+  expect(r.failed).toEqual([SANDBOX, HANDOVER]);
   const { hits, consentEpochs } = r.records!;
   expect(consentEpochs.map((e) => e.label)).toEqual(['undecided', 'granted']);
   const atc = ga4(hits, 'add_to_cart');
@@ -36,7 +38,7 @@ test('accept: granted epoch, add_to_cart granted', async () => {
 
 test('reject: denied epoch, add_to_cart denied', async () => {
   const r = await run('reject');
-  expect(r.failed).toEqual([SANDBOX]);
+  expect(r.failed).toEqual([SANDBOX, HANDOVER]);
   expect(r.records!.consentEpochs.map((e) => e.label)).toEqual(['undecided', 'denied']);
   const atc = ga4(r.records!.hits, 'add_to_cart');
   expect(atc.length).toBeGreaterThan(0);
@@ -45,7 +47,7 @@ test('reject: denied epoch, add_to_cart denied', async () => {
 
 test('accept then withdraw: three epochs, add_to_cart denied', async () => {
   const r = await run('accept-then-withdraw');
-  expect(r.failed).toEqual([SANDBOX]);
+  expect(r.failed).toEqual([SANDBOX, HANDOVER]);
   expect(r.records!.consentEpochs.map((e) => e.label)).toEqual(['undecided', 'granted', 'withdrawn']);
   expect(r.records!.consentEpochs.at(-1)!.state.analytics).toBe('denied');
   const atc = ga4(r.records!.hits, 'add_to_cart');
@@ -87,7 +89,7 @@ test('banner not shown: a HeadlessChrome user agent exits 2', async () => {
 test('banner not shown: the same scenario with the normal user agent gets past the consent step', async () => {
   const r = await run('banner-not-shown');
   expect(r.code).toBe(1);
-  expect(r.failed).toEqual([SANDBOX]);
+  expect(r.failed).toEqual([SANDBOX, HANDOVER]);
 }, 90_000);
 
 test('a mustNot meta before consent rule fails on the fixture pixel', async () => {
@@ -123,7 +125,8 @@ test('builtins: sandboxPageUrl warn keeps the warning and exits 0, and without i
   const text = await runCli(['run', scenario('undecided-warn'), '--site', site.url, '--out', outDir]);
   expect(text.code).toBe(0);
   expect(text.stdout).toMatch(/WARN builtin: sandboxPageUrl/);
-  expect(text.stdout).toContain('Result: pass with 1 warning');
+  expect(text.stdout).toContain(`WARN ${HANDOVER}`);
+  expect(text.stdout).toContain('Result: pass with 2 warnings');
 
   const strict = await run('undecided');
   expect(strict.code).toBe(1);

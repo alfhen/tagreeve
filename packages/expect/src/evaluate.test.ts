@@ -884,6 +884,216 @@ test('a possibleRealDataPush flag leaves the possibleRealData check passing', ()
   expect(check.pass).toBe(true);
 });
 
+function pushAt(t: number, event = 'purchase'): DataLayerEvent {
+  return {
+    type: 'dataLayerEvent', id: newId('dataLayerEvent'), runId, stepId: null, t, event, gtmUniqueEventId: null,
+    args: ['event', event, { ecommerce: { value: 1 } }], isConsentCommand: false, frame: { main: true, n: 0 },
+  };
+}
+
+function stepAt(label: string, startedAt: number, endedAt: number): Step {
+  return { type: 'step', id: newId('step'), runId, index: 0, label, startedAt, endedAt } as unknown as Step;
+}
+
+function hookFlag(kind: Flag['kind'], recordIds: string[] = []): Flag {
+  return { type: 'flag', id: newId('flag'), runId, kind, recordIds, detail: 'fake' };
+}
+
+const steps = `steps:\n  - { visit: /, label: first }\n  - { visit: /, label: second }\n`;
+const purchaseRule = (extra = '', kind = 'mustNot') => `${steps}expect:\n  ${kind}:\n    - { dataLayer: { event: purchase }${extra} }`;
+
+test('a mustNot dataLayer rule that passes while the hook is incomplete warns, and plainly passes otherwise', () => {
+  const plain = rule(purchaseRule(), [stepAt('first', 0, 1000), stepAt('second', 1000, 2000)]);
+  expect(plain.pass).toBe(true);
+  expect(plain.severity).toBeUndefined();
+
+  const loader = request({ t: 100 });
+  for (const flag of [hookFlag('dataLayerIncomplete'), hookFlag('dataLayerNotHooked', [loader.id])]) {
+    const warned = rule(purchaseRule(), [stepAt('first', 0, 1000), loader, flag]);
+    expect(warned).toMatchObject({ pass: false, severity: 'warn' });
+    expect(warned.message).toContain('could not all be read');
+  }
+
+  const first = { ...stepAt('first', 0, 1000), id: 'stp_first' };
+  const second = { ...stepAt('second', 1000, 2000), id: 'stp_second' };
+  const beforeEnd = request({ t: 500, stepId: first.id as never });
+  const afterEnd = request({ t: 1500, stepId: second.id as never });
+  const scoped = (loader: Request) => rule(purchaseRule(', after: first'), [first, second, loader, hookFlag('dataLayerNotHooked', [loader.id])]);
+  expect(scoped(beforeEnd).severity).toBeUndefined();
+  expect(scoped(beforeEnd).pass).toBe(true);
+  expect(scoped(afterEnd)).toMatchObject({ pass: false, severity: 'warn' });
+});
+
+test('an unhooked layer stays in scope after a later non-visit step, until the next navigation', () => {
+  const waits = `steps:\n  - { visit: /, label: first }\n  - { wait: 1s, label: later }\n  - { visit: /, label: next }\n`;
+  const text = `${waits}expect:\n  mustNot:\n    - { dataLayer: { event: purchase }, after: later }`;
+  const loader = request({ t: 100 });
+  const recs = (over: Step[]) => [...over, loader, hookFlag('dataLayerNotHooked', [loader.id])];
+  const sameDocument = rule(text, recs([stepAt('first', 0, 50), stepAt('later', 1000, 2000), stepAt('next', 3000, 4000)]));
+  expect(sameDocument).toMatchObject({ pass: false, severity: 'warn' });
+  const nextDocument = rule(text, recs([stepAt('first', 0, 50), stepAt('later', 1000, 2000), stepAt('next', 500, 600)]));
+  expect(nextDocument.severity).toBeUndefined();
+});
+
+test('a failing mustNot dataLayer rule stays a fail with the hook incomplete, and a must rule is not changed', () => {
+  const failing = rule(purchaseRule(), [stepAt('first', 0, 1000), pushAt(100), hookFlag('dataLayerIncomplete')]);
+  expect(failing.pass).toBe(false);
+  expect(failing.severity).toBeUndefined();
+  const must = rule(purchaseRule('', 'must'), [stepAt('first', 0, 1000), hookFlag('dataLayerIncomplete')]);
+  expect(must.pass).toBe(false);
+  expect(must.severity).toBeUndefined();
+});
+
+test('a dataLayer rule never gets a server-send note, while a hit rule on the same records does', () => {
+  const via = hit({ vendor: 'meta', t: 1100 });
+  const probable = hit({ vendor: 'meta-capi', t: 1200, via: { hitId: via.hit.id, by: 'eventId', confidence: 'probable' } }, { captured: 'serverContainer' });
+  const unlinked = hit({ vendor: 'meta', t: 1500 }, { captured: 'serverContainer' });
+  const records = [stepAt('first', 900, 1000), epoch(0, 1000, 'undecided'), epoch(1000, null, granted), via, probable, unlinked, pushAt(1200), pushAt(100)];
+  const hitRule = run(`start: /\n${steps}expect:\n  mustNot:\n    - { vendor: meta, before: consent }`, records)[0]!;
+  expect(hitRule).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked' });
+  for (const kind of ['mustNot', 'must'])
+    for (const scope of ['before: consent', 'after: first']) {
+      const r = run(`start: /\n${steps}expect:\n  ${kind}:\n    - { dataLayer: { event: purchase }, ${scope} }`, records)[0]!;
+      expect(r.note, `${kind} ${scope}`).toBeUndefined();
+      expect(r.severity, `${kind} ${scope}`).toBeUndefined();
+    }
+  const early = run(`start: /\n${steps}expect:\n  mustNot:\n    - { dataLayer: { event: purchase }, before: consent }`, records)[0]!;
+  expect(early.pass).toBe(false);
+  expect(early.evidence).toHaveLength(1);
+  expect(run(`start: /\n${steps}expect:\n  mustNot:\n    - { dataLayer: { event: purchase }, after: first }`, records)[0]!.evidence).toHaveLength(1);
+});
+
+const WINDOW_TIMES = [0, 949, 950, 1000, 1001, 1049, 1050, 1051, 1999, 2000, 2001, 2999, 3000, 3001];
+const WINDOW_SCOPES = ['before: consent', 'in: epoch(undecided)', 'in: epoch(granted)', 'after: lbl', 'from: lbl'];
+
+const labelled = 'steps:\n  - { visit: /, label: lbl }\n';
+
+function windowVerdict(scope: string, t: number, body: string): boolean {
+  const req = request({ t, url: 'http://localhost:3000/session/start' });
+  const response = { type: 'response', id: newId('response'), requestId: req.id, status: 204, setCookieNames: ['_c'] };
+  const records = [epoch(0, 1000, 'undecided'), epoch(1000, null, granted), stepAt('lbl', 2000, 3000), pushAt(t), req, response];
+  return run(`start: /\n${labelled}expect:\n  mustNot:\n    - { ${body}, ${scope} }`, records)[0]!.pass;
+}
+
+test.each(WINDOW_SCOPES.flatMap((scope) => WINDOW_TIMES.map((t) => [scope, t] as const)))('%s at t=%i selects a push as it selects a cookie', (scope, t) => {
+  expect(windowVerdict(scope, t, 'dataLayer: { event: purchase }')).toBe(windowVerdict(scope, t, 'cookie: _c'));
+});
+
+test.each(WINDOW_SCOPES)('%s passes at some times and fails at others, so the table above compares real verdicts', (scope) => {
+  const verdicts = new Set(WINDOW_TIMES.map((t) => windowVerdict(scope, t, 'dataLayer: { event: purchase }')));
+  expect(verdicts).toEqual(new Set([true, false]));
+});
+
+const LOADER_URL = 'https://www.googletagmanager.com/gtm.js?id=GTM-PWTEST1&l=myLayer';
+const navigation = (t: number) => request({ t, resourceType: 'document', frame: { main: true, n: 0 } } as Partial<Request>);
+const loaderAt = (t: number) => request({ t, url: LOADER_URL });
+const purchasePush = (t: number): DataLayerEvent => ({
+  type: 'dataLayerEvent', id: newId('dataLayerEvent'), runId, stepId: null, t, event: 'purchase', gtmUniqueEventId: null,
+  args: [{ event: 'purchase', ecommerce: { value: 10 } }], isConsentCommand: false, frame: { main: true, n: 0 },
+});
+const stepRec = (label: string, index: number, startedAt: number, endedAt: number) => ({ ...stepAt(label, startedAt, endedAt), index });
+
+test.each([
+  ['before: consent', 'before: consent'],
+  ['in: epoch(undecided)', 'in: epoch(undecided)'],
+] as const)('a mustNot dataLayer rule %s warns for a loader after the answer on the same document, and passes after a navigation', (_n, scope) => {
+  const text = `steps:\n  - { visit: /, label: first }\n  - { consent: accept, label: accept }\nexpect:\n  mustNot:\n    - { dataLayer: { event: purchase }, ${scope} }`;
+  const loader = loaderAt(2000);
+  const base = [stepRec('first', 1, 0, 500), stepRec('accept', 2, 1000, 1100), epoch(0, 1000, 'undecided'), epoch(1000, null, granted), loader, hookFlag('dataLayerNotHooked', [loader.id])];
+  const warned = rule(text, base);
+  expect(warned).toMatchObject({ pass: false, severity: 'warn' });
+  expect(warned.message).toContain('could not all be read');
+  const separated = rule(text, [...base, navigation(1500)]);
+  expect(separated.pass).toBe(true);
+  expect(separated.severity).toBeUndefined();
+});
+
+test('a mustNot dataLayer rule from: warns for a loader on the scope start document, and passes after a navigation', () => {
+  const text = `steps:\n  - { wait: 1s, label: first }\n  - { wait: 1s, label: later }\nexpect:\n  mustNot:\n    - { dataLayer: { event: purchase }, from: later }`;
+  const loader = loaderAt(500);
+  const base = [stepRec('first', 1, 0, 1000), { ...stepRec('later', 2, 2000, 3000) }, { ...loader, stepId: 'stp_first' }, hookFlag('dataLayerNotHooked', [loader.id])];
+  const warned = rule(text, base);
+  expect(warned).toMatchObject({ pass: false, severity: 'warn' });
+  expect(warned.message).toContain('could not all be read');
+  const separated = rule(text, [...base, navigation(1500)]);
+  expect(separated.pass).toBe(true);
+  expect(separated.severity).toBeUndefined();
+
+  const visitText = (nav: string) => `steps:\n  - { wait: 1s, label: first }\n  - ${nav}\n  - { wait: 1s, label: later }\nexpect:\n  mustNot:\n    - { dataLayer: { event: purchase }, from: later }`;
+  const withNav = [stepRec('first', 1, 0, 1000), stepRec('nav', 2, 1500, 1600), stepRec('later', 3, 2000, 3000), loader, hookFlag('dataLayerNotHooked', [loader.id])];
+  const byVisit = rule(visitText('{ visit: /two, label: nav }'), withNav);
+  expect(byVisit.pass).toBe(true);
+  expect(byVisit.severity).toBeUndefined();
+  expect(rule(visitText('{ wait: 1s, label: nav }'), withNav)).toMatchObject({ pass: false, severity: 'warn' });
+});
+
+test('a mustNot dataLayer rule after: warns for a loader on the same document, and passes after a main-frame document request', () => {
+  const text = `steps:\n  - { wait: 1s, label: first }\n  - { wait: 1s, label: second }\nexpect:\n  mustNot:\n    - { dataLayer: { event: purchase }, after: first }`;
+  const loader = loaderAt(500);
+  const base = [stepRec('first', 1, 100, 1000), stepRec('second', 2, 1000, 2000), loader, hookFlag('dataLayerNotHooked', [loader.id])];
+  expect(rule(text, base)).toMatchObject({ pass: false, severity: 'warn' });
+  const separated = rule(text, [...base, navigation(800)]);
+  expect(separated.pass).toBe(true);
+  expect(separated.severity).toBeUndefined();
+});
+
+const MUST_SCOPES = [
+  ['before: consent', 300, 2000],
+  ['in: epoch(undecided)', 300, 2000],
+  ['after: later', 3500, 500],
+  ['from: later', 2500, 500],
+  ['', 2500, 500],
+] as const;
+const MUST_RULES = [
+  '{ event: purchase, types: { ecommerce.value: number } }',
+  '{ event: purchase }, count: "<=1"',
+  '{ event: purchase }, count: 1',
+];
+
+test.each(MUST_RULES.flatMap((body) => MUST_SCOPES.map(([scope, pushT, loaderT]) => [body, scope, pushT, loaderT] as const)))(
+  'a must dataLayer rule %s %s with an unhooked loader warns, and passes after a navigation',
+  (body, scope, pushT, loaderT) => {
+    const text = `steps:\n  - { wait: 1s, label: first }\n  - { wait: 1s, label: later }\nexpect:\n  must:\n    - { dataLayer: ${body}${scope ? `, ${scope}` : ''} }`;
+    const loader = loaderAt(loaderT);
+    const push = purchasePush(pushT);
+    const base = [stepRec('first', 1, 0, 500), stepRec('later', 2, 2000, 3000), epoch(0, 1000, 'undecided'), epoch(1000, null, granted), push, loader];
+    const plain = rule(text, base);
+    expect(plain.pass).toBe(true);
+    expect(plain.severity).toBeUndefined();
+    expect(plain.evidence).toEqual([push.id]);
+    const warned = rule(text, [...base, hookFlag('dataLayerNotHooked', [loader.id])]);
+    expect(warned).toMatchObject({ pass: false, severity: 'warn', evidence: [push.id] });
+    expect(warned.message).toContain('could not all be read');
+    const separated = rule(text, [...base, hookFlag('dataLayerNotHooked', [loader.id]), navigation(1500)]);
+    if (scope === '') expect(separated).toMatchObject({ pass: false, severity: 'warn' });
+    else {
+      expect(separated.pass).toBe(true);
+      expect(separated.severity).toBeUndefined();
+      expect(separated.evidence).toEqual([push.id]);
+    }
+  },
+);
+
+test('a must dataLayer rule with only has and a lower count bound stays a plain pass while the hook is incomplete', () => {
+  const loader = loaderAt(500);
+  const push = purchasePush(2500);
+  const hooks = [[hookFlag('dataLayerNotHooked', [loader.id])], [hookFlag('dataLayerIncomplete')]];
+  for (const flags of hooks) {
+    const records = [push, loader, ...flags];
+    for (const extra of ['', ', count: ">=1"']) {
+      const r = rule(`expect:\n  must:\n    - { dataLayer: { event: purchase, has: [ecommerce.value] }${extra} }`, records);
+      expect(r.pass, extra).toBe(true);
+      expect(r.severity).toBeUndefined();
+      expect(r.evidence).toEqual([push.id]);
+    }
+    for (const body of ['{ event: purchase, has: [ecommerce.value] }, count: "<=1"', '{ event: purchase, has: [ecommerce.value], types: { ecommerce.value: number } }']) {
+      const r = rule(`expect:\n  must:\n    - { dataLayer: ${body} }`, records);
+      expect(r).toMatchObject({ pass: false, severity: 'warn', evidence: [push.id] });
+      expect(r.message).toContain('could not all be read');
+    }
+  }
+});
+
 test('earlyIdentityPush runs before possibleRealData and passes with a message when there is no identity', () => {
   const epochs = [{ type: 'consentEpoch', id: newId('consentEpoch'), runId, startT: 0, endT: null, source: 'test', label: 'undecided', state: allUnknown } as EvalEpoch];
   const push: DataLayerEvent = { type: 'dataLayerEvent', id: newId('dataLayerEvent'), runId, stepId: null, t: 10, event: 'login', gtmUniqueEventId: null, args: [{ user: { email: identity.email } }], isConsentCommand: false };
