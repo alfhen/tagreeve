@@ -182,6 +182,22 @@ export function firstJsonResult(records: RunRecords, path: string): string {
   return JSON.stringify(first, null, 2) + '\n';
 }
 
+const evidenceIds = (jsonl: string) =>
+  jsonl
+    .split('\n')
+    .filter((l) => l.includes('"type":"result"'))
+    .flatMap((l) => (JSON.parse(l) as { evidence: string[] }).evidence);
+
+/** Rewrites each shortened evidence ID of a reply to the evidence at the same place in the new record, since run and hit IDs change on each recording. */
+export function remapReplyEvidence(reply: string, oldJsonl: string, newJsonl: string): string {
+  const before = evidenceIds(oldJsonl);
+  const after = evidenceIds(newJsonl);
+  return reply.replace(/hit_…([0-9A-Z]+)/g, (token, tail: string) => {
+    const at = before.findIndex((id) => id.endsWith(tail));
+    return at >= 0 && after[at] ? `hit_…${after[at]!.slice(-tail.length)}` : token;
+  });
+}
+
 async function record(): Promise<void> {
   if (!existsSync(join(root, 'dist/cli.js'))) throw new Error('dist/cli.js is missing. Run pnpm build first.');
   const { startFixtureSite } = await import('../fixtures/site/src/index.ts');
@@ -225,6 +241,10 @@ async function record(): Promise<void> {
     for (const [name, text] of written) {
       const leaks = demoLeaks(text);
       if (leaks.length) throw new Error(`${name} holds ${leaks.join(', ')}. Nothing was written.`);
+    }
+    for (const s of demoScenarios) {
+      const oldJsonl = await readFile(join(demoDir, `${s}.jsonl`), 'utf8');
+      written.set(`${s}.reply.md`, remapReplyEvidence(await readFile(join(demoDir, `${s}.reply.md`), 'utf8'), oldJsonl, written.get(`${s}.jsonl`)!));
     }
     for (const [name, text] of written) await writeFile(join(demoDir, name), text);
     console.error(`Wrote ${[...written.keys()].map((n) => relative(root, join(demoDir, n))).join(', ')}`);
