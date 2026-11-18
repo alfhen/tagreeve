@@ -6,7 +6,7 @@ The second release candidate, after the rc.1 field test. Install it with `npm i 
 
 - `earlyIdentityPush` masks a key in its message only when the key holds the email or its local part (next to an at-marker or the domain, or a local part of 6 characters or more), so `user.email` shows with `user@example.test` (#1517).
 - Rules on dataLayer pushes: messages read `found 2 pushes` and `b should be string, found number in 1 push`, and a passing rule names the types it checked (#1536).
-- A `must` or `mustNot` dataLayer rule reads each push in full, so a path past 200 paths or depth 8 no longer gives a plain PASS. The push shapes in `--json`, `diff` and baselines keep their caps (#1521).
+- A `must` or `mustNot` dataLayer rule reads each push in full, so a path past the first 200 paths or past depth 8 no longer gives a wrong result: a `mustNot` no longer passes while the push holds the path, and a `must` with `types` or a count no longer misreads it. The push shapes in `--json`, `diff` and baselines keep their caps (#1521).
 - Docs: `docs/cli.md` no longer says `evaluate` runs `earlyIdentityPush` on an older run (#1537).
 - Release steps: publish by hand after the `release-tag` workflow passes, then run `scripts/check-npm-dist-tag.ts` to check the npm tag (#1535, #1546).
 
