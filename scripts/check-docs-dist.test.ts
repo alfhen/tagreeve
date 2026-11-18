@@ -90,11 +90,12 @@ describe('CLI', () => {
     writeFileSync(join(dir, 'index.html'), html);
     return dir;
   };
+  const bad = makeDist('bad', '<script src="https://cdn.example.com/a.js"></script>');
   const needle = ['import', 'meta', 'main'].join('.');
   const run = (entry: string, dist: string) => spawnSync(process.execPath, [entry, dist], { encoding: 'utf8' });
 
   it('exits 1 and names the external reference', () => {
-    const r = run(script, makeDist('bad', '<script src="https://cdn.example.com/a.js"></script>'));
+    const r = run(script, bad);
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('external reference(s)');
   });
@@ -102,7 +103,7 @@ describe('CLI', () => {
   it('exits 1 when started through a symlink', () => {
     const link = join(root, 'link.ts');
     symlinkSync(script, link);
-    const r = run(link, join(root, 'bad'));
+    const r = run(link, bad);
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('external reference(s)');
   });
@@ -115,7 +116,7 @@ describe('CLI', () => {
     const link = join(dir, 'link.ts');
     symlinkSync(copy, link);
     for (const entry of [copy, link]) {
-      const r = run(entry, join(root, 'bad'));
+      const r = run(entry, bad);
       expect(r.status).toBe(1);
       expect(r.stderr).toContain('external reference(s)');
     }
