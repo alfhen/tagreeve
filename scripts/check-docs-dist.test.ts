@@ -90,6 +90,7 @@ describe('CLI', () => {
     writeFileSync(join(dir, 'index.html'), html);
     return dir;
   };
+  const needle = ['import', 'meta', 'main'].join('.');
   const run = (entry: string, dist: string) => spawnSync(process.execPath, [entry, dist], { encoding: 'utf8' });
 
   it('exits 1 and names the external reference', () => {
@@ -106,6 +107,20 @@ describe('CLI', () => {
     expect(r.stderr).toContain('external reference(s)');
   });
 
+  it('exits 1 on a runtime without the entry flag, by path and through a symlink', () => {
+    const dir = join(root, 'noflag');
+    mkdirSync(dir);
+    const copy = join(dir, 'check-docs-dist.ts');
+    writeFileSync(copy, readFileSync(script, 'utf8').replaceAll(needle, 'undefined'));
+    const link = join(dir, 'link.ts');
+    symlinkSync(copy, link);
+    for (const entry of [copy, link]) {
+      const r = run(entry, join(root, 'bad'));
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('external reference(s)');
+    }
+  });
+
   it('exits 1 on a dead internal link', () => {
     const r = run(script, makeDist('dead', '<a href="/nowhere">x</a>'));
     expect(r.status).toBe(1);
@@ -119,7 +134,6 @@ describe('CLI', () => {
   });
 
   it('no script relies on the runtime entry flag', () => {
-    const needle = ['import', 'meta', 'main'].join('.');
     const users = readdirSync(scriptsDir)
       .filter((f) => f.endsWith('.ts'))
       .filter((f) => readFileSync(join(scriptsDir, f), 'utf8').split('\n').some((l) => !l.trim().startsWith('//') && l.includes(needle)));
