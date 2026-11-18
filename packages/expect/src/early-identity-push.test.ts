@@ -95,3 +95,71 @@ test('a fail override sets the severity', () => {
   expect(r.severity).toBe('fail');
   expect(r.pass).toBe(false);
 });
+
+const withEmail = (email: string) => ({ ...identity, email });
+const keyed = (email: string, key: string, value: unknown = email) => check([...undecided, push(100, { [key]: value })], { identity: withEmail(email) });
+
+test('a key named like the identity email local part shows when it is a plain name', () => {
+  const id = withEmail('user@example.test');
+  const p = push(100, { event: 'login', user: { email: 'user@example.test' } });
+  expect(JSON.stringify(p.args)).toContain('user@example.test');
+  const r = check([...undecided, p], { identity: id });
+  expect(r.pass).toBe(false);
+  expect(r.message).toContain('user.email: email');
+  expect(r.message).not.toContain('(other).email');
+});
+
+test.each([
+  ['info@example.test', 'user_info'],
+  ['data@example.test', 'user_data'],
+])('a plain key holding a short common local part (%s) is shown', (email, key) => {
+  const r = keyed(email, key);
+  expect(r.pass).toBe(false);
+  expect(r.message).toContain(`${key}: email`);
+  expect(r.message).not.toContain('(other)');
+});
+
+test.each(['ab_at_example_test', 'ab_example_test'])('a key with a short local part next to an at-marker or the domain reads (other): %s', (key) => {
+  expect(key).toContain('ab');
+  const r = keyed('ab@example.test', key);
+  expect(r.pass).toBe(false);
+  expect(r.message).toContain('(other): email');
+  for (const leak of [key, 'ab@example.test', 'ab']) expect(r.message).not.toContain(leak);
+});
+
+test.each(['user_at_example_test', 'user_example_test', 'user@example.test', 'user%40example.test', 'user(at)example.test'])('a key that holds user@example.test reads (other): %s', (key) => {
+  expect(key).toContain('user');
+  const r = keyed('user@example.test', key);
+  expect(r.pass).toBe(false);
+  expect(r.message).toContain('(other): email');
+  for (const leak of [key, 'user@example.test', 'user']) expect(r.message).not.toContain(leak);
+});
+
+test('a key equal to the default identity local part reads (other)', () => {
+  const local = identity.email.split('@')[0]!;
+  const r = keyed(identity.email, local);
+  expect(r.pass).toBe(false);
+  expect(r.message).toContain('(other): email');
+  expect(r.message).not.toContain(local);
+  expect(r.message).not.toContain(identity.email);
+});
+
+test('a key that contains a long local part reads (other)', () => {
+  const key = 'x_longlocalpart_y';
+  expect(key).toContain('longlocalpart');
+  const r = keyed('longlocalpart@example.test', key);
+  expect(r.message).toContain('(other): email');
+  expect(r.message).not.toContain('longlocalpart');
+});
+
+test('foreign values never warn, under keys that look like the email parts', () => {
+  const id = withEmail('user@example.test');
+  const page = (value: string) => push(100, { user: value, user_at_example_test: value, nested: { user: { email: value } } });
+  const foreign = check([...undecided, page('fake.person@example.test')], { identity: id });
+  expect(foreign.pass).toBe(true);
+  expect(foreign.evidence).toEqual([]);
+  expect(foreign.message).not.toContain('fake.person@example.test');
+  const own = check([...undecided, page('user@example.test')], { identity: id });
+  expect(own.pass).toBe(false);
+  expect(own.message).not.toContain('user@example.test');
+});

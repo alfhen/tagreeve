@@ -28,6 +28,20 @@ function push(item: unknown, extra: Partial<DataLayerEvent> = {}): DataLayerEven
 const shapes = (...events: DataLayerEvent[]) => pushShapes({ steps: [], dataLayerEvents: events });
 const first = (...events: DataLayerEvent[]) => shapes(...events).steps[0]!.events;
 
+test('pushShapes keeps 200 paths and depth 8 for pushes past the caps', () => {
+  const wide: Record<string, unknown> = { event: 'page' };
+  for (let i = 0; i < 250; i++) wide[`k${i}`] = 1;
+  wide.coupon = 'c';
+  const paths = first(push(wide))[0]!.paths;
+  expect(paths).toHaveLength(200);
+  expect(paths.map((p) => p.path)).not.toContain('coupon');
+
+  let deep: Record<string, unknown> = { coupon: 'c' };
+  for (let i = 9; i >= 0; i--) deep = { [`a${i}`]: deep };
+  const deepPaths = first(push({ event: 'page', ...deep }))[0]!.paths.filter((p) => p.path.startsWith('a0'));
+  expect(deepPaths).toEqual([{ path: 'a0.a1.a2.a3.a4.a5.a6.a7', types: ['object'] }]);
+});
+
 test('an array index reads [*] and paths carry types', () => {
   const [purchase] = first(push({ event: 'purchase', ecommerce: { value: 12, items: [{ item_id: 'a' }, { item_id: 'b' }, { item_id: 'c' }, { item_id: 'd', price: 1 }] } }));
   expect(purchase!.paths).toEqual([
