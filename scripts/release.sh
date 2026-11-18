@@ -15,6 +15,12 @@ if [ $# -ne 1 ]; then
 fi
 version="$1"
 
+# Explicit digit lists: a [0-9] range can match non-ASCII digits in some locales.
+if ! [[ "$version" =~ ^[0123456789]+\.[0123456789]+\.[0123456789]+(-rc\.[0123456789]+)?$ ]]; then
+  echo "refusing: version must be X.Y.Z or X.Y.Z-rc.N, got '$version'" >&2
+  exit 1
+fi
+
 cd "$(dirname "$0")/.."
 
 if [ -n "$(git status --porcelain)" ]; then
