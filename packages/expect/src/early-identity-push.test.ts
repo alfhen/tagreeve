@@ -141,6 +141,13 @@ test('a key with the domain label followed by the next domain label reads (other
   for (const leak of ['userexampletest', 'user@example.test']) expect(r.message).not.toContain(leak);
 });
 
+test.each(['userexamplecooptest', 'user_example_co_op_test'])('a key that holds user@example.co-op.test reads (other): %s', (key) => {
+  const r = keyed('user@example.co-op.test', key);
+  expect(r.pass).toBe(false);
+  expect(r.message).toContain('(other): email');
+  expect(r.message).not.toContain('user');
+});
+
 test.each(['user_at_example_test', 'user_example_test', 'user@example.test', 'user%40example.test', 'user(at)example.test'])('a key that holds user@example.test reads (other): %s', (key) => {
   expect(key).toContain('user');
   const r = keyed('user@example.test', key);

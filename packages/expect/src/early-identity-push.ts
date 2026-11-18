@@ -21,7 +21,7 @@ const holdsLocalPart = (key: string, identity: Identity): boolean => {
   const k = key.toLowerCase();
   if (local.length >= MIN_BARE_LOCAL && k.includes(local)) return true;
   const [label = '', ...after] = domain.split('.');
-  const nextLabel = after[0] ?? '';
+  const nextLabel = (after[0] ?? '').replace(/[^a-z0-9]/g, '');
   const endsLabel = (rest: string) => rest === '' || !/[a-z0-9]/.test(rest[0] ?? '') || (nextLabel !== '' && rest.startsWith(nextLabel));
   const labelMarkers = label === '' ? [] : [`_${label}`, `-${label}`, `.${label}`, label];
   for (let at = k.indexOf(local); at !== -1; at = k.indexOf(local, at + 1)) {
