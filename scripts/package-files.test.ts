@@ -22,6 +22,7 @@ function packedPaths(): string[] {
     const out = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts', '--offline'], {
       cwd: dir,
       encoding: 'utf8',
+      shell: process.platform === 'win32',
     });
     const [pack] = JSON.parse(out) as Array<{ files: Array<{ path: string }> }>;
     return pack!.files.map((file) => file.path);
