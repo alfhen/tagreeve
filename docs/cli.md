@@ -637,7 +637,7 @@ The `earlyIdentityPush` check warns when a `dataLayer` push carries the run's ow
 
 The result names each push by its `dle_` ID, the key path and the kind: `email`, `phone`, `email hash` or `phone hash`. It never prints a value. The push records hold the values, as they hold every push. A foreign value is not this check's business: it stays a `possibleRealDataPush` flag. With no identity in the options or in the run record, the check passes and says it could not check.
 
-It reads the stored records, so `evaluate` on an older run runs it too. The default severity is `warn`. To make the check fail a run, set it to `fail`:
+The default severity is `warn`. To make the check fail a run, set it to `fail`:
 
 ```yaml
 options:
