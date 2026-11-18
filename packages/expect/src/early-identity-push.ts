@@ -27,7 +27,7 @@ const holdsLocalPart = (key: string, identity: Identity): boolean => {
   if (local.length >= MIN_BARE_LOCAL && new RegExp(looseLocal).test(k)) return true;
   const [label = '', next = ''] = domain.split('.');
   const atMarkers = AT_MARKERS.map((m) => m.replace(/[()]/g, '\\$&')).join('|');
-  const alternatives = [atMarkers];
+  const alternatives = [`${SEP}(?:${atMarkers})`];
   if (loose(label) !== '') {
     const nextLabel = loose(next);
     const endsLabel = `(?=$|[^a-z0-9]${nextLabel === '' ? '' : `|${nextLabel}`})`;

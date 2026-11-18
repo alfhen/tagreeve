@@ -199,6 +199,13 @@ test('foreign values never warn, under keys that look like the email parts', () 
   expect(own.message).not.toContain('user@example.test');
 });
 
+test('a trailing separator in the local part does not block the at-marker', () => {
+  const r = keyed('u_@example.test', 'u__at_example');
+  expect(r.pass).toBe(false);
+  expect(r.message).toContain('(other): email');
+  expect(r.message).not.toContain('u__at_example');
+});
+
 test('dots in the local part do not shorten it for the bare-local check', () => {
   const email = 'j.o.h.n@example.test';
   for (const key of ['j.o.h.n', 'john']) {
