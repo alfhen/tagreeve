@@ -86,8 +86,9 @@ const frameHits = (records: RunRecords, main: boolean, ids: string[]): Request[]
     .map((h) => records.requests.find((q) => q.id === h.requestId)!)
     .filter((q) => q.outcome === 'stubbed' && q.frame?.main === main && ids.every((id) => q.url.includes(id)));
 
-const expectNoIds = (r: CliRun, message: string) => {
-  for (const s of [CID, ROTATED, SID, ROTATED_SID]) {
+const expectNoIds = (r: CliRun, message: string, ids: string[]) => {
+  for (const s of ids) {
+    expect(r.records!.requests.some((q) => q.url.includes(s) || (q.postData ?? '').includes(s)), s).toBe(true);
     for (const n of [s, s.split('.')[0]!]) {
       expect(r.stdout).not.toContain(n);
       expect(r.stderr).not.toContain(n);
@@ -117,7 +118,7 @@ test('a sandboxed frame with a rotated cid warns, names both frames, and keeps e
   expect(result.pass).toBe(false);
   expect(result.severity).toBe('warn');
   for (const part of [TID, 'main frame', 'sub frame']) expect(result.message).toContain(part);
-  expectNoIds(r, result.message);
+  expectNoIds(r, result.message, [CID, ROTATED]);
   expect(r.code).toBe(0);
 }, 150_000);
 
@@ -131,6 +132,6 @@ test('a sandboxed frame with a rotated sid and the same cid warns about the sess
   expect(result.severity).toBe('warn');
   for (const part of [TID, 'main frame', 'sub frame', 'session ID differs']) expect(result.message).toContain(part);
   expect(result.message).not.toContain('client ID differs');
-  expectNoIds(r, result.message);
+  expectNoIds(r, result.message, [CID, SID, ROTATED_SID]);
   expect(r.code).toBe(0);
 }, 150_000);
