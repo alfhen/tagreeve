@@ -264,7 +264,7 @@ What PRs do: the VitePress config, the workflow, the dogfood check, the post-dep
 - Fonts are self-hosted: Geist, Geist Mono and Anton come from npm packages and are bundled with the site. No font comes from a CDN.
 - No `CNAME` file. No domain in `packages/` or `fixtures/`.
 - Exact versions at least two weeks old. Actions pinned to SHAs.
-- The site's dependencies are root `devDependencies`. They never enter the CLI's `dist/` or its tarball (`files` is `dist`, `README.md` and `LICENSE`).
+- The site's dependencies are root `devDependencies`. They never enter the CLI's `dist/` or its tarball (`files` is `dist`, `README.md`, `LICENSE` and `CHANGELOG.md`).
 - `site/dist` and `site/.astro` go in `.gitignore`.
 
 **Writing.** Every page a reader sees follows these rules:
