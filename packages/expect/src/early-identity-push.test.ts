@@ -141,11 +141,25 @@ test('a key with the domain label followed by the next domain label reads (other
   for (const leak of ['userexampletest', 'user@example.test']) expect(r.message).not.toContain(leak);
 });
 
-test.each(['userexamplecooptest', 'user_example_co_op_test'])('a key that holds user@example.co-op.test reads (other): %s', (key) => {
+test.each(['userexamplecooptest', 'user_example_co_op_test', 'userexampleco-optest'])('a key that holds user@example.co-op.test reads (other): %s', (key) => {
   const r = keyed('user@example.co-op.test', key);
   expect(r.pass).toBe(false);
   expect(r.message).toContain('(other): email');
   expect(r.message).not.toContain('user');
+});
+
+test.each([
+  ['user@my-shop.test', 'usermyshoptest'],
+  ['user@my-shop.test', 'user_my_shop_test'],
+  ['user@xn--bcher-kva.test', 'userxnbcherkvatest'],
+  ['first.last@example.test', 'first_last_example_test'],
+  ['first.last@example.test', 'firstlastexampletest'],
+])('a key that holds %s with separators in the address reads (other): %s', (email, key) => {
+  const r = keyed(email, key);
+  expect(r.pass).toBe(false);
+  expect(r.message).toContain('(other): email');
+  expect(r.message).not.toContain('user');
+  expect(r.message).not.toContain('first');
 });
 
 test.each(['user_at_example_test', 'user_example_test', 'user@example.test', 'user%40example.test', 'user(at)example.test'])('a key that holds user@example.test reads (other): %s', (key) => {
