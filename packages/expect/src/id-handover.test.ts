@@ -119,6 +119,41 @@ describe('consent of the compared hits', () => {
 });
 
 describe('no throw and pass when there is nothing to compare', () => {
+  const FOUND_NONE = 'found no difference';
+
+  test('one context passes and says nothing was compared, without an ID', () => {
+    const { message, pass, evidence } = check([ctxA]);
+    expect(pass).toBe(true);
+    expect(evidence).toEqual([]);
+    expect(message).toContain('main frame on localhost');
+    expect(message).toMatch(/only one context/);
+    expect(message).toMatch(/nothing was compared/);
+    expect(message).not.toContain(FOUND_NONE);
+    expect(message).not.toContain(CID_A);
+    expect(message).not.toContain(SID_A);
+  });
+
+  test('a second context with the same cid passes with the found no difference message', () => {
+    const { message, pass } = check([ctxA, ctxB]);
+    expect(pass).toBe(true);
+    expect(message).toBe('Expected the GA4 client and session ID to carry over between contexts, found no difference.');
+  });
+
+  test('no GA4 hit with a cid passes and says no context was seen', () => {
+    const { message, pass } = check([{ ...ctxA, cid: undefined }]);
+    expect(pass).toBe(true);
+    expect(message).toMatch(/no context/);
+    expect(message).not.toContain(FOUND_NONE);
+    expect(idHandover([], new Map()).message).toMatch(/no context/);
+  });
+
+  test('two contexts of different measurement IDs were not compared', () => {
+    const { message, pass } = check([ctxA, { ...ctxB, tid: 'G-PWTEST0002' }]);
+    expect(pass).toBe(true);
+    expect(message).not.toContain(FOUND_NONE);
+    expect(message).toMatch(/nothing was compared/);
+  });
+
   test('a hit without a cid next to one with a cid passes', () => {
     const { hits, requests } = run([{ ...ctxA, cid: undefined }, ctxB]);
     expect(new URL(requests.get(hits[0]!.requestId)!.url).searchParams.has('cid')).toBe(false);
