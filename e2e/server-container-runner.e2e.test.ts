@@ -100,6 +100,9 @@ describe('the stand-in server container through the seam', () => {
     expect(reply.status).toBe(200);
     await until(() => answered.length >= 3);
 
+    const log = container.logTail().join('\n');
+    expect(container.hasExited(), `the stand-in exited. Log tail:\n${log}`).toBe(false);
+    expect(container.logTail().filter((line) => /fail|error/i.test(line)), `the stand-in logged errors. Log tail:\n${log}`).toEqual([]);
     expect(answered.map(where)).toEqual([
       'POST www.google-analytics.com/g/collect',
       'GET www.googleadservices.com/pagead/conversion/000000001/',

@@ -21,9 +21,9 @@ export interface RunCa {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function serial(): string {
-  // The high bit stays clear so the DER integer is positive.
+  // Top byte 0x40..0x7f: non-zero and high bit clear, so the DER integer is minimal and positive.
   const bytes = randomBytes(16);
-  bytes[0] = (bytes[0] ?? 0) & 0x7f;
+  bytes[0] = ((bytes[0] ?? 0) & 0x7f) | 0x40;
   return bytes.toString('hex');
 }
 

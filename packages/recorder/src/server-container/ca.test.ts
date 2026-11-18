@@ -1,8 +1,9 @@
 import { X509Certificate } from 'node:crypto';
+import tls from 'node:tls';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRunCa } from './ca.ts';
 
 let root: string;
@@ -12,6 +13,23 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
+
+vi.mock('node:crypto', async (importOriginal) => {
+  const real = await importOriginal<typeof import('node:crypto')>();
+  return {
+    ...real,
+    randomBytes: (size: number) => {
+      if (size === 16 && forcedSerialHead) {
+        const bytes = Buffer.alloc(16, 0x11);
+        bytes.set(forcedSerialHead);
+        return bytes;
+      }
+      return real.randomBytes(size);
+    },
+  };
+});
+
+let forcedSerialHead: number[] | undefined;
 
 describe('createRunCa', () => {
   it('writes the certificate 0644 in a 0755 directory and removes it on close', () => {
@@ -53,5 +71,19 @@ describe('createRunCa', () => {
     expect(a.certPem).not.toBe(b.certPem);
     a.close();
     b.close();
+  });
+
+  it('loads certificates whose random serial starts with zero bytes', () => {
+    forcedSerialHead = [0x00, 0x00, 0x7f];
+    try {
+      const ca = createRunCa(root);
+      const leaf = ca.leafFor('127.0.0.1');
+      expect(() => new X509Certificate(ca.certPem)).not.toThrow();
+      expect(() => new X509Certificate(leaf.certPem)).not.toThrow();
+      expect(() => tls.createSecureContext({ ca: ca.certPem, cert: leaf.certPem, key: leaf.keyPem })).not.toThrow();
+      ca.close();
+    } finally {
+      forcedSerialHead = undefined;
+    }
   });
 });
