@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,20 +9,15 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 
 // npm 10 runs the prepare script in pack even with --ignore-scripts, so pack a copy without scripts.
 function packedPaths(): string[] {
-  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { files: string[]; scripts?: unknown };
+  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts?: unknown };
   const dir = mkdtempSync(join(tmpdir(), 'package-files-'));
   try {
     const rest = { ...manifest };
     delete rest.scripts;
     writeFileSync(join(dir, 'package.json'), JSON.stringify(rest));
-    const entries = new Set([
-      ...readdirSync(root, { withFileTypes: true })
-        .filter((entry) => entry.isFile() && entry.name !== 'package.json')
-        .map((entry) => entry.name),
-      ...manifest.files,
-    ]);
-    for (const entry of entries) {
-      if (existsSync(join(root, entry))) cpSync(join(root, entry), join(dir, entry), { recursive: true });
+    for (const entry of readdirSync(root)) {
+      if (entry === 'package.json' || entry === 'node_modules' || entry === '.git') continue;
+      cpSync(join(root, entry), join(dir, entry), { recursive: true });
     }
     const out = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts', '--offline'], {
       cwd: dir,
