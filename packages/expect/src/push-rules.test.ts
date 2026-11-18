@@ -224,3 +224,67 @@ describe('a path that names an object or array', () => {
     expect(evaluatePushRule(ok, everywhere([withItems, without])).pass).toBe(false);
   });
 });
+
+describe('a push past the pushShapes caps', () => {
+  const COUPON = 'pw-secret-coupon-value';
+  const wide = (withCoupon: boolean) => {
+    const o: Record<string, unknown> = { event: 'page' };
+    for (let i = 0; i < 250; i++) o[`k${i}`] = 1;
+    if (withCoupon) o.coupon = COUPON;
+    return o;
+  };
+  const deepObject = () => {
+    let o: Record<string, unknown> = { coupon: COUPON };
+    for (let i = 9; i >= 0; i--) o = { [`a${i}`]: o };
+    return { event: 'page', ...o };
+  };
+  const wideCoupon = push([wide(true)]);
+  const deepCoupon = push([deepObject()]);
+  const dl = (selector: Omit<PushSelector, 'event'>): PushSelector => ({ event: 'page', ...selector });
+
+  test('mustNot has fails on a path past 200 paths and names the push', () => {
+    expect(JSON.stringify(wideCoupon.args)).toContain(COUPON);
+    const out = evaluatePushRule(rule('mustNot', dl({ has: ['coupon'] })), everywhere([wideCoupon]));
+    expect(out.pass).toBe(false);
+    expect(out.evidence).toEqual([wideCoupon.id]);
+    expect(out.message).toBe('Expected no "page" push holding any of coupon, found 1 push (1 before narrowing).');
+    expect(JSON.stringify(out)).not.toContain(COUPON);
+  });
+
+  test('mustNot has **.path fails on a path past depth 8', () => {
+    expect(JSON.stringify(deepCoupon.args)).toContain('coupon');
+    const out = evaluatePushRule(rule('mustNot', dl({ has: ['**.coupon'] })), everywhere([deepCoupon]));
+    expect(out.pass).toBe(false);
+    expect(out.evidence).toEqual([deepCoupon.id]);
+    expect(JSON.stringify(out)).not.toContain(COUPON);
+  });
+
+  test('must with a count of 0 fails on a path past the caps', () => {
+    for (const op of ['=', '<='] as const) {
+      const out = evaluatePushRule(rule('must', dl({ has: ['coupon'] }), { op, n: 0 }), everywhere([wideCoupon]));
+      expect(out.pass, op).toBe(false);
+    }
+  });
+
+  test('must types reads the type past the caps', () => {
+    expect(evaluatePushRule(rule('must', dl({ types: { '**.coupon': 'string' } })), everywhere([wideCoupon])).pass).toBe(true);
+    const out = evaluatePushRule(rule('must', dl({ types: { '**.coupon': 'number' } })), everywhere([wideCoupon]));
+    expect(out.pass).toBe(false);
+    expect(out.evidence).toEqual([wideCoupon.id]);
+    expect(out.message).toContain('**.coupon is number but found string in 1 push');
+    expect(JSON.stringify(out)).not.toContain(COUPON);
+    const deep = evaluatePushRule(rule('must', dl({ types: { '**.coupon': 'number' } })), everywhere([deepCoupon]));
+    expect(deep.pass).toBe(false);
+    expect(JSON.stringify(deep)).not.toContain(COUPON);
+  });
+
+  test('the same wide push without coupon still passes mustNot, and an incomplete hook warns', () => {
+    const plain = push([wide(false)]);
+    const out = evaluatePushRule(rule('mustNot', dl({ has: ['coupon'] })), everywhere([plain]));
+    expect(out.pass).toBe(true);
+    expect(out.evidence).toEqual([]);
+    expect(out.message).toContain('found none (1 before narrowing)');
+    const warn = evaluatePushRule(rule('mustNot', dl({ has: ['coupon'] })), everywhere([plain], { hookIncomplete: true }));
+    expect(warn).toMatchObject({ pass: false, severity: 'warn' });
+  });
+});

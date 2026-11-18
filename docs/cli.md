@@ -301,6 +301,7 @@ expect:
 - A `dataLayer` rule cannot be combined with `vendor`, a hit filter or a `body.*` key. It exits 2 and names the key.
 - When the `dataLayer` hook is incomplete in the rule's scope (`dataLayerIncomplete` or `dataLayerNotHooked`), a `mustNot`, or a `must` with `types` or an upper or exact `count` (`<=`, `<`, `=`), that would pass shows as `WARN` with a message that the pushes could not all be read, and the exit code stays 0. A `must` that only asks for a push stays a plain pass. A failing rule stays a fail. A `dataLayerNotHooked` loader counts for its whole document, up to the next navigation (a `visit` step or a main-frame document request).
 - A `dataLayer` rule never gets the `serverSendProbableLink` or `serverSendUnlinked` note: it reads pushes, not hits.
+- A rule reads each push in full. The 200-path and depth-8 caps of the `--json` push shapes do not apply to it, so a path past them still counts for `has`, `types` and `count`.
 - To write a rule, copy the event, kind, frame and paths from `dataLayer.steps[].events[]` in a run's `--json` output.
 
 ### GTM override

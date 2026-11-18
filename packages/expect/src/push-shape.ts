@@ -45,6 +45,13 @@ const NO_STEP = '(no step)';
 const EVENT_CHARS = /^[A-Za-z0-9_.:-]+$/;
 const MAX_DEPTH = 8;
 const MAX_PATHS = 200;
+interface Limits {
+  paths: number;
+  depth: number;
+}
+
+const SHAPE_LIMITS: Limits = { paths: MAX_PATHS, depth: MAX_DEPTH };
+const NO_LIMITS: Limits = { paths: Infinity, depth: Infinity };
 const GTAG_COMMANDS = new Set(['config', 'consent', 'event', 'get', 'js', 'set']);
 const GTAG_OTHER = 'gtag (other)';
 
@@ -82,16 +89,16 @@ function typeOf(value: unknown): string {
   return Array.isArray(value) ? 'array' : typeof value;
 }
 
-function walk(value: unknown, path: string, depth: number, out: Map<string, Set<string>>): void {
+function walk(value: unknown, path: string, depth: number, out: Map<string, Set<string>>, limits: Limits): void {
   const children: [string, unknown][] =
     typeof value !== 'object' || value === null ? [] : Array.isArray(value) ? value.map((v) => ['[*]', v]) : Object.entries(value);
-  if (children.length === 0 || depth >= MAX_DEPTH) {
-    if (path === '' || (!out.has(path) && out.size >= MAX_PATHS)) return;
+  if (children.length === 0 || depth >= limits.depth) {
+    if (path === '' || (!out.has(path) && out.size >= limits.paths)) return;
     (out.get(path) ?? out.set(path, new Set()).get(path)!).add(typeOf(value));
     return;
   }
   for (const [key, child] of children) {
-    walk(child, key === '[*]' ? `${path}[*]` : path === '' ? safeKey(key) : `${path}.${safeKey(key)}`, depth + 1, out);
+    walk(child, key === '[*]' ? `${path}[*]` : path === '' ? safeKey(key) : `${path}.${safeKey(key)}`, depth + 1, out, limits);
   }
 }
 
@@ -141,19 +148,19 @@ function frameKind(e: DataLayerEvent): PushFrameKind {
 }
 
 // gtm.* pushes are counts only, and a consent command keeps its signal names without the granted or denied values.
-function collectPaths(e: DataLayerEvent, command: Command | undefined, into: Map<string, Set<string>>): void {
+function collectPaths(e: DataLayerEvent, command: Command | undefined, into: Map<string, Set<string>>, limits: Limits): void {
   if (e.event?.startsWith('gtm.')) return;
   if (command?.fromObject && command.list[0] === 'event' && typeof command.list[1] === 'string' && command.list[1].startsWith('gtm.')) return;
   if (e.isConsentCommand || isObjectConsent(command)) {
     const signals = (command?.fromObject ? command.list : e.args)[2];
-    if (typeof signals === 'object' && signals !== null) for (const [name, value] of Object.entries(signals)) walk(value, safeKey(name), 0, into);
+    if (typeof signals === 'object' && signals !== null) for (const [name, value] of Object.entries(signals)) walk(value, safeKey(name), 0, into, limits);
     return;
   }
   if (command !== undefined) {
-    for (const arg of command.list.slice(command.list[0] === 'set' ? 1 : 2)) walk(arg, '', 0, into);
+    for (const arg of command.list.slice(command.list[0] === 'set' ? 1 : 2)) walk(arg, '', 0, into, limits);
     return;
   }
-  for (const arg of e.args) walk(arg, '', 0, into);
+  for (const arg of e.args) walk(arg, '', 0, into, limits);
 }
 
 export interface PushDescription {
@@ -168,7 +175,7 @@ export interface PushDescription {
 export function pushShapeOf(e: DataLayerEvent): PushDescription {
   const command = commandOf(e);
   const paths = new Map<string, Set<string>>();
-  collectPaths(e, command, paths);
+  collectPaths(e, command, paths, NO_LIMITS);
   return { event: eventLabel(e, command), kind: command === undefined ? 'object' : 'gtag', frame: frameKind(e), paths };
 }
 
@@ -187,7 +194,7 @@ export function pushShapes(records: { steps?: readonly Step[]; dataLayerEvents: 
     const group = groups.get(key) ?? groups.set(key, { shape: { event, kind, frame, count: 0, paths: [], ids: [] }, types: new Map() }).get(key)!;
     group.shape.count += 1;
     group.shape.ids.push(e.id);
-    collectPaths(e, command, group.types);
+    collectPaths(e, command, group.types, SHAPE_LIMITS);
   }
   return {
     pushes: records.dataLayerEvents.length,
