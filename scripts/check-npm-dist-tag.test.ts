@@ -1,3 +1,6 @@
+import { mkdtempSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -46,6 +49,14 @@ describe('CLI', () => {
 
   it.each([['v0.7.0'], ['0.7.0-beta.1'], [''], []])('exits non-zero for %j before reaching npm', (...args) => {
     const r = run(...args);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('Not a release version');
+  });
+
+  it('runs main when started through a symlink', () => {
+    const link = join(mkdtempSync(join(tmpdir(), 'dist-tag-')), 'check.ts');
+    symlinkSync(script, link);
+    const r = spawnSync(process.execPath, [link, 'v0.7.0'], { encoding: 'utf8', env: { ...process.env, PATH: '/nonexistent' } });
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('Not a release version');
   });
