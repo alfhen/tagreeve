@@ -31,6 +31,14 @@ const hostOf = (url: string | null | undefined): string | undefined => {
 
 const contextLabel = (req: Request, hit: Hit): string => `${req.frame!.main ? 'main frame' : 'sub frame'} on ${hostOf(hit.page) ?? hostOf(req.frameUrl) ?? 'an unknown host'}`;
 
+const passMessage = (byTid: ReadonlyMap<string, ReadonlyMap<string, HitContext>>): string => {
+  if ([...byTid.values()].some((contexts) => contexts.size >= 2)) return 'Expected the GA4 client and session ID to carry over between contexts, found no difference.';
+  const labels = new Set([...byTid.values()].flatMap((contexts) => [...contexts.keys()]));
+  if (labels.size === 0) return 'Saw no context to compare, so nothing was compared.';
+  if (labels.size === 1) return `Only one context qualified for comparison (${[...labels][0]}), so nothing was compared.`;
+  return 'Saw no measurement ID in more than one context, so nothing was compared.';
+};
+
 /** `hits` must hold browser hits only. Compares the GA4 client ID, then the session ID, between the contexts of each measurement ID. Never keeps an ID value in its result. */
 export function idHandover(hits: readonly Hit[], requests: ReadonlyMap<string, Request>): IdHandover {
   const byRequest = new Map<string, Hit[]>();
@@ -82,7 +90,7 @@ export function idHandover(hits: readonly Hit[], requests: ReadonlyMap<string, R
     }
   }
 
-  if (problems.length === 0) return { pass: true, evidence: [], message: 'Expected the GA4 client and session ID to carry over between contexts, found no difference.' };
+  if (problems.length === 0) return { pass: true, evidence: [], message: passMessage(byTid) };
   const more = problems.length > MAX_LISTED ? `; and ${problems.length - MAX_LISTED} more` : '';
   return {
     pass: false,
