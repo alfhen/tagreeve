@@ -7,6 +7,7 @@
 <body>
 <h1>ID handover frame</h1>
 <p>Sends GA4 hits from the top frame and from a sandboxed iframe. <code>?frame=rotate-cid</code> or <code>?frame=rotate-sid</code> changes the ID the frame sends.</p>
+<iframe id="child" sandbox="allow-scripts" title="Sandboxed frame"></iframe>
 <script>
 var CID = '3333333333.4444444444';
 var SID = '1730000000';
@@ -14,11 +15,7 @@ var mode = new URLSearchParams(location.search).get('frame');
 var frameCid = mode === 'rotate-cid' ? '5555555555.6666666666' : CID;
 var frameSid = mode === 'rotate-sid' ? '1730009999' : SID;
 new Image().src = 'https://www.google-analytics.com/g/collect?v=2&tid=G-PWTEST0001&cid=' + CID + '&sid=' + SID + '&en=page_view&dl=' + encodeURIComponent(location.href);
-var frame = document.createElement('iframe');
-frame.setAttribute('sandbox', 'allow-scripts');
-frame.title = 'Sandboxed frame';
-frame.src = '/id-handover-frame-child?cid=' + frameCid + '&sid=' + frameSid;
-document.body.appendChild(frame);
+document.getElementById('child').src = '/id-handover-frame-child?cid=' + frameCid + '&sid=' + frameSid;
 </script>
 </body>
 </html>
