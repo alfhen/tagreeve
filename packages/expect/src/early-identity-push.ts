@@ -20,11 +20,14 @@ const holdsLocalPart = (key: string, identity: Identity): boolean => {
   if (local === '') return false;
   const k = key.toLowerCase();
   if (local.length >= MIN_BARE_LOCAL && k.includes(local)) return true;
-  const label = domain.split('.')[0] ?? '';
-  const next = [...AT_MARKERS, ...(label === '' ? [] : [`_${label}`, `-${label}`, `.${label}`, label])];
+  const [label = '', ...after] = domain.split('.');
+  const nextLabel = after[0] ?? '';
+  const endsLabel = (rest: string) => rest === '' || !/[a-z0-9]/.test(rest[0] ?? '') || (nextLabel !== '' && rest.startsWith(nextLabel));
+  const labelMarkers = label === '' ? [] : [`_${label}`, `-${label}`, `.${label}`, label];
   for (let at = k.indexOf(local); at !== -1; at = k.indexOf(local, at + 1)) {
     const rest = k.slice(at + local.length);
-    if (next.some((m) => rest.startsWith(m))) return true;
+    if (AT_MARKERS.some((m) => rest.startsWith(m))) return true;
+    if (labelMarkers.some((m) => rest.startsWith(m) && endsLabel(rest.slice(m.length)))) return true;
   }
   return false;
 };

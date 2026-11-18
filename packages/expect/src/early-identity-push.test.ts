@@ -127,6 +127,20 @@ test.each(['ab_at_example_test', 'ab_example_test'])('a key with a short local p
   for (const leak of [key, 'ab@example.test', 'ab']) expect(r.message).not.toContain(leak);
 });
 
+test('a key that only starts like the domain label is shown: user_examples', () => {
+  const r = keyed('user@example.test', 'user_examples');
+  expect(r.pass).toBe(false);
+  expect(r.message).toContain('user_examples: email');
+  expect(r.message).not.toContain('(other)');
+});
+
+test('a key with the domain label followed by the next domain label reads (other): userexampletest', () => {
+  const r = keyed('user@example.test', 'userexampletest');
+  expect(r.pass).toBe(false);
+  expect(r.message).toContain('(other): email');
+  for (const leak of ['userexampletest', 'user@example.test']) expect(r.message).not.toContain(leak);
+});
+
 test.each(['user_at_example_test', 'user_example_test', 'user@example.test', 'user%40example.test', 'user(at)example.test'])('a key that holds user@example.test reads (other): %s', (key) => {
   expect(key).toContain('user');
   const r = keyed('user@example.test', key);
