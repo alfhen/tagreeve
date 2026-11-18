@@ -38,16 +38,23 @@ function accepted(version: string): boolean {
 }
 
 describe('release.sh version check', () => {
+  const argLists: Array<(version: string) => string[]> = [
+    (version) => ['--no-tag', version],
+    (version) => [version],
+  ];
+
   it.each(versions)('agrees with distTagFor on %j', (version) => {
-    const run = spawnSync('bash', [script, '--no-tag', version], { cwd: dir, encoding: 'utf8' });
-    const refused = /^refusing: version must be/m.test(run.stderr);
-    expect(refused).toBe(!accepted(version));
-    if (refused) {
-      expect(run.status).toBe(1);
-      expect(run.stderr).not.toMatch(/fatal:|ENOENT|pnpm/);
-      expect(run.stdout).toBe('');
-      expect(readdirSync(dir)).toEqual(['scripts']);
-      expect(readdirSync(join(dir, 'scripts'))).toEqual(['release.sh']);
+    for (const args of argLists) {
+      const run = spawnSync('bash', [script, ...args(version)], { cwd: dir, encoding: 'utf8' });
+      const refused = /^refusing: version must be/m.test(run.stderr);
+      expect(refused).toBe(!accepted(version));
+      if (refused) {
+        expect(run.status).toBe(1);
+        expect(run.stderr).not.toMatch(/fatal:|ENOENT|pnpm/);
+        expect(run.stdout).toBe('');
+        expect(readdirSync(dir)).toEqual(['scripts']);
+        expect(readdirSync(join(dir, 'scripts'))).toEqual(['release.sh']);
+      }
     }
   });
 });
