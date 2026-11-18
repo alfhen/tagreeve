@@ -4,7 +4,7 @@
 
 The third release candidate, after the rc.2 fixes. Install it with `npm i -g tagreeve@next`.
 
-- `earlyIdentityPush` reads a `dataLayer` key as `(other)` when it holds the local part of the test email, with any run of separators, next to an at-marker, the domain label or the next domain label (#1555).
+- `earlyIdentityPush` reads a `dataLayer` key as `(other)` when it holds the local part of the test email, with any run of separators, next to an at-marker, or next to the domain label when the key ends there, a separator follows or the next domain label follows. A key that only starts like the domain label, such as `user_examples`, is shown (#1555).
 - `idHandover` with one qualifying context still passes, and its message now says nothing was compared, for example `Only one context qualified for comparison (checkout), so nothing was compared.` (#1563).
 - The npm package includes `CHANGELOG.md` (#1564).
 - The CA certificates that Tagreeve makes for the server container runner always load, because the serial is now always a minimal positive DER integer (#1560).
