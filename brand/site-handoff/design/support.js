@@ -1166,6 +1166,24 @@
     }
     return cur;
   }
+  function buildValidatedUrl(baseUrl) {
+    try {
+      if (baseUrl.includes("/../") || /\/%2e%2e\//i.test(baseUrl)) {
+        throw new Error("Invalid path");
+      }
+      const url = new URL(baseUrl, document.baseURI);
+      const allowedDomains = ["unpkg.com", window.location.hostname];
+      if (!allowedDomains.includes(url.hostname)) {
+        throw new Error("Invalid host");
+      }
+      if (!["http:", "https:"].includes(url.protocol)) {
+        throw new Error("Invalid protocol");
+      }
+      return url.href;
+    } catch {
+      throw new Error("Invalid URL");
+    }
+  }
   var GLOBAL_POLL_INTERVAL_MS = 50;
   var GLOBAL_POLL_TIMEOUT_MS = 3e4;
   function createExternalModules(onResolved) {
@@ -1203,7 +1221,7 @@
       const p = ready.then(() => {
         const pre = bundledBlob(url);
         if (pre) return pre.text();
-        return fetch(url).then((r) => {
+        return fetch(buildValidatedUrl(url)).then((r) => {
           if (!r.ok) throw new Error("HTTP " + r.status);
           return r.text();
         });

@@ -14,10 +14,19 @@
   if (new URLSearchParams(location.search).get('main')) {
     document.getElementById('pw-nav-frame').remove();
     window.dataLayer = window.dataLayer || [];
-    setTimeout(function () {
-      window.dataLayer.push({ event: 'add_to_cart' });
-      location.href = '/';
-    }, 400);
+    function pushAndLeave() {
+      setTimeout(function () {
+        window.dataLayer.push({ event: 'add_to_cart' });
+        location.href = '/';
+      }, 400);
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+      var banner = document.getElementById('pw-consent-banner');
+      if (!banner || banner.hidden) return pushAndLeave();
+      banner.addEventListener('click', function (e) {
+        if (e.target.closest('button')) pushAndLeave();
+      });
+    });
   }
 </script>
 </body>
