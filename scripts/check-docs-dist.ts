@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const requestingRels = new Set(['stylesheet', 'preload', 'modulepreload', 'prefetch', 'icon', 'apple-touch-icon']);
 const external = /^(?:https?:)?\/\//i;
@@ -129,4 +130,6 @@ function main(dist: string): number {
   return bad || dead.length ? 1 : 0;
 }
 
-if (import.meta.main) process.exit(main(process.argv[2] ?? 'site/dist'));
+// import.meta.main is missing on Node 24.0 and 24.1, which satisfy engines.node.
+const isEntry = process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+if (isEntry) process.exit(main(process.argv[2] ?? 'site/dist'));
