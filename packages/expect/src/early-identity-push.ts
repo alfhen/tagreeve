@@ -15,18 +15,25 @@ const MAX_LISTED = 5;
 const MIN_BARE_LOCAL = 6;
 const AT_MARKERS = ['@', '_at_', '%40', '(at)'];
 
+const SEP = '[^a-z0-9]*';
+// Runs of separators in an address part match any separators (or none) in the key.
+const loose = (part: string) => part.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).join(SEP);
+
 const holdsLocalPart = (key: string, identity: Identity): boolean => {
   const [local = '', domain = ''] = identity.email.toLowerCase().split('@');
-  if (local === '') return false;
+  const looseLocal = loose(local);
+  if (looseLocal === '') return false;
   const k = key.toLowerCase();
-  if (local.length >= MIN_BARE_LOCAL && k.includes(local)) return true;
-  const label = domain.split('.')[0] ?? '';
-  const next = [...AT_MARKERS, ...(label === '' ? [] : [`_${label}`, `-${label}`, `.${label}`, label])];
-  for (let at = k.indexOf(local); at !== -1; at = k.indexOf(local, at + 1)) {
-    const rest = k.slice(at + local.length);
-    if (next.some((m) => rest.startsWith(m))) return true;
+  if (local.length >= MIN_BARE_LOCAL && new RegExp(looseLocal).test(k)) return true;
+  const [label = '', next = ''] = domain.split('.');
+  const atMarkers = AT_MARKERS.map((m) => m.replace(/[()]/g, '\\$&')).join('|');
+  const alternatives = [`${SEP}(?:${atMarkers})`];
+  if (loose(label) !== '') {
+    const nextLabel = loose(next);
+    const endsLabel = `(?=$|[^a-z0-9]${nextLabel === '' ? '' : `|${nextLabel}`})`;
+    alternatives.push(`${SEP}${loose(label)}${endsLabel}`);
   }
-  return false;
+  return new RegExp(`${looseLocal}(?:${alternatives.join('|')})`).test(k);
 };
 
 // A key can itself hold a value, so only a plain name is shown.
