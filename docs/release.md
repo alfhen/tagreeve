@@ -13,7 +13,7 @@ Releases are git tags. Each tag points at a commit that carries a built `dist/`.
 
 There is no provenance yet. `npm publish --provenance` needs a publish from CI, and publishing stays manual.
 
-The script refuses to run if the tree is dirty, HEAD is not origin/main, or `package.json` does not match `<version>`. It does not push and it does not create a GitHub release.
+The script refuses to run if `<version>` is not `X.Y.Z` or `X.Y.Z-rc.N` (ASCII digits only), if the tree is dirty, HEAD is not origin/main, or `package.json` does not match `<version>`. It does not push and it does not create a GitHub release.
 
 The release commit drops the `build` script because npm runs a nested install for git dependencies that have one, and that install races with the outer one.
 
