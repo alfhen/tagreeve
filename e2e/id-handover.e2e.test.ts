@@ -118,7 +118,7 @@ test('a sandboxed frame with a rotated cid warns, names both frames, and keeps e
   expect(result.pass).toBe(false);
   expect(result.severity).toBe('warn');
   for (const part of [TID, 'main frame', 'sub frame']) expect(result.message).toContain(part);
-  expectNoIds(r, result.message, [CID, ROTATED]);
+  expectNoIds(r, result.message, [CID, ROTATED, SID]);
   expect(r.code).toBe(0);
 }, 150_000);
 
