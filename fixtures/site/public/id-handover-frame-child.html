@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ID handover frame child</title>
+</head>
+<body>
+<script>
+var query = new URLSearchParams(location.search);
+new Image().src = 'https://www.google-analytics.com/g/collect?v=2&tid=G-PWTEST0001&cid=' + encodeURIComponent(query.get('cid')) + '&sid=' + encodeURIComponent(query.get('sid')) + '&en=frame_view&dl=' + encodeURIComponent(location.href);
+</script>
+</body>
+</html>

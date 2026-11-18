@@ -1,0 +1,5 @@
+start: /id-handover-frame?frame=rotate-cid
+steps:
+  - visit: /id-handover-frame?frame=rotate-cid
+  - wait: 2s
+options: { seed: 1, allowUnknownDestination: true }
