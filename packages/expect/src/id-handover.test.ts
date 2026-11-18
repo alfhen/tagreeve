@@ -126,7 +126,7 @@ describe('no throw and pass when there is nothing to compare', () => {
     expect(pass).toBe(true);
     expect(evidence).toEqual([]);
     expect(message).toContain('main frame on localhost');
-    expect(message).toMatch(/only one context/);
+    expect(message).toBe('Only one context qualified for comparison (main frame on localhost), so nothing was compared.');
     expect(message).toMatch(/nothing was compared/);
     expect(message).not.toContain(FOUND_NONE);
     expect(message).not.toContain(CID_A);
@@ -151,7 +151,14 @@ describe('no throw and pass when there is nothing to compare', () => {
     const { message, pass } = check([ctxA, { ...ctxB, tid: 'G-PWTEST0002' }]);
     expect(pass).toBe(true);
     expect(message).not.toContain(FOUND_NONE);
-    expect(message).toMatch(/nothing was compared/);
+    expect(message).toBe('Saw no measurement ID in more than one context, so nothing was compared.');
+    expect(message).not.toMatch(/one context qualified/);
+  });
+
+  test('two hosts where only one has a client ID name the one that qualified', () => {
+    const { message, pass } = check([ctxA, { ...ctxB, cid: undefined }]);
+    expect(pass).toBe(true);
+    expect(message).toBe('Only one context qualified for comparison (main frame on localhost), so nothing was compared.');
   });
 
   test('a hit without a cid next to one with a cid passes', () => {

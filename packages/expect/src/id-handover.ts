@@ -35,7 +35,7 @@ const passMessage = (byTid: ReadonlyMap<string, ReadonlyMap<string, HitContext>>
   if ([...byTid.values()].some((contexts) => contexts.size >= 2)) return 'Expected the GA4 client and session ID to carry over between contexts, found no difference.';
   const labels = new Set([...byTid.values()].flatMap((contexts) => [...contexts.keys()]));
   if (labels.size === 0) return 'Saw no context to compare, so nothing was compared.';
-  if (labels.size === 1) return `Saw only one context (${[...labels][0]}), so nothing was compared.`;
+  if (labels.size === 1) return `Only one context qualified for comparison (${[...labels][0]}), so nothing was compared.`;
   return 'Saw no measurement ID in more than one context, so nothing was compared.';
 };
 
