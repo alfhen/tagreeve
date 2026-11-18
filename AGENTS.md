@@ -72,7 +72,13 @@ Open `review-minor` issues are fixed in batches between plan waves. Batches are 
 
 The pipeline never releases Tagreeve: `autoRelease` is false in `.github/pipeline.json`. A release is made on the maintainer's say-so.
 
-Releases are git tags with a built `dist/`, made on `main` by `scripts/release.sh <version>`. The script refuses to run unless HEAD is `origin/main`, the tree is clean and `package.json` has the same version. It makes a release commit that only the tag points at, and that is never merged to `main`. Push the tag, then check it installs:
+Releases are git tags with a built `dist/`, made on `main` by `scripts/release.sh <version>`. The script refuses to run unless HEAD is `origin/main`, the tree is clean and `package.json` has the same version. It makes a release commit that only the tag points at, and that is never merged to `main`. Push the tag and wait for the release-tag workflow to pass. Then publish to npm by hand from the tag commit (`git switch --detach v<version>`), with your own one-time password. CI never publishes. For a release candidate (`-rc.N`) run `npm publish --tag next`. For a final release run `npm publish`, which moves `latest`. Then run the check:
+
+```bash
+node scripts/check-npm-dist-tag.ts <version>
+```
+
+The check script exits non-zero unless npm serves the version under its dist-tag. Then check the tag installs:
 
 ```bash
 npm i -g --install-links github:alfhen/tagreeve#v<version>
