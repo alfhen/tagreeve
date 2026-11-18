@@ -77,3 +77,61 @@ test('builtins idHandover: fail makes the rotate run exit 1, and the default exi
   expect(resultOf(plain).severity).toBe('warn');
   expect(plain.code).toBe(0);
 }, 200_000);
+
+const ROTATED_SID = '1730009999';
+
+const frameHits = (records: RunRecords, main: boolean, ids: string[]): Request[] =>
+  records.hits
+    .filter((h) => h.vendor === 'ga4' && h.params.tid === TID && h.consent.analytics !== 'denied')
+    .map((h) => records.requests.find((q) => q.id === h.requestId)!)
+    .filter((q) => q.outcome === 'stubbed' && q.frame?.main === main && ids.every((id) => q.url.includes(id)));
+
+const expectNoIds = (r: CliRun, message: string, ids: string[]) => {
+  for (const s of ids) {
+    expect(r.records!.requests.some((q) => q.url.includes(s) || (q.postData ?? '').includes(s)), s).toBe(true);
+    for (const n of [s, s.split('.')[0]!]) {
+      expect(r.stdout).not.toContain(n);
+      expect(r.stderr).not.toContain(n);
+      expect(message).not.toContain(n);
+    }
+  }
+};
+
+test('a sandboxed frame with the same cid and sid as the top frame passes', async () => {
+  const r = await run('id-handover-frame');
+  const records = r.records!;
+  expect(frameHits(records, true, [CID, `sid=${SID}`]).length).toBeGreaterThan(0);
+  expect(frameHits(records, false, [CID, `sid=${SID}`]).length).toBeGreaterThan(0);
+  expect(frameHits(records, false, [CID]).every((q) => !(q.frameUrl ?? '').includes('/web-pixels@'))).toBe(true);
+  const sandbox = (JSON.parse(r.stdout) as Summary).results.find((x) => x.expectation === 'builtin: sandboxPageUrl');
+  expect(sandbox?.pass).toBe(true);
+  expect(resultOf(r).pass).toBe(true);
+  expect(r.code).toBe(0);
+}, 150_000);
+
+test('a sandboxed frame with a rotated cid warns, names both frames, and keeps exit 0', async () => {
+  const r = await run('id-handover-frame-rotate-cid');
+  const records = r.records!;
+  expect(frameHits(records, true, [CID]).length).toBeGreaterThan(0);
+  expect(frameHits(records, false, [ROTATED]).length).toBeGreaterThan(0);
+  const result = resultOf(r);
+  expect(result.pass).toBe(false);
+  expect(result.severity).toBe('warn');
+  for (const part of [TID, 'main frame', 'sub frame']) expect(result.message).toContain(part);
+  expectNoIds(r, result.message, [CID, ROTATED, SID]);
+  expect(r.code).toBe(0);
+}, 150_000);
+
+test('a sandboxed frame with a rotated sid and the same cid warns about the session ID', async () => {
+  const r = await run('id-handover-frame-rotate-sid');
+  const records = r.records!;
+  expect(frameHits(records, true, [CID, `sid=${SID}`]).length).toBeGreaterThan(0);
+  expect(frameHits(records, false, [CID, `sid=${ROTATED_SID}`]).length).toBeGreaterThan(0);
+  const result = resultOf(r);
+  expect(result.pass).toBe(false);
+  expect(result.severity).toBe('warn');
+  for (const part of [TID, 'main frame', 'sub frame', 'session ID differs']) expect(result.message).toContain(part);
+  expect(result.message).not.toContain('client ID differs');
+  expectNoIds(r, result.message, [CID, SID, ROTATED_SID]);
+  expect(r.code).toBe(0);
+}, 150_000);

@@ -49,6 +49,8 @@ const pages: Record<string, string> = {
   '/viewport': 'viewport.html',
   '/datalayer-frame': 'datalayer-frame.html',
   '/datalayer-frame-child': 'datalayer-frame-child.html',
+  '/id-handover-frame': 'id-handover-frame.html',
+  '/id-handover-frame-child': 'id-handover-frame-child.html',
   '/datalayer-wrap': 'datalayer-wrap.html',
   '/pinterest': 'pinterest.html',
   '/tracker': 'tracker.html',
