@@ -96,9 +96,8 @@ const where = (request: ProxyRequest) => `${request.method} ${new URL(request.ur
 
 describe('the stand-in server container through the seam', () => {
   test('makes the three vendor calls through the proxy, with decrypted bodies', async () => {
-    const reply = await fetch(`${container.origin}/capi`, { method: 'POST', body: JSON.stringify({ event_name: 'Purchase', event_id: 'evt-runner-1', email: EMAIL }) });
+    const reply = await fetch(`${container.origin}/capi?answer=after`, { method: 'POST', body: JSON.stringify({ event_name: 'Purchase', event_id: 'evt-runner-1', email: EMAIL }) });
     expect(reply.status).toBe(200);
-    await until(() => answered.length >= 3);
 
     const log = container.logTail().join('\n');
     expect(container.hasExited(), `the stand-in exited. Log tail:\n${log}`).toBe(false);
