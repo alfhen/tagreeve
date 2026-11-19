@@ -323,7 +323,7 @@ test('hitShape groups hits by key and tuple with a count, and holds no ID, time 
 
 test('diffShapes finds no drift in the same run', () => {
   const [a, b] = pair([{}, { vendor: 'meta', event: 'PageView' }], [{}, { vendor: 'meta', event: 'PageView' }]);
-  expect(diffShapes(shapeOf(a), shapeOf(b))).toEqual({ added: [], removed: [], countChanges: [], moved: [], drift: false });
+  expect(diffShapes(shapeOf(a), shapeOf(b))).toEqual({ added: [], removed: [], countChanges: [], gcdLetters: [], moved: [], drift: false });
 });
 
 test('a key on one side only is drift, and is also added or removed in diffRuns', () => {
@@ -1177,5 +1177,70 @@ describe('renamed pairs in diffRuns', () => {
     expect(d.warnings).toEqual([]);
     expect(d.dataLayer!.kindChanged).toEqual([]);
     expect(d.dataLayer!.eventsRemoved).toEqual([expect.objectContaining({ event: 'purchase', kind: 'object' })]);
+  });
+});
+
+describe('gcd letters in diffShapes', () => {
+  const key = { epoch: 'denied', vendor: 'ga4', event: 'view_product' };
+  const denied = { analytics: 'denied', ads: 'denied', adUserData: 'denied', adPersonalization: 'denied' };
+  const tuple = (over: { gcs?: string; gcd?: string; ids?: string[]; count?: number; analytics?: string } = {}): ShapeTuple => ({
+    consent: { ...denied, analytics: over.analytics ?? 'denied', gcs: over.gcs ?? 'G100', gcd: over.gcd ?? '13q3q3q2q5l1' },
+    ids: over.ids ?? ['client_id'],
+    count: over.count ?? 1,
+  });
+  const base = (): ShapeKey[] => [{ key, tuples: [tuple({ gcd: '13p3p3p2p5l1' })] }];
+
+  test('a matched gcd-letter pair is listed in gcdLetters and is not drift', () => {
+    const d = diffShapes(base(), [{ key, tuples: [tuple()] }]);
+    expect(d).toMatchObject({ added: [], removed: [], countChanges: [], drift: false });
+    expect(d.gcdLetters).toHaveLength(1);
+    expect(JSON.stringify(d.gcdLetters[0])).toContain('13p3p3p2p5l1');
+    expect(JSON.stringify(d.gcdLetters[0])).toContain('13q3q3q2q5l1');
+    expect(d.gcdLetters[0]!.key).toEqual(key);
+  });
+
+  test('a pair with different counts still gives a count change', () => {
+    const d = diffShapes(base(), [{ key, tuples: [tuple({ count: 2 })] }]);
+    expect(d).toMatchObject({ added: [], removed: [], drift: false });
+    expect(d.gcdLetters).toHaveLength(1);
+    expect(d.countChanges).toHaveLength(1);
+    expect(d.countChanges[0]).toMatchObject({ key, a: 1, b: 2 });
+  });
+
+  test('a pair with a lower count is a count change and not drift', () => {
+    const d = diffShapes([{ key, tuples: [tuple({ gcd: '13p3p3p2p5l1', count: 2 })] }], [{ key, tuples: [tuple({ count: 1 })] }]);
+    expect(d).toMatchObject({ drift: false, removed: [], added: [] });
+    expect(d.countChanges).toEqual([expect.objectContaining({ a: 2, b: 1 })]);
+    expect(d.gcdLetters).toHaveLength(1);
+  });
+
+  test('one of two identical hits that changes its letter is not drift', () => {
+    const a = [{ key, tuples: [tuple({ gcd: '13p3p3p2p5l1', count: 2 })] }];
+    const b = [{ key, tuples: [tuple({ gcd: '13p3p3p2p5l1' }), tuple()] }];
+    const d = diffShapes(a, b);
+    expect(d).toMatchObject({ added: [], removed: [], drift: false });
+    expect(d.gcdLetters).toHaveLength(1);
+  });
+
+  test('two hits that merge into one letter are not drift', () => {
+    const a = [{ key, tuples: [tuple({ gcd: '13p3p3p2p5l1' }), tuple()] }];
+    const b = [{ key, tuples: [tuple({ gcd: '13p3p3p2p5l1', count: 2 })] }];
+    const d = diffShapes(a, b);
+    expect(d).toMatchObject({ added: [], removed: [], drift: false });
+    expect(d.gcdLetters).toHaveLength(1);
+  });
+
+  test.each([
+    ['gcs', [{ key, tuples: [tuple({ gcs: 'G101' })] }]],
+    ['one consent state', [{ key, tuples: [tuple({ analytics: 'granted' })] }]],
+    ['ID presence', [{ key, tuples: [tuple({ ids: [] })] }]],
+    ['gcd presence', [{ key, tuples: [tuple({ gcd: '' })] }]],
+    ['event name', [{ key: { ...key, event: 'add_to_cart' }, tuples: [tuple()] }]],
+  ] as Array<[string, ShapeKey[]]>)('a difference in %s stays drift', (_name, run) => {
+    const d = diffShapes(base(), run);
+    expect(d.drift).toBe(true);
+    expect(d.added).toHaveLength(1);
+    expect(d.removed).toHaveLength(1);
+    expect(d.gcdLetters).toEqual([]);
   });
 });

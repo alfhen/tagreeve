@@ -184,6 +184,7 @@ export function compareBaseline(baseline: BaselineFile, records: RunRecords): Ba
   const epochOrder = [...records.consentEpochs].sort((x, y) => x.startT - y.startT).map((e) => e.label);
   const diff = diffShapes(baseline.keys, hitShape(records, { byPage: baseline.byPage }), { epochOrder });
   warnings.push(...diff.moved.map(describeMove));
+  warnings.push(...diff.gcdLetters.map((g) => `gcd letters changed for ${keyLabel(g.key)}: ${g.a} -> ${g.b} (same consent state). This is not drift.`));
   if (baseline.dataLayer === undefined) {
     warnings.push('dataLayer pushes not compared: the baseline has no push shapes (saved before 0.6.0-rc.2). Save it again to compare them.');
   } else {

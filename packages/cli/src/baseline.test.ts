@@ -573,3 +573,26 @@ test('a baseline with no dataLayer section warns it was saved before 0.6.0-rc.2'
   expect(warning).toContain('saved before 0.6.0-rc.2');
   expect(warning).not.toContain('rc.1');
 });
+
+function gcdRun(gcd: string): RunRecords {
+  const run = makeRun(['view_product']);
+  run.hits[0]!.consent = { ...state, raw: { gcs: 'G100', gcd } };
+  run.consentEpochs[0]!.label = 'denied';
+  return run;
+}
+
+test('a gcd default or update letter is not drift, in both directions', () => {
+  const p = '13p3p3p2p5l1';
+  const q = '13q3q3q2q5l1';
+  const warning = (from: string, to: string) => [`gcd letters changed for ga4 view_product [epoch denied]: ${from} -> ${to} (same consent state). This is not drift.`];
+  const forward = compareBaseline(buildBaseline(gcdRun(p), false), gcdRun(q));
+  expect(forward).toMatchObject({ drift: false, added: 0, removed: 0, countChanges: 0, warnings: warning(p, q) });
+  const back = compareBaseline(buildBaseline(gcdRun(q), false), gcdRun(p));
+  expect(back).toMatchObject({ drift: false, added: 0, removed: 0, countChanges: 0, warnings: warning(q, p) });
+});
+
+test('a gcd change from p to t is still drift and gives no gcd-letters warning', () => {
+  const result = compareBaseline(buildBaseline(gcdRun('13p3p3p2p5l1'), false), gcdRun('13t3p3p2p5l1'));
+  expect(result).toMatchObject({ drift: true, added: 1, removed: 1 });
+  expect(result.warnings.filter((w) => w.startsWith('gcd letters changed'))).toEqual([]);
+});
