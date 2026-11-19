@@ -1207,6 +1207,22 @@ describe('gcd letters in diffShapes', () => {
     expect(d.countChanges[0]).toMatchObject({ key, a: 1, b: 2 });
   });
 
+  test('one of two identical hits that changes its letter is not drift', () => {
+    const a = [{ key, tuples: [tuple({ gcd: '13p3p3p2p5l1', count: 2 })] }];
+    const b = [{ key, tuples: [tuple({ gcd: '13p3p3p2p5l1' }), tuple()] }];
+    const d = diffShapes(a, b);
+    expect(d).toMatchObject({ added: [], removed: [], drift: false });
+    expect(d.gcdLetters).toHaveLength(1);
+  });
+
+  test('two hits that merge into one letter are not drift', () => {
+    const a = [{ key, tuples: [tuple({ gcd: '13p3p3p2p5l1' }), tuple()] }];
+    const b = [{ key, tuples: [tuple({ gcd: '13p3p3p2p5l1', count: 2 })] }];
+    const d = diffShapes(a, b);
+    expect(d).toMatchObject({ added: [], removed: [], drift: false });
+    expect(d.gcdLetters).toHaveLength(1);
+  });
+
   test.each([
     ['gcs', [{ key, tuples: [tuple({ gcs: 'G101' })] }]],
     ['one consent state', [{ key, tuples: [tuple({ analytics: 'granted' })] }]],
