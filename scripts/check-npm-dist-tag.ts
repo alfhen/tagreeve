@@ -3,7 +3,7 @@ import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 export const release = /^\d+\.\d+\.\d+$/;
-export const candidate =/^\d+\.\d+\.\d+-rc\.\d+$/;
+export const candidate = /^\d+\.\d+\.\d+-rc\.\d+$/;
 
 export function distTagFor(version: string): 'next' | 'latest' {
   if (typeof version === 'string') {
