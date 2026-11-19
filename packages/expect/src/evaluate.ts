@@ -33,6 +33,7 @@ import { GA4_BODY_ONLY_IGNORE, type MultipartBody, bodyEntries, guardFieldName, 
 import { consentModeSetup, GOOGLE_VENDORS } from './consent-mode-setup.ts';
 import { earlyIdentityPush } from './early-identity-push.ts';
 import { idHandover } from './id-handover.ts';
+import { serverContainerRejected } from './server-container-rejected.ts';
 import { hostMatches } from './hosts.ts';
 import { evaluatePushRule, fieldGlob } from './push-rules.ts';
 import { evaluateTagRule, expectedTagsOf, type ExpectedTags } from './tags.ts';
@@ -137,7 +138,8 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
       add(`${kind}: ${rule.description}`, pass, evidence, message, countRests ? 'warn' : outcome.severity, countRests ? 'serverSendProbableLink' : note, scoped && (pass || failureRests));
     }
 
-  builtInChecks(records, scenario, ctx, add);
+  const containerRan = Boolean(runRecord && (runRecord.serverContainer || runRecord.testServerContainer) && !runRecord.serverContainer?.error);
+  builtInChecks(records, scenario, ctx, add, containerRan);
   return results;
 }
 
@@ -1111,13 +1113,14 @@ function countByHost(flags: readonly Flag[], ctx: Context): string {
 }
 
 /** Built-in checks whose default is not `fail`. */
-const DEFAULT_SEVERITY: Partial<Record<BuiltinName, Severity>> = { earlyIdentifiers: 'warn', consentModeSetup: 'warn', earlyIdentityPush: 'warn', idHandover: 'warn' };
+const DEFAULT_SEVERITY: Partial<Record<BuiltinName, Severity>> = { earlyIdentifiers: 'warn', consentModeSetup: 'warn', earlyIdentityPush: 'warn', idHandover: 'warn', serverContainerRejected: 'warn' };
 
 function builtInChecks(
   records: readonly Input[],
   scenario: Scenario,
   ctx: Context,
   addResult: (expectation: string, pass: boolean, evidence: string[], message: string, severity?: Severity, note?: ResultNote, timeJudged?: boolean) => void,
+  containerRan: boolean,
 ) {
   const add = (name: BuiltinName, pass: boolean, evidence: string[], message: string, note?: ResultNote, timeJudged = false) =>
     addResult(
@@ -1200,16 +1203,21 @@ function builtInChecks(
       [],
       'Cannot check for data that is not from the run identity: no identity was given and no possibleRealData flags exist.',
     );
-    return;
+  } else {
+    add(
+      'possibleRealData',
+      problems.length === 0,
+      evidence,
+      problems.length === 0
+        ? 'Expected no data that is not from the run identity, found none.'
+        : `Expected no data that is not from the run identity, found ${problems.length}: ${shown}${more}.`,
+    );
   }
-  add(
-    'possibleRealData',
-    problems.length === 0,
-    evidence,
-    problems.length === 0
-      ? 'Expected no data that is not from the run identity, found none.'
-      : `Expected no data that is not from the run identity, found ${problems.length}: ${shown}${more}.`,
-  );
+
+  if (containerRan) {
+    const rejected = serverContainerRejected([...ctx.requests.values()], ctx.responses, scenario.options.serverHosts ?? []);
+    add('serverContainerRejected', rejected.pass, rejected.evidence, rejected.message);
+  }
 }
 
 const DENIABLE = ['analytics', 'ads', 'adUserData'] as const;

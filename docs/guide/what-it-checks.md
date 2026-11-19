@@ -48,6 +48,8 @@ Google tags also send the Consent Mode signals they were set up with. Tagreeve w
 
 Tracking also needs the same visitor ID in every part of the site. Google Analytics keeps a client ID and a session ID. A checkout on another host or in a frame can start with new ones, and the visit then looks like two visitors. Tagreeve warns when the IDs do not carry over. The warning names the measurement ID and the two places, and never prints an ID. See [idHandover](../cli.md#idhandover).
 
+With `--server-container`, the local container can answer most browser requests with an error while the run still looks fine. Tagreeve warns when more than half of the requests to the container, and at least 2, were rejected. The warning gives counts and status codes only. See [serverContainerRejected](../cli.md#servercontainerrejected).
+
 ## Stub mode
 
 By default, a run is in stub mode. In stub mode, Tagreeve records each known tracking request and then answers it itself. Your test visits do not add fake traffic to real reports.

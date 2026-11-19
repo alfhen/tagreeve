@@ -215,6 +215,11 @@ export function createStandIn(env: StandInEnv, options: { readonly socketTimeout
     const chunks: Buffer[] = [];
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
     req.on('end', () => {
+      const rejectWith = Number(url.searchParams.get('reject'));
+      if (Number.isInteger(rejectWith) && rejectWith >= 400 && rejectWith <= 599) {
+        res.writeHead(rejectWith, { 'content-type': 'text/plain' }).end('rejected');
+        return;
+      }
       const answerAfter = url.searchParams.get('answer') === 'after';
       const answer = () => {
         if (!res.writableEnded) res.writeHead(200, { 'content-type': 'text/plain' }).end('ok');

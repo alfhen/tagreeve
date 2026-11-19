@@ -1,6 +1,6 @@
 import { guardFieldName, maskValuePath, OTHER_NAME, platformHostFor } from '@tagreeve/decoders';
 import type { FlagKind, HitLinkMiss, Result, ResultNote, RunRecords, ServerContainerErrorClass, Severity } from '@tagreeve/core';
-import { expectedTagsOf, isServerHit, judgeIndex, labelKind, listWithMore, NO_EVENT, pushShapes, summarizeTags, tagLabel, viaHitOf, type PushShape, type PushShapes, type TagsContainerSummary } from '@tagreeve/expect';
+import { expectedTagsOf, isServerHit, judgeIndex, labelKind, listWithMore, NO_EVENT, pushShapes, rejectedCounts, summarizeTags, tagLabel, viaHitOf, type PushShape, type PushShapes, type TagsContainerSummary } from '@tagreeve/expect';
 import { formatDefaultsLine, type DefaultUsed } from './defaults.ts';
 import { NOTE_TEXT } from './report/model.ts';
 
@@ -260,13 +260,19 @@ export function formatDuration(ms: number): string {
 const SERVER_CONTAINER_LIMITS =
   '  Not shown: Stape-only features, tags that need the hosting layer, unpublished workspaces, calls no decoder matched (flagged unknown)';
 
+function rejectedSuffix(summary: Summary): string {
+  const result = summary.results.find((r) => r.expectation === 'builtin: serverContainerRejected');
+  const counts = result && !result.pass ? rejectedCounts(result.message) : null;
+  return counts ? `; ${counts.rejected} of ${counts.counted} requests rejected` : '';
+}
+
 function serverContainerLines(summary: Summary): string[] {
   const { serverContainer: c, testServerContainer } = summary;
   const head = testServerContainer ? 'stand-in container (test seam)' : c?.error ? `failed (${c.error})` : 'image ok';
-  if (!c) return testServerContainer ? [`Server container: ${head}`] : [];
+  if (!c) return testServerContainer ? [`Server container: ${head}${rejectedSuffix(summary)}`] : [];
   const error = testServerContainer && c.error ? `, failed (${c.error})` : '';
   const calls = `${c.calls} vendor call${c.calls === 1 ? '' : 's'}, ${c.exact} linked exactly, ${c.probable} probable, ${c.unlinked} unlinked`;
-  return [`Server container: ${head}${error}; ${calls}; ${c.forwarded} request${c.forwarded === 1 ? '' : 's'} forwarded to Google`, SERVER_CONTAINER_LIMITS];
+  return [`Server container: ${head}${error}; ${calls}; ${c.forwarded} request${c.forwarded === 1 ? '' : 's'} forwarded to Google${c.error ? '' : rejectedSuffix(summary)}`, SERVER_CONTAINER_LIMITS];
 }
 
 const DATALAYER_EVENTS_SHOWN = 3;

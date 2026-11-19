@@ -1,5 +1,4 @@
-import { hashEmail, type Hit, type HitLinkMiss, type Identity, type Request } from '@tagreeve/core';
-import { isServerContainerRequest, isServerHostUrl } from '../stub.ts';
+import { hashEmail, isServerContainerRequest, isServerHostUrl, type Hit, type HitLinkMiss, type Identity, type Request } from '@tagreeve/core';
 
 /** A shared value shorter than this proves nothing. */
 const MIN_VALUE_LENGTH = 8;

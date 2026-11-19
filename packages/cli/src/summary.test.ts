@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { createIdentity, newId } from '@tagreeve/core';
 import { applyBaseline, buildSummary, dataLayerLabelRank, redactFlagDetail, countHits, exitCodeFor, formatDuration, formatSummary, type Summary } from './summary.ts';
 import { main } from './main.ts';
@@ -374,6 +374,38 @@ test('a container that failed shows its error class, and the stand-in stays mark
   const records = serverRecords();
   records.run.testServerContainer = true;
   expect(formatSummary(buildSummary(records, [], 'run.jsonl'))).toContain('Server container: stand-in container (test seam); 4 vendor calls');
+});
+
+describe('the rejected requests suffix', () => {
+  const rejectedResult = (over: object = {}) => ({
+    type: 'result',
+    id: newId('result'),
+    runId: 'run_x',
+    expectation: 'builtin: serverContainerRejected',
+    pass: false,
+    severity: 'warn',
+    message: '22 of 27 requests to the server container were rejected (400: 22).',
+    evidence: Array.from({ length: 22 }, () => newId('request')),
+    ...over,
+  }) as unknown as Result;
+  const line = (records: RunRecords, results: Result[]) => formatSummary(buildSummary(records, results, 'run.jsonl')).split('\n').find((l) => l.startsWith('Server container:'))!;
+
+  test('a warning or failing result adds the counts it holds, which the records do not', () => {
+    expect(line(serverRecords(), [rejectedResult()])).toMatch(/forwarded to Google; 22 of 27 requests rejected$/);
+    expect(line(serverRecords(), [rejectedResult({ severity: 'fail' })])).toContain('; 22 of 27 requests rejected');
+  });
+
+  test('a passing result and no result add nothing', () => {
+    expect(line(serverRecords(), [rejectedResult({ pass: true, message: 'No requests to the server container to check.', evidence: [] })])).not.toContain('requests rejected');
+    expect(line(serverRecords(), [])).not.toContain('requests rejected');
+  });
+
+  test('a failed container line has no suffix', () => {
+    const failed = line(serverRecords('exited'), []);
+    expect(failed).toContain('Server container: failed (exited); ');
+    expect(failed).not.toContain('requests rejected');
+    expect(line(serverRecords('exited'), [rejectedResult()])).not.toContain('requests rejected');
+  });
 });
 
 test('a run without a container has no serverContainer field and no line', () => {

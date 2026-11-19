@@ -1,6 +1,5 @@
-import { isLibraryLoadPath, type Request } from '@tagreeve/core';
+import { isLibraryLoadPath, isServerContainerRequest, isServerHostUrl, LOAD_RESOURCE_TYPES, type Request } from '@tagreeve/core';
 import { isCollectionEndpoint, isMetaCapiEndpoint, type TrackerEntry } from '@tagreeve/decoders';
-import { hostMatches } from '@tagreeve/expect';
 
 const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
 
@@ -43,7 +42,6 @@ export function stubResponse(req: Pick<Request, 'resourceType' | 'headers'> & Pa
   }
 }
 
-const LOADS = new Set(['script', 'stylesheet', 'font', 'document']);
 const VENDOR_HOST =
   /(^|\.)(facebook\.com|facebook\.net|doubleclick\.net|googleadservices\.com|googlesyndication\.com|googletagmanager\.com)$|^(www\.)?google\.com$/;
 const COLLECTION_PATH = /^\/(?:tr|pagead\/(?:viewthroughconversion|conversion|1p-[\w-]+)|rmkt|ccm|td)(?:\/|$)/;
@@ -65,7 +63,7 @@ export function isKnownVendorCollection(req: Pick<Request, 'url' | 'resourceType
   if (isLibraryLoadPath(url.pathname)) return false;
   if (COLLECTION_PATH.test(url.pathname)) return true;
   if (SITE_FUNCTION_PATH.test(url.pathname)) return false;
-  return !LOADS.has(req.resourceType);
+  return !LOAD_RESOURCE_TYPES.has(req.resourceType);
 }
 
 export interface StubDecisionOptions {
@@ -74,32 +72,7 @@ export interface StubDecisionOptions {
   trackers: readonly TrackerEntry[];
 }
 
-const bareHost = (h: string) => h.replace(/^\[|\]$/g, '');
-
-/** True when the URL's host is one of `serverHosts`, with or without IPv6 brackets. An unparsable URL is on none. */
-export function isServerHostUrl(url: string, serverHosts: readonly string[]): boolean {
-  try {
-    return hostMatches(bareHost(new URL(url).hostname), serverHosts.map(bareHost));
-  } catch {
-    return false;
-  }
-}
-
-/**
- * A request to a `serverHosts` host that the local server container answers under `--server-container`:
- * everything except library loads and script, stylesheet, font and document loads. It does not ask the decoders,
- * because a first-party container often uses paths that none of them knows.
- */
-export function isServerContainerRequest(req: Pick<Request, 'url' | 'resourceType'>, serverHosts: readonly string[]): boolean {
-  let url: URL;
-  try {
-    url = new URL(req.url);
-  } catch {
-    return false;
-  }
-  if (!/^https?:$/.test(url.protocol) || !isServerHostUrl(req.url, serverHosts)) return false;
-  return !isLibraryLoadPath(url.pathname) && !LOADS.has(req.resourceType);
-}
+export { isServerContainerRequest, isServerHostUrl };
 
 /** A collection request that stub and `server` mode answer locally. `server` mode lets the hosts in `serverHosts` through. */
 export function isStubbedCollection(req: Request, options: StubDecisionOptions): boolean {
