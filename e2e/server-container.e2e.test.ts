@@ -95,6 +95,17 @@ describe('--server-container with the stand-in container', () => {
     expect(pixel).toHaveLength(1);
     const capi = records.hits.find((h) => h.vendor === 'meta-capi')!;
     expect(capi.via).toEqual({ hitId: pixel[0]!.id, by: 'eventId', confidence: 'exact' });
+    expect(first.records!.run.recordSchemaVersion).toBe(5);
+    const calls = fromContainer(records);
+    const capiCall = calls.find((r) => r.url.includes('graph.facebook.com'))!;
+    expect(capiCall.url).toContain('access_token=[redacted]');
+    expect(capiCall.secretsRedacted).toEqual(['access_token']);
+    const others = calls.filter((r) => r !== capiCall);
+    expect(others).toHaveLength(2);
+    for (const r of others) expect('secretsRedacted' in r).toBe(false);
+    const browser = records.requests.filter((r) => r.captured !== 'serverContainer');
+    expect(browser.length).toBeGreaterThan(0);
+    for (const r of browser) expect('secretsRedacted' in r).toBe(false);
   });
 
   test('the container calls carry the time of the proxy and the id of the running step', () => {
