@@ -334,3 +334,79 @@ describe('no ID in the result', () => {
     expect(text).not.toMatch(/searchParams|URLSearchParams|postData/);
   });
 });
+
+describe('session ID per client', () => {
+  const MSG = 'Expected the GA4 client and session ID to carry over between contexts, found';
+  const specs = (bX: Partial<Spec> = {}, bY: Partial<Spec> = {}): Spec[] => [
+    { ...ctxA, cid: CID_A, sid: SID_A },
+    { ...ctxA, cid: CID_B, sid: SID_B },
+    { ...ctxB, cid: CID_A, sid: SID_B, ...bX },
+    { ...ctxB, cid: CID_B, sid: SID_B, ...bY },
+  ];
+  const urlOf = (r: ReturnType<typeof run>, i: number) => r.requests.get(r.hits[i]!.requestId)!.url;
+
+  test('a client that changes session is flagged although another client shares it', () => {
+    const r = run(specs());
+    expect(CID_A).not.toBe(CID_B);
+    expect(urlOf(r, 2)).toContain(`sid=${SID_B}`);
+    for (const v of [CID_A, CID_B, SID_A, SID_B]) expect(r.hits.some((h) => r.requests.get(h.requestId)!.url.includes(v))).toBe(true);
+    expect(r.result.pass).toBe(false);
+    expect(r.result.message).toBe(`${MSG} 1 difference: ${TID}: session ID differs between main frame on localhost and main frame on 127.0.0.1.`);
+    expect(r.result.evidence.length).toBeGreaterThan(0);
+    const ids = new Set(r.hits.map((h) => h.id as string));
+    for (const e of r.result.evidence) expect(ids.has(e)).toBe(true);
+    expect(r.result.evidence).toContain(r.hits[0]!.id);
+    expect(r.result.evidence).toContain(r.hits[2]!.id);
+    const json = JSON.stringify(r.result);
+    for (const v of [CID_A, CID_B, SID_A, SID_B]) expect(json).not.toContain(v);
+  });
+
+  test('the same four hits pass when the client keeps its session', () => {
+    const r = run(specs({ sid: SID_A }));
+    expect(urlOf(r, 2)).toContain(`sid=${SID_A}`);
+    expect(r.result.pass).toBe(true);
+    expect(r.result.evidence).toEqual([]);
+    expect(r.result.message).toBe(`${MSG} no difference.`);
+  });
+
+  test('only a client both contexts have under the same measurement ID counts', () => {
+    const third = '6666666666.1730000003';
+    const base = run(specs());
+    expect(base.result.message).toContain('session ID differs');
+    const a = run(specs({ cid: third }));
+    expect(third).not.toBe(CID_A);
+    expect(third).not.toBe(CID_B);
+    expect(urlOf(a, 2)).toContain(third);
+    expect(a.result.pass).toBe(true);
+    expect(a.result.message).not.toContain('session ID differs');
+    expect(a.result.message).not.toContain('client ID differs');
+    const b = run(specs({ tid: 'G-PWTEST0002' }));
+    expect(b.hits[2]!.params.tid).toBe('G-PWTEST0002');
+    expect(b.hits[0]!.params.tid).toBe(TID);
+    expect(b.result.pass).toBe(true);
+    expect(b.result.message).not.toContain('session ID differs');
+  });
+
+  test('a client with no sid in one context is skipped and hides nothing', () => {
+    const one = run([
+      { ...ctxA, cid: CID_A, sid: SID_A },
+      { ...ctxA, cid: CID_B, sid: SID_B },
+      { ...ctxB, cid: CID_A, sid: SID_B },
+      { ...ctxB, cid: CID_B, sid: undefined },
+    ]);
+    expect(new URL(urlOf(one, 3)).searchParams.has('sid')).toBe(false);
+    expect(urlOf(one, 2)).toContain(`sid=${SID_B}`);
+    expect(one.result.pass).toBe(false);
+    expect(one.result.message).toContain('session ID differs');
+    const two = run([
+      { ...ctxA, cid: CID_A, sid: SID_A },
+      { ...ctxA, cid: CID_B, sid: SID_B },
+      { ...ctxB, cid: CID_A, sid: undefined },
+      { ...ctxB, cid: CID_B, sid: SID_B },
+    ]);
+    expect(new URL(urlOf(two, 2)).searchParams.has('sid')).toBe(false);
+    expect(urlOf(two, 3)).toContain(`sid=${SID_B}`);
+    expect(two.result.pass).toBe(true);
+    expect(two.result.message).not.toContain('session ID differs');
+  });
+});
