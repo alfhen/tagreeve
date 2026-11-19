@@ -82,10 +82,13 @@ export function idHandover(hits: readonly Hit[], requests: ReadonlyMap<string, R
           flag(`${tid}: client ID differs between ${a.label} and ${b.label}`, a, b);
           continue;
         }
-        const sidsOf = (c: HitContext) => new Set(c.seen.filter((s) => shared.has(s.cid) && s.sid).map((s) => s.sid!));
-        const sidsA = sidsOf(a);
-        const sidsB = sidsOf(b);
-        if (sidsA.size > 0 && sidsB.size > 0 && ![...sidsA].some((v) => sidsB.has(v))) flag(`${tid}: session ID differs between ${a.label} and ${b.label}`, a, b);
+        const sidsOf = (c: HitContext, cid: string) => new Set(c.seen.filter((s) => s.cid === cid && s.sid).map((s) => s.sid!));
+        const differs = [...shared].some((cid) => {
+          const sidsA = sidsOf(a, cid);
+          const sidsB = sidsOf(b, cid);
+          return sidsA.size > 0 && sidsB.size > 0 && ![...sidsA].some((v) => sidsB.has(v));
+        });
+        if (differs) flag(`${tid}: session ID differs between ${a.label} and ${b.label}`, a, b);
       }
     }
   }
