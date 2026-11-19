@@ -1207,6 +1207,13 @@ describe('gcd letters in diffShapes', () => {
     expect(d.countChanges[0]).toMatchObject({ key, a: 1, b: 2 });
   });
 
+  test('a pair with a lower count is a count change and not drift', () => {
+    const d = diffShapes([{ key, tuples: [tuple({ gcd: '13p3p3p2p5l1', count: 2 })] }], [{ key, tuples: [tuple({ count: 1 })] }]);
+    expect(d).toMatchObject({ drift: false, removed: [], added: [] });
+    expect(d.countChanges).toEqual([expect.objectContaining({ a: 2, b: 1 })]);
+    expect(d.gcdLetters).toHaveLength(1);
+  });
+
   test('one of two identical hits that changes its letter is not drift', () => {
     const a = [{ key, tuples: [tuple({ gcd: '13p3p3p2p5l1', count: 2 })] }];
     const b = [{ key, tuples: [tuple({ gcd: '13p3p3p2p5l1' }), tuple()] }];

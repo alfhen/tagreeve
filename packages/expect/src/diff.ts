@@ -611,6 +611,7 @@ export function diffShapes(a: ShapeKey[], b: ShapeKey[], options: ShapeDiffOptio
       if (before) {
         if (before.count !== t.count) result.countChanges.push({ key, consent: t.consent, ids: t.ids, a: before.count, b: t.count });
       } else if (first && !tb.has(first.tid)) {
+        first.left = 0;
         if (first.t.count !== t.count) result.countChanges.push({ key, consent: t.consent, ids: t.ids, a: first.t.count, b: t.count });
       } else if (need > 0) {
         result.added.push({ key, consent: t.consent, ids: t.ids, wholeKey: !ka });
