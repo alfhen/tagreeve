@@ -1,6 +1,6 @@
 # Plan for 0.8.0
 
-0.8.0 has one goal: one command gives a DPO-ready audit of a site's consent behaviour (#1391). It adds a consent matrix to `suite`, which runs each scenario under accept, reject, no answer and accept then withdraw. It adds canaries: seeded test click IDs on the start URL, searched for in every request, with the route each one took. It adds a consent audit to the HTML report. It also fixes the issues found in the 0.7.0 field tests and reviews: the install docs (#1587), baseline drift on `gcd` letters (#1569), the `addToCart` message on a 429 (#1576), the `Server container` line wording (#1583), path moves in `diff` (#1584), scrubbed secrets on server container records (#1585), server-side rules when the container rejects requests (#1579), and six review follow-ups (#1533, #1532, #1531, #1530, #1519, #1513). Each item is one PR. A PR is done when its acceptance test passes in CI, an adversarial review reports no blockers or majors, and it is squash-merged.
+0.8.0 has one goal: two commands give a DPO-ready audit of a site's consent behaviour (#1391): `tagreeve suite --consent ...` runs it and `tagreeve report <suite dir> --html` shows it. It adds a consent matrix to `suite`, which runs each scenario under accept, reject, no answer and accept then withdraw. It adds canaries: seeded test click IDs on the start URL, searched for in every request, with the route each one took. It adds a consent audit to the HTML report. It also fixes the issues found in the 0.7.0 field tests and reviews: the install docs (#1587), baseline drift on `gcd` letters (#1569), the `addToCart` message on a 429 (#1576), the `Server container` line wording (#1583), path moves in `diff` (#1584), scrubbed secrets on server container records (#1585), server-side rules when the container rejects requests (#1579), and six review follow-ups (#1533, #1532, #1531, #1530, #1519, #1513). Each item is one PR. A PR is done when its acceptance test passes in CI, an adversarial review reports no blockers or majors, and it is squash-merged.
 
 0.8.0 starts from `main` at `119e6b9` ("Release prep for 0.7.0 (#1586)").
 
@@ -70,7 +70,7 @@ Decided in this plan:
 - **A scenario's own rules run only in the cell of its own state** (choice: maintainer may change). The rules were written for the state the scenario answers. The other cells run the built-in checks only, and their `suite.json` cell gets `rulesSkipped` with the count.
 - **`--consent` takes one variant and no baseline in 0.8.0** (choice: maintainer may change). `--consent` with a second `--variant` or with `--baseline` exits 2. `--stores` works with it.
 - **The record names its cell** (choice: maintainer may change). `Run.consentCell` is `accept`, `reject`, `none` or `withdraw`, set by `labelRecord` as it sets `Run.store`, and absent outside a matrix. The state is also in the `suite.json` cell labels (`labels.consent`) and in the record file name `<scenario>[.<store>].<state>.<variant>.jsonl`. `baselineFileName` adds `.<state>` after the store, so `baseline save` of a cell record never writes the file that a plain `run --baseline` reads.
-- **The withdraw column counts only the withdrawn epoch** (choice: maintainer may change). T13 counts every hit of the accept, reject and none cells, and only the hits in the `withdrawn` epoch of the withdraw cell.
+- **The withdraw column counts only the withdrawn epoch** (choice: maintainer may change). T13 counts every hit of the accept cell, the hits of the reject and none cells that are not in a `granted` epoch (a later `consent` step can grant), and only the hits in the `withdrawn` epoch of the withdraw cell.
 - **Canaries are a scenario option, `canaries: true`** (choice: maintainer may change). The run appends `gclid`, `gbraid`, `wbraid`, `fbclid`, `msclkid` and `ttclid` to the start URL. Each value is `TEST-<PARAM>-<seed>-<cell>-0001`, for example `TEST-GCLID-7-REJECT-0001`, with `RUN` as the cell outside a matrix. So every cell of a matrix has its own canaries. A start URL that already has one of these parameters exits 2 and names the parameter. The run identity's email and phone are canaries too. Output names a canary by source and name (`url param gclid`, `identity email`), never by value. Only `Run.canaries` holds the URL canary values, and an identity canary has no value outside `Run.identity`.
 - **The recorder searches for canaries when the run closes,** on the raw records, as it scans for `possibleRealData` today (choice: maintainer may change). The matcher is pure code in `@tagreeve/core`. Each finding is an `identifierRoute` flag. One `canarySearch` flag per run says what was searched and what was skipped. The search covers request URLs, bodies and decoded `Hit.params` values. It does not search headers, including `Referer` and `Cookie`, and every message that says what was searched says so. The built-in `identifierRoute` in `@tagreeve/expect` judges the flags, so `evaluate` of a stored run judges them too.
 - **Route kinds** (choice: maintainer may change): `pageUrl` when the canary is only in the decoded `Hit.page` value or in a referrer field, for example GA4 `dl` and `dr`, Meta `dl` and `rl`, Pinterest `ad.loc`, Google Ads `url`, `dl` and `ref`. The decoders own the field names: B13 puts them in `packages/decoders/src/page-fields.ts`, exported from `@tagreeve/decoders`, and every decoder reads its page field from there; the recorder keeps no vendor table of its own; `direct` when the sink holds the canary under its own parameter name, or the canary is the identity; `cookie` (V13) when a checkpoint saw it in a first-party cookie before the sink; `unknown` otherwise.
@@ -358,7 +358,7 @@ Closes #1583
 Closes #1532
 - #1533: the guide says a request to a listed platform host gets the `platformHost` flag on any site, which never fails a run, and with `platformHosts: false` it is an `unknownDestination`. Design §11 says hashes of an extra email or phone count for `earlyIdentityPush`, as `docs/cli.md` does.
 - #1583: both pages say `forwarded` counts the requests the container itself sends to Google, and the rejected count is about browser requests.
-- #1532: the `consentModeSetup` text names the gtag `arguments` form, recorded as an array or as an index-key object, and says a literal nested array does not count. It says GTM's `gtm.uniqueEventId` stamp is not in the record, as E13 showed.
+- #1532: the `consentModeSetup` text names the gtag `arguments` form, recorded as an array or as an index-key object, and says a literal nested array does not count. It says nothing about GTM's `gtm.uniqueEventId` stamp until E13 reports where the key appears in the default order and in `order=inner`.
 - The fixes: G13 (`gcd` letters), K13 (the message), Q13 (`secretsRedacted`), Y13 (whole emails, the `possibleRealData` change, and the known limit that a foreign email glued to the run's email inside base64 still counts as the run's own), N13 (`pathsMoved`).
 Evals:
 
@@ -426,6 +426,7 @@ Evals:
 | T13-3 | behaviour | The fixture's sentinel identity values and the request URLs are in the records and absent from `suite.json` and stdout. | The e2e test, precondition then absence. |
 | T13-4 | regression | `tagreeve report` still reads a suite folder without `--consent`, and still refuses one with it. | `pnpm exec vitest run --project unit packages/cli/src/report/suite.test.ts`. |
 | T13-5 | behaviour | The docs describe `--consent`, `withdrawWith` and `consentMatrix`. | `grep -n "withdrawWith" docs/cli.md` and `grep -n "consentMatrix" docs/cli.md` print lines; `pnpm docs:build` passes. |
+| T13-6 | behaviour | A reject cell whose scenario has a later `consent: accept` step does not count the hits of the `granted` epoch. | `pnpm exec vitest run --project unit packages/expect/src/state-table.test.ts`. |
 
 Acceptance: T13-1 passes, and fails on `main`, where `suite.json` has no `consentMatrix`.
 
@@ -496,7 +497,7 @@ Evals:
 | Id | Kind | What must be true | How to check |
 | --- | --- | --- | --- |
 | V13-1 | behaviour | The relay journey's gclid route has kind `cookie` and names `_pw_click` and the checkpoint. | `pnpm exec vitest run --project e2e e2e/identifier-route.e2e.test.ts`. |
-| V13-2 | behaviour | The `_pw_click` value and the value of a fixture cookie that is not a canary are in the browser (read with `context.cookies()` in the test) and absent from the JSONL record and stdout. | The same e2e test, precondition then absence. |
+| V13-2 | behaviour | The `_pw_click` value and the value of a fixture cookie that is not a canary are in the browser (read with `context.cookies()` in the test). The fixture cookie's value is absent from the JSONL record and stdout. The `_pw_click` value is absent from stdout and from every record field except the `Run.canaries` entry of the gclid canary (C13), and no cookie field holds it. | The same e2e test, precondition then absence. |
 | V13-3 | behaviour | A cookie that holds the canary inside `GCL.<ts>.<token>` is matched. | `pnpm exec vitest run --project unit packages/recorder/src/canary-routes.test.ts`. |
 | V13-4 | error path | A sink before the first sighting keeps kind `unknown`. | The same unit file. |
 
@@ -550,7 +551,7 @@ Closes #1391
 - `tagreeve report <suite dir> --html <file>` of a consent suite adds a section "Consent audit" with one column per state: the cell verdict, the failed and warned rules and built-ins, the `identifierRoute` routes, the `consentModeSetup` result and what was searched and skipped.
 - The section shows the `consentMatrix` table of T13.
 - The section starts with one fixed line: the report shows what was sent and flags likely problems; people decide what is allowed. Under it: a pass means no planted value was found in the searched forms.
-- `docs/guide/consent-audit.md` shows the one command (`tagreeve suite --consent accept,reject,none,withdraw`), `withdrawWith` and `canaries`, and how to read the section.
+- `docs/guide/consent-audit.md` shows the two commands (`tagreeve suite --consent accept,reject,none,withdraw`, then `tagreeve report <suite dir> --html`), `withdrawWith` and `canaries`, and how to read the section.
 - The refusal of a consent suite from S13 is removed, and `buildSuiteModel` gives each consent cell its own view by `Run.consentCell`.
 - The fixed line and the searched list say which request parts were searched (URL, body and decoded fields) and that headers were not.
 - It documents F13 and A13.
@@ -567,7 +568,7 @@ Evals:
 | A13-6 | behaviour | The identity email and a canary value are in the records and absent from the HTML; the fixed line says headers were not searched. | The same file, precondition then absence. |
 
 Acceptance: A13-1 passes, and fails on `main` of wave 6, where the suite report has no consent audit.
-QA: run the one command on the fixture site, open the report, and read it as a DPO would.
+QA: run `suite --consent` and then `report --html` on the fixture site, open the report, and read it as a DPO would.
 
 ### Wave 8
 
@@ -595,6 +596,10 @@ Acceptance: O13-1 and O13-6 pass, and fail on `main`, where the rules fail or pa
 ## Release
 
 **R18 Release prep for 0.8.0-rc.1.** Written as its own entry after every entry above has merged. 0.8.0-rc.1 is cut through a release-prep PR. The PR runs `scripts/bump-version.sh 0.8.0-rc.1`, which sets `package.json` and the version lines of the README, `docs/cli.md` and `docs/design.md`. It writes the `## 0.8.0-rc.1` section of `CHANGELOG.md` from the PR lines and removes the #1569 and #1576 lines from "Known", the README "In 0.8.0-rc.1" line, design §15 item 8 and a new §15.8 "Differences in 0.8", and re-records `site/demo/` if `pnpm docs:test` shows a change. `package.json` is gated, so the maintainer merges it, and CI publishes the release under `next`. No agent publishes, pushes a tag or starts the release workflow.
+
+Touches: `package.json`, the version lines of `README.md`, `docs/cli.md` and `docs/design.md`, the `## 0.8.0-rc.1` section of `CHANGELOG.md`, `docs/design.md` §15, `site/demo/`.
+
+Acceptance: `pnpm exec vitest run --project unit scripts/bump-version.test.ts` and `pnpm docs:test` pass on the release-prep PR.
 
 ## After the PRs
 
