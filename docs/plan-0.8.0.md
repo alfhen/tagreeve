@@ -29,7 +29,7 @@ Each issue was read on 2026-11-19 against `main` at `119e6b9`.
 
 | Issue | Kind | Status on main | Entry | Where in the code |
 | --- | --- | --- | --- | --- |
-| #1391 | feature | Open. Feasibility comment: canaries feasible, matrix feasible, server internals out of reach. | S13, T13, C13, U13, J13, V13, W13, F13, A13 | `suiteCommand` in `packages/cli/src/suite.ts`; `buildFlags` and `close` in `packages/recorder/src/recorder.ts`; `variants` and `fieldHashes` in `packages/core/src/identity.ts`; `packages/cli/src/report/` |
+| #1391 | feature | Open. Feasibility comment: canaries feasible, matrix feasible, server internals out of reach. | S13, T13, C13, B13, U13, J13, V13, W13, F13, A13 | `suiteCommand` in `packages/cli/src/suite.ts`; `buildFlags` and `close` in `packages/recorder/src/recorder.ts`; `variants` and `fieldHashes` in `packages/core/src/identity.ts`; `packages/cli/src/report/` |
 | #1587 | docs | Open. Five places give `npm i -g tagreeve@next`. `scripts/docs-text.docs.test.ts` requires `@next` and refuses the bare command. | I13 | `README.md`, `docs/cli.md`, `docs/guide/first-run.md`, `INSTALL_COMMAND` in `site/src/lib/prompt.ts` |
 | #1569 | bug | Open. `diffShapes` keys a tuple on raw `gcd`, so `p` and `q` are two tuples. | G13 | `diffShapes` in `packages/expect/src/diff.ts`; `GCD_LETTERS` in `packages/decoders/src/ga4.ts` |
 | #1576 | bug | Open. `waitForCart` throws one fixed message. | K13 | `waitForCart` and `createCartCheck` in `packages/recorder/src/steps.ts` |
@@ -73,7 +73,8 @@ Decided in this plan:
 - **The withdraw column counts only the withdrawn epoch** (choice: maintainer may change). T13 counts every hit of the accept, reject and none cells, and only the hits in the `withdrawn` epoch of the withdraw cell.
 - **Canaries are a scenario option, `canaries: true`** (choice: maintainer may change). The run appends `gclid`, `gbraid`, `wbraid`, `fbclid`, `msclkid` and `ttclid` to the start URL. Each value is `TEST-<PARAM>-<seed>-<cell>-0001`, for example `TEST-GCLID-7-REJECT-0001`, with `RUN` as the cell outside a matrix. So every cell of a matrix has its own canaries. A start URL that already has one of these parameters exits 2 and names the parameter. The run identity's email and phone are canaries too. Output names a canary by source and name (`url param gclid`, `identity email`), never by value. Only `Run.canaries` holds the URL canary values, and an identity canary has no value outside `Run.identity`.
 - **The recorder searches for canaries when the run closes,** on the raw records, as it scans for `possibleRealData` today (choice: maintainer may change). The matcher is pure code in `@tagreeve/core`. Each finding is an `identifierRoute` flag. One `canarySearch` flag per run says what was searched and what was skipped. The search covers request URLs, bodies and decoded `Hit.params` values. It does not search headers, including `Referer` and `Cookie`, and every message that says what was searched says so. The built-in `identifierRoute` in `@tagreeve/expect` judges the flags, so `evaluate` of a stored run judges them too.
-- **Route kinds** (choice: maintainer may change): `pageUrl` when the canary is only in the decoded `Hit.page` value or in a referrer field, for example GA4 `dl` and `dr`, Meta `dl` and `rl`, Pinterest `ad.loc`, Google Ads `url`, `dl` and `ref`. The decoders own the field names (U13 exports them from `@tagreeve/decoders`); the recorder keeps no vendor table of its own; `direct` when the sink holds the canary under its own parameter name, or the canary is the identity; `cookie` (V13) when a checkpoint saw it in a first-party cookie before the sink; `unknown` otherwise.
+- **Route kinds** (choice: maintainer may change): `pageUrl` when the canary is only in the decoded `Hit.page` value or in a referrer field, for example GA4 `dl` and `dr`, Meta `dl` and `rl`, Pinterest `ad.loc`, Google Ads `url`, `dl` and `ref`. The decoders own the field names: B13 puts them in `packages/decoders/src/page-fields.ts`, exported from `@tagreeve/decoders`, and every decoder reads its page field from there; the recorder keeps no vendor table of its own; `direct` when the sink holds the canary under its own parameter name, or the canary is the identity; `cookie` (V13) when a checkpoint saw it in a first-party cookie before the sink; `unknown` otherwise.
+- **Names in a route are masked.** `route.sink.field`, the V13 cookie hop name and every parameter, key or cookie name a route prints go through `guardFieldName` from `packages/decoders/src/fields.ts`. A value-like name, such as a body key that is an email, reads `(other)`. The raw name is never stored.
 - **A sink is a request to a host outside the site, `firstPartyHosts` and `serverHosts`** (choice: maintainer may change). A request to the site or to the user's own server container is a hop, not a leak.
 - **`identifierRoute` fails by default, and a `pageUrl` route warns** (choice: maintainer may change). One rule judges every sink. A sink that decoded into a Google hit that carries its own consent (`gcs` or `gcd`, design §7.3) takes that consent. Every other sink, a hit of another vendor or a request that decoded into no hit, takes the consent of its epoch, with the grace window. The sink fails when that consent is `undecided`, `denied` or `withdrawn`, or `mixed` with `ad_user_data` or `analytics_storage` denied. A `pageUrl` route only warns, because a cookieless ping sends the page URL by design. The result exists only on a run that planted canaries, so no existing run changes.
 - **Docs owners** (choice: maintainer may change). To keep the files of one wave apart, some code entries leave `docs/cli.md` and `docs/design.md` to a later entry: D13 documents G13, K13, Q13, Y13 and N13; T13 documents S13; J13 documents C13 and U13; W13 documents V13; A13 documents F13. The release candidate is cut only after all of them merge.
@@ -95,7 +96,7 @@ Decided in this plan:
 ```mermaid
 flowchart LR
   W1["Wave 1: I13, E13, G13, K13, Q13, Y13, H13, L13"] --> W2["Wave 2: N13, S13"]
-  W2 --> W3["Wave 3: D13, C13"]
+  W2 --> W3["Wave 3: D13, C13, B13"]
   W3 --> W4["Wave 4: T13, U13"]
   W4 --> W5["Wave 5: J13, V13"]
   W5 --> W6["Wave 6: W13, F13"]
@@ -111,14 +112,16 @@ No two entries of one wave touch the same file. Why the waves are this way:
 - **O13 in wave 8.** It edits `packages/core/src/records.ts`, which has one entry per wave from wave 1 to wave 5 (S13 takes wave 2), `packages/cli/src/report/model.ts`, which F13 edits in wave 6, and `docs/cli.md` and `docs/design.md`, which A13 edits in wave 7. Wave 8 is free of all of them. O13 documents itself.
 - **Small fixes in waves 1 to 3.** They do not depend on #1391. G13 and N13 both edit `packages/expect/src/diff.ts`, so N13 waits for wave 2. D13 documents the code fixes of waves 1 and 2, so it is in wave 3.
 - **The matrix: S13 in wave 2, T13 in wave 4.** S13 and L13 both edit `packages/expect/src/scenario.ts`. T13 needs S13's cells and writes the matrix docs, so it is not in wave 3 with D13.
-- **The canaries: C13, U13, J13, then V13 and W13.** C13 needs S13's cell name in `packages/cli/src/run.ts`. U13 needs C13's canaries. J13 judges U13's flags. V13 adds the cookie hop to U13's routes and runs next to J13, because they share no file. W13 needs J13's judge and V13's routes.
+- **The canaries: C13 and B13, U13, J13, then V13 and W13.** C13 needs S13's cell name in `packages/cli/src/run.ts`. B13 puts the decoders' page fields in one module, which U13 reads. It is in wave 3 because no other wave 3 entry touches `packages/decoders/`; G13 edits `ga4.ts` in wave 1. U13 needs C13's canaries and B13's module. J13 judges U13's flags. V13 adds the cookie hop to U13's routes and runs next to J13, because they share no file. W13 needs J13's judge and V13's routes.
 - **The report: F13 in wave 6, A13 in wave 7.** F13 reads J13's results. A13 needs T13's table and F13's route view, and writes the report docs.
 - **`docs/cli.md` and `docs/design.md`.** At most one entry per wave edits them: I13 (wave 1, `docs/cli.md` only), D13 (wave 3), T13 (wave 4), J13 (wave 5), W13 (wave 6), A13 (wave 7), O13 (wave 8). The other entries leave them to their docs owner (Decisions).
 - **`packages/core/src/records.ts`.** Q13 (wave 1), S13 (wave 2), C13 (wave 3), U13 (wave 4), V13 (wave 5), O13 (wave 8): one per wave.
 - **`packages/expect/src/scenario.ts`.** L13 (wave 1), S13 (wave 2), C13 (wave 3), J13 (wave 5).
 - **`packages/cli/src/run.ts`.** S13 (wave 2), C13 (wave 3), U13 (wave 4).
 - **`packages/cli/src/summary.ts`.** C13 (wave 3), U13 (wave 4).
-- **`packages/decoders/src/index.ts`.** U13 only (wave 4); G13 edits `ga4.ts` in wave 1, a different file.
+- **`packages/decoders/src/index.ts`.** B13 only (wave 3).
+- **`packages/decoders/src/ga4.ts` and `packages/decoders/src/ga4.test.ts`.** G13 (wave 1), B13 (wave 3).
+- **`packages/decoders/src/page-fields.ts`.** B13 makes it (wave 3); U13 (wave 4) only imports it.
 - **`packages/recorder/src/canary-routes.ts`.** U13 makes it (wave 4); V13 (wave 5) and W13 (wave 6) extend it.
 - **`packages/cli/src/suite.ts` and `packages/cli/src/report/suite.ts`.** S13 (wave 2, the refusal of a consent suite), T13 (wave 4), A13 (wave 7, report only).
 - **`packages/cli/src/report/model.ts`.** F13 (wave 6), O13 (wave 8).
@@ -388,6 +391,23 @@ Evals:
 
 Acceptance: `e2e/canaries.e2e.test.ts` passes, and fails on `main`, where `canaries` is an unknown option and the run exits 2.
 
+**B13 Decoders: page fields in one module (#1391).** Round cap 3. Touches: new `packages/decoders/src/page-fields.ts` and new `packages/decoders/src/page-fields.test.ts`; the export in `packages/decoders/src/index.ts`; the page field read in `packages/decoders/src/ga4.ts`, `packages/decoders/src/google-ads.ts`, `packages/decoders/src/meta.ts`, `packages/decoders/src/meta-capi.ts`, `packages/decoders/src/pinterest.ts`, `packages/decoders/src/sgtm-data-client.ts` and `PAGE_PARAMS` in `packages/decoders/src/tracker.ts`; their tests `packages/decoders/src/ga4.test.ts`, `packages/decoders/src/google-ads.test.ts`, `packages/decoders/src/meta.test.ts`, `packages/decoders/src/meta-capi.test.ts`, `packages/decoders/src/pinterest.test.ts`, `packages/decoders/src/sgtm-data-client.test.ts`, `packages/decoders/src/tracker.test.ts` (added cases only).
+Refs #1391
+- `page-fields.ts` names, per decoder, the page fields it reads, in order, and the referrer fields it sends: GA4 `dl` (referrer `dr`), Google Ads `url` then `dl` (referrer `ref`), Meta `dl` (referrer `rl`), Meta CAPI `event_source_url`, Pinterest `ad.loc`, the server container data client `page_location`, and the tracker's `PAGE_PARAMS`.
+- Each decoder reads its `Hit.page` through these names. The tracker keeps its `frameUrl` fallback.
+- Decoder output stays exactly the same. No user-visible change, so no docs.
+Invariants: Every `Hit` field of every decoder is unchanged. No `--json` change.
+Evals:
+
+| Id | Kind | What must be true | How to check |
+| --- | --- | --- | --- |
+| B13-1 | behaviour | `page-fields.ts` names the page and referrer fields listed above, and `@tagreeve/decoders` exports it. | `pnpm exec vitest run --project unit packages/decoders/src/page-fields.test.ts`. |
+| B13-2 | error path | For each decoder, a sample request with a marker under each of its parameters that `page-fields.ts` does not name never gives the marker in `Hit.page`, and a marker under each named page field does. So a decoder that reads a page field `page-fields.ts` does not name fails. | The same file. |
+| B13-3 | regression | Every existing decoder test passes unchanged. | `pnpm exec vitest run --project unit packages/decoders/src`. `git diff main -- 'packages/decoders/src/*.test.ts'` shows only added lines. |
+| B13-4 | regression | No decoder reads a page field inline. | `git grep -n "page:" -- 'packages/decoders/src/*.ts' ':!*.test.ts'` shows, in each decoder, a read through a name from `page-fields.ts`. |
+
+Acceptance: `page-fields.test.ts` passes, and fails on `main`, where `page-fields.ts` does not exist.
+
 ### Wave 4
 
 **T13 Consent matrix: what each vendor got in each state (#1391, part 2).** Round cap 3. Touches: new `packages/expect/src/state-table.ts` and new `packages/expect/src/state-table.test.ts`; `packages/expect/src/index.ts`; `SuiteManifest` and the table output in `packages/cli/src/suite.ts`, `packages/cli/src/suite.test.ts`; `isManifest` in `packages/cli/src/report/suite.ts` (reads `consentMatrix`); new `e2e/suite-consent-table.e2e.test.ts`; `docs/cli.md` (the `suite` section: `--consent`, the cells and the table; the scenario options table: `withdrawWith`); `docs/design.md` (§4 the `Run.consentCell` row, §12 `suite`, §11 the options).
@@ -409,28 +429,29 @@ Evals:
 
 Acceptance: T13-1 passes, and fails on `main`, where `suite.json` has no `consentMatrix`.
 
-**U13 Canary routes: `identifierRoute` and `canarySearch` flags (#1391, part 4).** Round cap 4. Touches: new `packages/decoders/src/page-fields.ts` (the page and referrer field names each decoder reads, used by the decoders) and new `packages/decoders/src/page-fields.test.ts`, the export in `packages/decoders/src/index.ts`; new `packages/recorder/src/canary-routes.ts` and new `packages/recorder/src/canary-routes.test.ts`; the recorder options and `close` in `packages/recorder/src/recorder.ts` (one call next to `buildFlags`); `FlagKind` and `Flag` in `packages/core/src/records.ts` (the two kinds and an optional `route`); `executeRun` in `packages/cli/src/run.ts` (passes the canaries to the recorder); the flag lines in `packages/cli/src/summary.ts`, `packages/cli/src/summary.test.ts`; new `fixtures/site/public/click-id-relay.html` and new `fixtures/site/public/click-id-relay-send.html`, their lines in the page map of `fixtures/site/src/index.ts`, a row in `fixtures/site/README.md`, new `fixtures/site/src/pages-click-id-relay.test.ts`; new `e2e/identifier-route.e2e.test.ts` with new `e2e/scenarios/identifier-route-reject.yml`.
+**U13 Canary routes: `identifierRoute` and `canarySearch` flags (#1391, part 4).** Round cap 4. Touches: `packages/decoders/src/page-fields.ts` (new in B13; imported only); new `packages/recorder/src/canary-routes.ts` and new `packages/recorder/src/canary-routes.test.ts`; the recorder options and `close` in `packages/recorder/src/recorder.ts` (one call next to `buildFlags`); `FlagKind` and `Flag` in `packages/core/src/records.ts` (the two kinds and an optional `route`); `executeRun` in `packages/cli/src/run.ts` (passes the canaries to the recorder); the flag lines in `packages/cli/src/summary.ts`, `packages/cli/src/summary.test.ts`; new `fixtures/site/public/click-id-relay.html` and new `fixtures/site/public/click-id-relay-send.html`, their lines in the page map of `fixtures/site/src/index.ts`, a row in `fixtures/site/README.md`, new `fixtures/site/src/pages-click-id-relay.test.ts`; new `e2e/identifier-route.e2e.test.ts` with new `e2e/scenarios/identifier-route-reject.yml`.
 Refs #1391
 - At `close`, on the raw records, the recorder looks for each pool form in every request URL, body and decoded `Hit.params` value, including redirect hops and server container calls, using `readings` for the decode layers.
-- The route kind `pageUrl` is judged from `Hit.page` and the exported referrer field names, not from a recorder table. The decoders read their page field from the exported names, so a new vendor field changes one place.
+- The route kind `pageUrl` is judged from `Hit.page` and the referrer field names in `page-fields.ts` (B13), not from a recorder table. U13 changes no decoder.
 - Each canary seen in a sink request gives one `identifierRoute` flag. `route` holds `{ kind, source, sink: { requestId, host, vendor, field, transform } }`, with `hops: []` until V13 and W13. `recordIds` hold the request ID. The detail names the canary by source and name, for example `url param gclid -> request to www.googleadservices.com, param x, base64`, and never holds its value.
+- Routes are built from raw request URLs and bodies, and a page can use a value as a key, such as a body key that is an email. So `route.sink.field` and every parameter, key or cookie name the detail prints go through `guardFieldName` from `packages/decoders/src/fields.ts`. A value-like name reads `(other)`. The raw name is never stored.
 - One `canarySearch` flag per run with canaries. Its detail names the forms searched, the parts searched (URL, body and decoded fields) and the parts not searched (headers, including `Referer` and `Cookie`), and the count of requests searched, and counts the skipped requests by reason: compressed or binary body, body cut at 64 KiB, net-log request with no body. Its `recordIds` are the skipped request IDs.
 - `/click-id-relay` (a plain page with `assets/banner.js`) reads `gclid` from its URL, writes it to the first-party cookie `_pw_click`, and sends a GA4 page view whose `dl` holds the page URL. `/click-id-relay-send` sends the cookie value base64-encoded in a Google Ads conversion request for `AW-000000001`, which `stub` mode answers. `?send=granted` sends it only after consent is granted.
 - The text summary shows up to 5 route lines and the searched line.
 - Docs owner: J13.
-Invariants: Only canary values and names are stored. A run without canaries gets neither flag. No result changes in U13.
+Invariants: Only canary values and names are stored. `route.sink.field` and every printed parameter, key or cookie name are masked by `guardFieldName`; no raw name is stored. A run without canaries gets neither flag. No result changes in U13.
 Evals:
 
 | Id | Kind | What must be true | How to check |
 | --- | --- | --- | --- |
 | U13-1 | behaviour | With reject, the relay journey gives an `identifierRoute` flag for gclid on the Google Ads request, kind `unknown`, transform base64. | `pnpm exec vitest run --project e2e e2e/identifier-route.e2e.test.ts`. |
 | U13-2 | behaviour | The GA4 page view gives a `pageUrl` route for gclid. | The same e2e test. |
-| U13-8 | behaviour | A canary only in a Pinterest `ad.loc`, a Google Ads `dl` or a Meta `rl` gives route kind `pageUrl`, not `unknown`; the same canary under another parameter gives `unknown`. | `canary-routes.test.ts` and `packages/decoders/src/page-fields.test.ts`, paired cases. |
-| U13-3 | behaviour | The run has one `canarySearch` flag that names the forms and the parts searched, says headers were not searched, and counts the requests. | The same e2e test, and a `canary-routes.test.ts` case on the detail text. |
+| U13-8 | behaviour | A canary only in a Pinterest `ad.loc`, a Google Ads `dl` or a Meta `rl` gives route kind `pageUrl`, not `unknown`; the same canary under another parameter gives `unknown`. | `canary-routes.test.ts`, paired cases. |
+| U13-3 | behaviour | The run has one `canarySearch` flag that names the forms and the parts searched, says headers were not searched, and counts the requests. A gzip body is counted as skipped, with its request ID. | The same e2e test, and `canary-routes.test.ts` cases on the detail text and on a gzip body. |
 | U13-4 | regression | Removing the base64 form from the pool makes U13-1 fail. | `pnpm exec vitest run --project unit packages/recorder/src/canary-routes.test.ts`, a case run with a pool that lacks base64. |
 | U13-5 | behaviour | A canary in a request to the site, a `firstPartyHosts` host or a `serverHosts` host gives no flag; the same canary to a vendor host gives one. | `canary-routes.test.ts`, paired cases. |
-| U13-6 | behaviour | A gzip body is counted as skipped, with its request ID. | `canary-routes.test.ts`. |
 | U13-7 | regression | A run without canaries has the same flags as on `main`. | `pnpm exec vitest run --project e2e e2e/plain-gtm.e2e.test.ts e2e/smoke.e2e.test.ts`. |
+| U13-9 | error path | A POST body `{"jane@shop.example.net":"<base64 of the gclid canary>"}` to a vendor host gives a flag whose `route.sink.field` is `(other)`, and `JSON.stringify(flag)` does not contain the email. | `pnpm exec vitest run --project unit packages/recorder/src/canary-routes.test.ts`, a case that first asserts the email is in the request `postData`. |
 
 Acceptance: `e2e/identifier-route.e2e.test.ts` passes, and fails on `main`, where no `identifierRoute` flag exists.
 
@@ -446,7 +467,7 @@ Refs #1391
 - A failing message lists up to 5 route lines. Evidence is request IDs.
 - `builtins: { identifierRoute: warn }` makes every finding a warning.
 - It documents C13, U13 and J13.
-Invariants: Runs without canaries keep their results and exit codes. No observed value in any message.
+Invariants: Runs without canaries keep their results and exit codes. No observed value in any message. Route field names come from the masked flag (`route.sink.field`), never from the raw request.
 Evals:
 
 | Id | Kind | What must be true | How to check |
@@ -467,8 +488,9 @@ QA: run the relay journey with reject and with accept, and read the summary and 
 Refs #1391
 - At each checkpoint, each cookie value is compared in memory with the canary pool. A match sets `canary` on that cookie to the canary's name. No value is stored.
 - A sink whose canary a checkpoint saw in a first-party cookie before the sink gets route kind `cookie` and one hop `{ kind: "cookie", name, checkpointId }`. The detail reads `url param gclid -> cookie _pw_click (checkpoint <label>) -> request to <host>, param x, base64`.
+- The hop's cookie `name`, stored and printed, goes through `guardFieldName`, as U13's names do. A value-like cookie name reads `(other)`.
 - Docs owner: W13.
-Invariants: No cookie value in the record or any output. A non-canary cookie gets no `canary` field.
+Invariants: No cookie value in the record or any output. No raw cookie name in a hop: it is masked by `guardFieldName`. A non-canary cookie gets no `canary` field.
 Evals:
 
 | Id | Kind | What must be true | How to check |
@@ -508,7 +530,7 @@ Refs #1391
 - Under the rows, "Searched and skipped" lists the forms, the parts searched (URL, body and decoded fields), the parts not searched (headers, including `Referer` and `Cookie`), the request count and the skipped requests by reason, from `canarySearch`.
 - A run without canaries has no section.
 - Docs owner: A13.
-Invariants: The report shows names and counts only: no canary value, identity value, hash or observed value. The CSP stays.
+Invariants: The report shows names and counts only: no canary value, identity value, hash or observed value. Route field names come from the masked flag (`route.sink.field`), never from the raw request. The CSP stays.
 Evals:
 
 | Id | Kind | What must be true | How to check |
