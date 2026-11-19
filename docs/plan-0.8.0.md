@@ -1,6 +1,6 @@
 # Plan for 0.8.0
 
-0.8.0 has one goal: two commands give a DPO-ready audit of a site's consent behaviour (#1391): `tagreeve suite --consent ...` runs it and `tagreeve report <suite dir> --html` shows it. It adds a consent matrix to `suite`, which runs each scenario under accept, reject, no answer and accept then withdraw. It adds canaries: seeded test click IDs on the start URL, searched for in every request, with the route each one took. It adds a consent audit to the HTML report. It also fixes the issues found in the 0.7.0 field tests and reviews: the install docs (#1587), baseline drift on `gcd` letters (#1569), the `addToCart` message on a 429 (#1576), the `Server container` line wording (#1583), path moves in `diff` (#1584), scrubbed secrets on server container records (#1585), server-side rules when the container rejects requests (#1579), and six review follow-ups (#1533, #1532, #1531, #1530, #1519, #1513). Each item is one PR. A PR is done when its acceptance test passes in CI, an adversarial review reports no blockers or majors, and it is squash-merged.
+0.8.0 has one goal: two commands give a DPO-ready audit of a site's consent behaviour (#1391): `tagreeve suite --consent ...` runs it and `tagreeve report <suite dir> --html <out.html>` shows it. It adds a consent matrix to `suite`, which runs each scenario under accept, reject, no answer and accept then withdraw. It adds canaries: seeded test click IDs on the start URL, searched for in every request, with the route each one took. It adds a consent audit to the HTML report. It also fixes the issues found in the 0.7.0 field tests and reviews: the install docs (#1587), baseline drift on `gcd` letters (#1569), the `addToCart` message on a 429 (#1576), the `Server container` line wording (#1583), path moves in `diff` (#1584), scrubbed secrets on server container records (#1585), server-side rules when the container rejects requests (#1579), and six review follow-ups (#1533, #1532, #1531, #1530, #1519, #1513). Each item is one PR. A PR is done when its acceptance test passes in CI, an adversarial review reports no blockers or majors, and it is squash-merged.
 
 0.8.0 starts from `main` at `119e6b9` ("Release prep for 0.7.0 (#1586)").
 
@@ -358,7 +358,7 @@ Closes #1583
 Closes #1532
 - #1533: the guide says a request to a listed platform host gets the `platformHost` flag on any site, which never fails a run, and with `platformHosts: false` it is an `unknownDestination`. Design §11 says hashes of an extra email or phone count for `earlyIdentityPush`, as `docs/cli.md` does.
 - #1583: both pages say `forwarded` counts the requests the container itself sends to Google, and the rejected count is about browser requests.
-- #1532: the `consentModeSetup` text names the gtag `arguments` form, recorded as an array or as an index-key object, and says a literal nested array does not count. It says nothing about GTM's `gtm.uniqueEventId` stamp until E13 reports where the key appears in the default order and in `order=inner`.
+- #1532: the `consentModeSetup` text names the gtag `arguments` form, recorded as an array or as an index-key object, and says a literal nested array does not count. D13 says nothing about GTM's `gtm.uniqueEventId` stamp; #1513 stays open.
 - The fixes: G13 (`gcd` letters), K13 (the message), Q13 (`secretsRedacted`), Y13 (whole emails, the `possibleRealData` change, and the known limit that a foreign email glued to the run's email inside base64 still counts as the run's own), N13 (`pathsMoved`).
 Evals:
 
@@ -412,7 +412,7 @@ Acceptance: `page-fields.test.ts` passes, and fails on `main`, where `page-field
 
 **T13 Consent matrix: what each vendor got in each state (#1391, part 2).** Round cap 3. Touches: new `packages/expect/src/state-table.ts` and new `packages/expect/src/state-table.test.ts`; `packages/expect/src/index.ts`; `SuiteManifest` and the table output in `packages/cli/src/suite.ts`, `packages/cli/src/suite.test.ts`; `isManifest` in `packages/cli/src/report/suite.ts` (reads `consentMatrix`); new `e2e/suite-consent-table.e2e.test.ts`; `docs/cli.md` (the `suite` section: `--consent`, the cells and the table; the scenario options table: `withdrawWith`); `docs/design.md` (§4 the `Run.consentCell` row, §12 `suite`, §11 the options).
 Refs #1391
-- `stateTable(records by state)` gives, per vendor, the hit count, the events, the field names (`Hit.fields`) and the ID names of each state, and for each state other than `accept` the vendors, events and fields that `accept` did not have.
+- `stateTable(records by state)` gives, per vendor, the hit count, the events, the field names (`Hit.fields`) and the ID names of each state, and for each state other than `accept` the vendors, events and fields that `accept` did not have. The epoch filter applies to every column: hit count, events, field names and ID names leave out the hits of a reject or none cell that are in a `granted` epoch.
 - `suite.json` gets `consentMatrix`: one entry per scenario (and store) with that table. Names and counts only.
 - The text output adds one line per vendor after the table, for example `ga4: accept 12 hits; reject 3 hits, 2 fields not in accept; none 0; withdraw 2 hits`.
 - It documents S13 and T13.
@@ -426,7 +426,7 @@ Evals:
 | T13-3 | behaviour | The fixture's sentinel identity values and the request URLs are in the records and absent from `suite.json` and stdout. | The e2e test, precondition then absence. |
 | T13-4 | regression | `tagreeve report` still reads a suite folder without `--consent`, and still refuses one with it. | `pnpm exec vitest run --project unit packages/cli/src/report/suite.test.ts`. |
 | T13-5 | behaviour | The docs describe `--consent`, `withdrawWith` and `consentMatrix`. | `grep -n "withdrawWith" docs/cli.md` and `grep -n "consentMatrix" docs/cli.md` print lines; `pnpm docs:build` passes. |
-| T13-6 | behaviour | A reject cell whose scenario has a later `consent: accept` step does not count the hits of the `granted` epoch. | `pnpm exec vitest run --project unit packages/expect/src/state-table.test.ts`. |
+| T13-6 | behaviour | A reject cell whose scenario has a later `consent: accept` step leaves the hits of the `granted` epoch out of the hit count, events, field names and ID names. | `pnpm exec vitest run --project unit packages/expect/src/state-table.test.ts`, a case that first asserts the reject records hold a hit in the `granted` epoch with an event, a field and an ID name that no other reject hit has, then that the cell has none of them. |
 
 Acceptance: T13-1 passes, and fails on `main`, where `suite.json` has no `consentMatrix`.
 
@@ -437,7 +437,7 @@ Refs #1391
 - Each canary seen in a sink request gives one `identifierRoute` flag. `route` holds `{ kind, source, sink: { requestId, host, vendor, field, transform } }`, with `hops: []` until V13 and W13. `recordIds` hold the request ID. The detail names the canary by source and name, for example `url param gclid -> request to www.googleadservices.com, param x, base64`, and never holds its value.
 - Routes are built from raw request URLs and bodies, and a page can use a value as a key, such as a body key that is an email. So `route.sink.field` and every parameter, key or cookie name the detail prints go through `guardFieldName` from `packages/decoders/src/fields.ts`. A value-like name reads `(other)`. The raw name is never stored.
 - One `canarySearch` flag per run with canaries. Its detail names the forms searched, the parts searched (URL, body and decoded fields) and the parts not searched (headers, including `Referer` and `Cookie`), and the count of requests searched, and counts the skipped requests by reason: compressed or binary body, body cut at 64 KiB, net-log request with no body. Its `recordIds` are the skipped request IDs.
-- `/click-id-relay` (a plain page with `assets/banner.js`) reads `gclid` from its URL, writes it to the first-party cookie `_pw_click`, and sends a GA4 page view whose `dl` holds the page URL. `/click-id-relay-send` sends the cookie value base64-encoded in a Google Ads conversion request for `AW-000000001`, which `stub` mode answers. `?send=granted` sends it only after consent is granted.
+- `/click-id-relay` (a plain page with `assets/banner.js`) reads `gclid` from its URL, writes it to the first-party cookie `_pw_click`, and sends a GA4 page view whose `dl` holds the page URL. `/click-id-relay-send` sends the cookie value base64-encoded in a Google Ads conversion request for `AW-000000001`, which `stub` mode answers. `?send=granted` sends it only after consent is granted. `/click-id-relay` also sets a second first-party cookie, `_pw_other=TEST-NOCANARY-0001`, whose value is not a canary.
 - The text summary shows up to 5 route lines and the searched line.
 - Docs owner: J13.
 Invariants: Only canary values and names are stored. `route.sink.field` and every printed parameter, key or cookie name are masked by `guardFieldName`; no raw name is stored. A run without canaries gets neither flag. No result changes in U13.
@@ -485,7 +485,7 @@ Evals:
 Acceptance: J13-1 passes, and fails on `main`, where there is no such check. J13-1 asserts the verdict, not the route kind, because V13 changes the kind in the same wave.
 QA: run the relay journey with reject and with accept, and read the summary and `--json`.
 
-**V13 Canary routes: the cookie hop (#1391, part 6).** Round cap 3. Touches: `checkpoint` in `packages/recorder/src/recorder.ts`; `CheckpointCookie` in `packages/core/src/records.ts` (optional `canary`); `packages/recorder/src/canary-routes.ts` (new in U13; the cookie hop) and `packages/recorder/src/canary-routes.test.ts` (new in U13); `e2e/identifier-route.e2e.test.ts` (new in U13; a cookie case).
+**V13 Canary routes: the cookie hop (#1391, part 6).** Round cap 3. Touches: `checkpoint` in `packages/recorder/src/recorder.ts`; `CheckpointCookie` in `packages/core/src/records.ts` (optional `canary`); `packages/recorder/src/canary-routes.ts` (new in U13; the cookie hop) and `packages/recorder/src/canary-routes.test.ts` (new in U13); `e2e/identifier-route.e2e.test.ts` (new in U13; a cookie case); new `packages/recorder/test/e2e/cookie-hop.e2e.test.ts`.
 Refs #1391
 - At each checkpoint, each cookie value is compared in memory with the canary pool. A match sets `canary` on that cookie to the canary's name. No value is stored.
 - A sink whose canary a checkpoint saw in a first-party cookie before the sink gets route kind `cookie` and one hop `{ kind: "cookie", name, checkpointId }`. The detail reads `url param gclid -> cookie _pw_click (checkpoint <label>) -> request to <host>, param x, base64`.
@@ -497,7 +497,7 @@ Evals:
 | Id | Kind | What must be true | How to check |
 | --- | --- | --- | --- |
 | V13-1 | behaviour | The relay journey's gclid route has kind `cookie` and names `_pw_click` and the checkpoint. | `pnpm exec vitest run --project e2e e2e/identifier-route.e2e.test.ts`. |
-| V13-2 | behaviour | The `_pw_click` value and the value of a fixture cookie that is not a canary are in the browser (read with `context.cookies()` in the test). The fixture cookie's value is in no JSONL record line and not in stdout. The `_pw_click` value is not in stdout and not in any `CheckpointCookie` field. It may be in `Run.canaries`, `Request.url`, `Hit.params` and `Hit.page`, where the page sent it (C13). | The same e2e test, precondition then absence. |
+| V13-2 | behaviour | On the relay page the browser holds the `_pw_click` canary value and the `_pw_other` value `TEST-NOCANARY-0001`. No `CheckpointCookie` field holds either value. The `_pw_other` value is in no JSONL record line and not in stdout. The `_pw_click` value is not in stdout. It may be in `Run.canaries`, `Request.url`, `Hit.params` and `Hit.page`, where the page sent it (C13). | `pnpm exec vitest run --project e2e packages/recorder/test/e2e/cookie-hop.e2e.test.ts` drives the Recorder on the relay page, asserts both values with `recorder.context.cookies()`, then checks the checkpoint records. `e2e/identifier-route.e2e.test.ts` runs the CLI through `runCli` and checks stdout and the JSONL file; its precondition is read from the record: a checkpoint lists `_pw_click` and `_pw_other` by name, and `Run.canaries` holds the gclid value. |
 | V13-3 | behaviour | A cookie that holds the canary inside `GCL.<ts>.<token>` is matched. | `pnpm exec vitest run --project unit packages/recorder/src/canary-routes.test.ts`. |
 | V13-4 | error path | A sink before the first sighting keeps kind `unknown`. | The same unit file. |
 
@@ -548,10 +548,10 @@ Acceptance: F13-1 passes, and fails on `main` of wave 5, where the report has no
 
 **A13 The consent audit report (#1391, part 9).** Round cap 4. Touches: `buildSuiteModel` and `renderSuiteReport` in `packages/cli/src/report/suite.ts`, `packages/cli/src/report/suite.test.ts`; new `e2e/report-consent-audit.e2e.test.ts`; `docs/cli.md` (the `report` section), `docs/design.md` (§12 `report`), `docs/guide/reading-results.md` (identifier routes), new `docs/guide/consent-audit.md`, `site/astro.config.mjs` (the sidebar item for the new guide), `site/src/lib/docs-pages.test.ts` (the page list), `README.md` (one line and a link).
 Closes #1391
-- `tagreeve report <suite dir> --html <file>` of a consent suite adds a section "Consent audit" with one column per state: the cell verdict, the failed and warned rules and built-ins, the `identifierRoute` routes, the `consentModeSetup` result and what was searched and skipped.
+- `tagreeve report <suite dir> --html <out.html>` of a consent suite adds a section "Consent audit" with one column per state: the cell verdict, the failed and warned rules and built-ins, the `identifierRoute` routes, the `consentModeSetup` result and what was searched and skipped.
 - The section shows the `consentMatrix` table of T13.
 - The section starts with one fixed line: the report shows what was sent and flags likely problems; people decide what is allowed. Under it: a pass means no planted value was found in the searched forms.
-- `docs/guide/consent-audit.md` shows the two commands (`tagreeve suite --consent accept,reject,none,withdraw`, then `tagreeve report <suite dir> --html`), `withdrawWith` and `canaries`, and how to read the section.
+- `docs/guide/consent-audit.md` shows the two commands (`tagreeve suite --consent accept,reject,none,withdraw`, then `tagreeve report <suite dir> --html <out.html>`), `withdrawWith` and `canaries`, and how to read the section.
 - The refusal of a consent suite from S13 is removed, and `buildSuiteModel` gives each consent cell its own view by `Run.consentCell`.
 - The fixed line and the searched list say which request parts were searched (URL, body and decoded fields) and that headers were not.
 - It documents F13 and A13.
@@ -595,9 +595,9 @@ Acceptance: O13-1 and O13-6 pass, and fail on `main`, where the rules fail or pa
 
 ## Release
 
-**R18 Release prep for 0.8.0-rc.1.** Written as its own entry after every entry above has merged. 0.8.0-rc.1 is cut through a release-prep PR. The PR runs `scripts/bump-version.sh 0.8.0-rc.1`, which sets `package.json` and the version lines of the README, `docs/cli.md` and `docs/design.md`. It writes the `## 0.8.0-rc.1` section of `CHANGELOG.md` from the PR lines and removes the #1569 and #1576 lines from "Known", the README "In 0.8.0-rc.1" line, design §15 item 8 and a new §15.8 "Differences in 0.8", and re-records `site/demo/` if `pnpm docs:test` shows a change. `package.json` is gated, so the maintainer merges it, and CI publishes the release under `next`. No agent publishes, pushes a tag or starts the release workflow.
+**R18 Release prep for 0.8.0-rc.1.** Written as its own entry after every entry above has merged. 0.8.0-rc.1 is cut through a release-prep PR. The PR runs `scripts/bump-version.sh 0.8.0-rc.1`, which sets `package.json` and the version lines of the README, `docs/cli.md` and `docs/design.md`. It writes the `## 0.8.0-rc.1` section of `CHANGELOG.md` from the PR lines, the README "In 0.8.0-rc.1" line, design §15 item 8 and a new §15.8 "Differences in 0.8", and re-records `site/demo/` if `pnpm docs:test` shows a change. `package.json` is gated, so the maintainer merges it, and CI publishes the release under `next`. No agent publishes, pushes a tag or starts the release workflow.
 
-Touches: `package.json`, the version lines of `README.md`, `docs/cli.md` and `docs/design.md`, the `## 0.8.0-rc.1` section of `CHANGELOG.md`, `docs/design.md` §15, `site/demo/`.
+Touches: `package.json`, the "In 0.8.0-rc.1" line of `README.md`, the version lines of `README.md`, `docs/cli.md` and `docs/design.md`, the `## 0.8.0-rc.1` section of `CHANGELOG.md`, `docs/design.md` §15, `site/demo/`.
 
 Acceptance: `pnpm exec vitest run --project unit scripts/bump-version.test.ts` and `pnpm docs:test` pass on the release-prep PR.
 
@@ -605,7 +605,7 @@ Acceptance: `pnpm exec vitest run --project unit scripts/bump-version.test.ts` a
 
 The maintainer field-tests 0.8.0-rc.1 in `stub` mode, supervised:
 
-- On a plain GTM site and on a Shopify store, run `tagreeve suite --consent accept,reject,none,withdraw` with `canaries: true` and read the consent audit.
+- On a plain GTM site and on a Shopify store, run `tagreeve suite --consent accept,reject,none,withdraw` with `canaries: true`, then `tagreeve report <suite dir> --html <out.html>`, and read the consent audit.
 - Count `identifierRoute` findings by route kind. #1391 says slice 3 (observed runtime IDs) is worth starting only if slice 1 finds real leaks in a field test.
 
 ## Flagged concerns
