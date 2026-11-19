@@ -15,7 +15,7 @@ The spec is [docs/design.md](docs/design.md). The product goals are [docs/goals.
 - **Tests stay local.** E2E tests run only against `fixtures/site` in `stub` mode. The one exception is a `server` mode test whose host is the fixture's own loopback host, with or without the fixture's stand-in server container. No test needs Docker or the network. Never use a real store as an e2e target.
 - **Browser.** Use context-level hooks only (`context.route`, `context.on('request')`, `context.addInitScript`, `context.exposeBinding`). Send a normal Chrome user agent, never one containing `HeadlessChrome`. No browser flags in the default launch. `--net-log` (opt-in) adds Chromium's `--log-net-log`, and nothing else uses a CDP session or a flag. CDP auto-attach on every target was measured and does not see unload-time requests (design §5.3).
 - **Third-party code.** `@duckduckgo/autoconsent` (MPL-2.0) is an unmodified dependency. Never copy or patch its files. Tracker Radar, EasyPrivacy and Disconnect are not sources: never ship them or derive tracker entries from them. Tracker entries link to the vendor's own docs.
-- **Releases.** Never publish to npm or create a GitHub release without the maintainer's say-so. Never force-push `main`.
+- **Releases.** The maintainer's merge of a version bump is the say-so for a release: CI publishes it. No agent runs `npm publish`, pushes a tag, starts the release workflow or reruns a job of it, and none creates a GitHub release. Never force-push `main`.
 
 ## Toolchain
 
@@ -72,7 +72,7 @@ Open `review-minor` issues are fixed in batches between plan waves. Batches are 
 
 The pipeline never releases Tagreeve: `autoRelease` is false in `.github/pipeline.json`. A release is made on the maintainer's say-so.
 
-Releases are git tags with a built `dist/`, made on `main` by `scripts/release.sh <version>`. The script refuses to run unless HEAD is `origin/main`, the tree is clean and `package.json` has the same version. It makes a release commit that only the tag points at, and that is never merged to `main`. Push the tag and wait for the release-tag workflow to pass. Then publish to npm by hand from the tag commit (`git switch --detach v<version>`), with your own one-time password. CI never publishes. For a release candidate (`-rc.N`) run `npm publish --tag next`. For a final release run `npm publish`, which moves `latest`. Then run the check:
+Releases are git tags with a built `dist/`. CI makes them: after a person merges a version bump to `main`, the `release.yml` workflow builds the release commit with `scripts/release.sh --at <sha> <version>`, pushes the tag, checks it and publishes to npm with trusted publishing. No agent publishes, pushes a tag, starts the release workflow or reruns a job of it. The details and the recovery steps are in `docs/release.md`. A release by hand uses `scripts/release.sh <version>` and is the maintainer's alone. After a release, run the check:
 
 ```bash
 node scripts/check-npm-dist-tag.ts <version>

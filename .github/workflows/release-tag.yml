@@ -3,6 +3,16 @@ name: release-tag
 on:
   push:
     tags: ['v*']
+  workflow_call:
+    inputs:
+      ref:
+        description: The tag name, v<version>
+        type: string
+        required: true
+      sha:
+        description: The commit the tag points at
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -10,8 +20,16 @@ permissions:
 jobs:
   check-tag:
     runs-on: ubuntu-24.04
+    env:
+      tag: ${{ inputs.ref || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+      - name: Check that the tag points at this commit
+        run: |
+          git fetch --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
+          test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$(git rev-parse HEAD)"
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -19,7 +37,7 @@ jobs:
       - name: Check the tag against package.json and dist
         run: |
           version=$(node -p 'require("./package.json").version')
-          test "$GITHUB_REF_NAME" = "v$version"
+          test "$tag" = "v$version"
           test -f dist/cli.js
       - name: Pack the tarball
         run: |
@@ -61,7 +79,7 @@ jobs:
           kill %1
       - name: Dry-run publish
         run: |
-          case "$GITHUB_REF_NAME" in
+          case "$tag" in
             v*-rc.*) dist_tag=next ;;
             *) dist_tag=latest ;;
           esac
