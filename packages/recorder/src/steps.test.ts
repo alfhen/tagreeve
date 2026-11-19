@@ -13,6 +13,7 @@ import {
   ServerContainerFailure,
   stderrPrint,
   stdinResolver,
+  StepError,
 } from './steps.ts';
 
 const field = (over: Partial<Parameters<typeof isSensitiveField>[0]> = {}) => ({
@@ -614,5 +615,99 @@ describe('handoff text streams', () => {
       err.mockRestore();
       out.mockRestore();
     }
+  });
+});
+
+describe('the addToCart failure message', () => {
+  const SHOP = 'https://shop.example.com';
+  const answered = async (
+    requests: Request[],
+    responses: { requestId: string; status: number }[],
+    scenarioYaml = 'start: /\nsteps:\n  - addToCart: "#add"\n',
+  ): Promise<string> => {
+    const page = { goto: () => Promise.resolve(), locator: () => ({ first: () => ({ click: () => Promise.resolve() }) }) };
+    const recorder = {
+      site: SHOP,
+      setIdentity: () => undefined,
+      beginStep: () => ({}),
+      endStep: () => undefined,
+      checkpoint: () => Promise.resolve(),
+      context: { pages: () => [page] },
+      wait: () => Promise.resolve(),
+      stepActivity: () => ({ requests, responses, dataLayerEvents: [] }),
+    };
+    const scenario = parseScenario(scenarioYaml);
+    const error = await playScenario(recorder as never, scenario, { seed: 1, cartTimeoutMs: 50 }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(StepError);
+    return (error as Error).message;
+  };
+  const post = (id: `req_${string}`, path: string, over: Partial<Request> = {}) => request({ id, method: 'POST', url: `${SHOP}${path}`, ...over });
+
+  test('names the status and the path, and marks a 429', async () => {
+    const message429 = await answered([post('req_1', '/cart/add.js')], [{ requestId: 'req_1', status: 429 }]);
+    expect(message429).toContain('click did not add to cart: the store answered 429 (rate limited) to /cart/add.js');
+    const message500 = await answered([post('req_1', '/cart/add.js')], [{ requestId: 'req_1', status: 500 }]);
+    expect(message500).toContain('click did not add to cart: the store answered 500 to /cart/add.js');
+    expect(message500).not.toContain('rate limited');
+  });
+
+  test('keeps only the pathname, with value-like segments read as (other)', async () => {
+    const url = `${SHOP}/checkout/cart/add/product/12345678?form_key=PWFAKEKEY01`;
+    const input = post('req_1', '/', { url, postData: 'id=PWFAKE-BODY-0001' });
+    expect(input.url).toContain('12345678');
+    expect(input.url).toContain('form_key');
+    expect(input.postData).toContain('PWFAKE-BODY-0001');
+    const message = await answered([input], [{ requestId: 'req_1', status: 400 }]);
+    expect(message).toContain('the store answered 400 to /checkout/cart/add/product/(other)');
+    for (const leak of ['12345678', 'form_key', '?', 'shop.example.com', 'PWFAKE-BODY-0001']) expect(message).not.toContain(leak);
+  });
+
+  test('masks value segments inside a sandbox prefix', async () => {
+    const message = await answered([post('req_1', '/web-pixels@build/12345678/sandbox/strict/cart/add.js')], [{ requestId: 'req_1', status: 404 }]);
+    expect(message).toContain('the store answered 404');
+    expect(message).not.toContain('12345678');
+  });
+
+  test('ignores a response of a cart request that later failed', async () => {
+    const failed = post('req_1', '/cart/add.js', { outcome: 'failed' } as Partial<Request>);
+    const message = await answered([failed], [{ requestId: 'req_1', status: 429 }]);
+    expect(message).toMatch(/click did not add to cart$/);
+  });
+
+  test('keeps the plain message with no cart request, a pending one or a failed one', async () => {
+    const failed = post('req_1', '/cart/add.js', { outcome: 'failed' } as Partial<Request>);
+    for (const requests of [[], [post('req_1', '/cart/add.js')], [failed]]) {
+      const message = await answered(requests, []);
+      expect(message).toMatch(/click did not add to cart$/);
+      expect(message).not.toContain('answered');
+    }
+  });
+
+  test('names the last 4xx or 5xx answer', async () => {
+    const requests = [post('req_1', '/cart/add.js'), post('req_2', '/cart/add.js')];
+    const a = await answered(requests, [{ requestId: 'req_1', status: 503 }, { requestId: 'req_2', status: 429 }]);
+    expect(a).toContain('the store answered 429 (rate limited) to /cart/add.js');
+    expect(a).not.toContain('503');
+    const b = await answered(requests, [{ requestId: 'req_1', status: 429 }, { requestId: 'req_2', status: 500 }]);
+    expect(b).toContain('the store answered 500 to /cart/add.js');
+    expect(b).not.toContain('429');
+    expect(b).not.toContain('rate limited');
+  });
+
+  test('names an answer to a request that matches the scenario cartRequest pattern', async () => {
+    const yaml = 'start: /\nsteps:\n  - addToCart: "#add"\noptions: { cartRequest: /basket }\n';
+    const message = await answered([post('req_1', '/basket')], [{ requestId: 'req_1', status: 422 }], yaml);
+    expect(message).toContain('the store answered 422 to /basket');
+  });
+
+  test('does not name an answer to a request that is not a cart request', async () => {
+    const cart = await answered([post('req_1', '/cart/add.js')], [{ requestId: 'req_1', status: 429 }]);
+    expect(cart).toContain('the store answered 429');
+    const other = await answered([post('req_1', '/cart.js')], [{ requestId: 'req_1', status: 429 }]);
+    expect(other).toMatch(/click did not add to cart$/);
+    expect(other).not.toContain('429');
   });
 });

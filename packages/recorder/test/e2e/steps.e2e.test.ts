@@ -332,7 +332,14 @@ describe('addToCart', () => {
   test('fails when the cart request is answered with a 422 after a delay', async () => {
     const error = await addToCartError(fetchButton('/cart/add.js'), { path: '/cart/add.js', status: 422, delayMs: 400 });
     expect(error).toBeInstanceOf(StepError);
-    expect((error as StepError).message).toContain('click did not add to cart');
+    expect((error as StepError).message).toContain('click did not add to cart: the store answered 422 to /cart/add.js');
+    expect((error as StepError).message).not.toContain('rate limited');
+  });
+
+  test('names a 429 as rate limited', async () => {
+    const error = await addToCartError(fetchButton('/cart/add.js'), { path: '/cart/add.js', status: 429 });
+    expect(error).toBeInstanceOf(StepError);
+    expect((error as StepError).message).toContain('click did not add to cart: the store answered 429 (rate limited) to /cart/add.js');
   });
 
   test('passes when the cart request is answered with a 200 after a delay', async () => {

@@ -1,5 +1,6 @@
 import { createInterface } from 'node:readline/promises';
 import { createIdentity, hasCountryFormat, type Identity, type Request, type Step as StepRecord } from '@tagreeve/core';
+import { OTHER_NAME, isValueSegment } from '@tagreeve/decoders';
 import { IDENTITY_FIELDS, SECRET_FIELD, type IdentityField, type Locator, type Scenario, type Step, type UrlMatcher } from '@tagreeve/expect';
 import type { Frame, JSHandle, Locator as PlaywrightLocator, Page } from 'playwright';
 import { Scrubber } from './gtm-scrub.ts';
@@ -52,8 +53,13 @@ function isCartRequest(r: Request): boolean {
  * WooCommerce `?wc-ajax=add_to_cart`, a Storefront cart mutation) or an add_to_cart dataLayer event.
  * A cart request counts once its response is recorded with a 2xx or 3xx status (a form POST answers with a redirect); a pending, failed, 4xx or 5xx one does not. `pattern` is a regular expression for URLs that also count.
  */
-export function createCartCheck(pattern?: string): CartCheck {
+function cartRequestTest(pattern?: string): (r: Request) => boolean {
   const custom = pattern === undefined ? undefined : new RegExp(pattern);
+  return (r) => isCartRequest(r) || custom?.test(r.url) === true;
+}
+
+export function createCartCheck(pattern?: string): CartCheck {
+  const isCart = cartRequestTest(pattern);
   return ({ requests, responses, dataLayerEvents }) => {
     const accepted = (r: Request): boolean => {
       const statuses = responses.filter((x) => x.requestId === r.id).map((x) => x.status);
@@ -61,7 +67,7 @@ export function createCartCheck(pattern?: string): CartCheck {
     };
     return (
       dataLayerEvents.some((e) => e.event !== null && CART_EVENT.test(e.event)) ||
-      requests.some((r) => (isCartRequest(r) || custom?.test(r.url) === true) && accepted(r))
+      requests.some((r) => isCart(r) && accepted(r))
     );
   };
 }
@@ -417,11 +423,25 @@ async function waitForUrl(recorder: Recorder, url: UrlMatcher, timeout: number):
   }
 }
 
+function cartAnswerNote(activity: StepActivity, isCart: (r: Request) => boolean): string {
+  const cart = new Set(activity.requests.filter((r) => r.outcome !== 'failed' && isCart(r)).map((r) => r.id));
+  const answers = activity.responses.filter((x) => cart.has(x.requestId) && x.status >= 400);
+  const last = answers.at(-1);
+  if (last === undefined) return '';
+  const request = activity.requests.find((r) => r.id === last.requestId);
+  if (request === undefined) return '';
+  const path = new URL(request.url).pathname.split('/').map((segment) => (isValueSegment(segment) ? OTHER_NAME : segment)).join('/');
+  return `: the store answered ${last.status}${last.status === 429 ? ' (rate limited)' : ''} to ${path}`;
+}
+
 async function waitForCart(recorder: Recorder, record: StepRecord, scenario: Scenario, options: PlayOptions): Promise<void> {
   const check = options.cartCheck ?? createCartCheck(scenario.options.cartRequest);
   const deadline = Date.now() + (options.cartTimeoutMs ?? 5000);
   while (!check(recorder.stepActivity(record))) {
-    if (Date.now() >= deadline) throw new Error('click did not add to cart');
+    if (Date.now() >= deadline) {
+      const note = options.cartCheck ? '' : cartAnswerNote(recorder.stepActivity(record), cartRequestTest(scenario.options.cartRequest));
+      throw new Error(`click did not add to cart${note}`);
+    }
     await recorder.wait(100);
   }
 }
