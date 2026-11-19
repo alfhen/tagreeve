@@ -12,8 +12,8 @@ const scripts = ['bump-version.sh', 'release-plan.ts', 'check-npm-dist-tag.ts'];
 const readme = (version: string): string =>
   `# Tagreeve\n\n> **Status: 0.7 (\`${version}\`).** Plays a visitor.\n\n> **In ${version}:** the prose line.\n`;
 const cliLine = (version: string): string =>
-  `\`npm i -g tagreeve@next\` installs the newest release candidate. The current release candidate is \`${version}\`. The newest final release is 0.6.2. The first Tagreeve release was 0.4.0-rc.1.`;
-const CLI_HEAD = '`npm i -g tagreeve@next` installs the newest release candidate.';
+  `\`npm i -g tagreeve\` installs the newest final release, and \`npm i -g tagreeve@next\` the newest release candidate. The current release candidate is \`${version}\`. The newest final release is 0.6.2. The first Tagreeve release was 0.4.0-rc.1.`;
+const CLI_HEAD = '`npm i -g tagreeve` installs the newest final release, and `npm i -g tagreeve@next` the newest release candidate.';
 const CLI_TAIL = 'The first Tagreeve release was 0.4.0-rc.1.';
 const design = (version: string): string =>
   `# Tagreeve design\n\nStatus: revision 20, for release ${version}. Milestones are built.\n\n7. **0.7 (built, \`${version}\`):** the milestone prose.\n`;
@@ -71,7 +71,7 @@ describe('bump-version.sh', () => {
     const line = cliText(dir);
     expect(line).toBe(`${CLI_HEAD} The current release is \`0.7.0\`. The newest final release is 0.7.0. ${CLI_TAIL}`);
     expect(cli).not.toContain('The current release candidate is');
-    expect(line.match(/`[^`]*`/g)).toEqual(['`npm i -g tagreeve@next`', '`0.7.0`']);
+    expect(line.match(/`[^`]*`/g)).toEqual(['`npm i -g tagreeve`', '`npm i -g tagreeve@next`', '`0.7.0`']);
     expect(versionOf(dir)).toBe('0.7.0');
     expect(read(dir, 'README.md')).toContain('(`0.7.0`)');
     expect(read(dir, 'docs/design.md').split('\n')[2]).toContain('for release 0.7.0.');

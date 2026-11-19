@@ -9,11 +9,11 @@ A coding agent, for example Claude Code, can do these steps for you. Copy the pr
 ## Install
 
 ```bash
-npm i -g tagreeve@next
+npm i -g tagreeve
 tagreeve install-browser
 ```
 
-The first command installs the `tagreeve` command. The second installs Chromium, the browser that Tagreeve drives. Both steps are needed once per machine. The [CLI page](../cli.md) lists other ways to install.
+The first command installs the `tagreeve` command. `npm i -g tagreeve` installs the newest final release, and `npm i -g tagreeve@next` the newest release candidate. The second command installs Chromium, the browser that Tagreeve drives. Both steps are needed once per machine. The [CLI page](../cli.md) lists other ways to install.
 
 ## Set up the folders
 
