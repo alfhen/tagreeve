@@ -46,7 +46,7 @@ const safeKey = (key: string, identity: Identity) => {
 function ownLeaves(value: unknown, path: string, key: string, identity: Identity, depth: number, out: Leaves): void {
   if (depth > MAX_DEPTH) return;
   if (typeof value === 'string' || typeof value === 'number') {
-    const kinds = ownValueKinds(`${key}=${value}`, identity);
+    const kinds = ownValueKinds(`${key}=${value}`, identity, { literal: true });
     for (const k of ownValueKinds(String(value), identity)) kinds.add(k);
     if (kinds.size === 0) return;
     const name = path || '(value)';
