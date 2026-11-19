@@ -215,3 +215,82 @@ test('dots in the local part do not shorten it for the bare-local check', () => 
     expect(r.message).not.toContain('j.o.h.n');
   }
 });
+
+const buyer = { ...createIdentity(1), email: 'buyer@example.test', phone: '+4512345678', extra: [] as string[] };
+const pushed = (item: unknown) => check([...undecided, push(10, item)], { identity: buyer });
+const argsHold = (item: unknown, text: string) => expect(JSON.stringify([item])).toContain(text);
+const noneOf = (message: string | undefined, ...values: string[]) => {
+  for (const v of values) expect(message ?? '').not.toContain(v);
+};
+
+test('whole-email matching: a foreign email containing the run email is not the run own', () => {
+  argsHold({ user: { email: 'other.buyer@example.test' } }, 'other.buyer@example.test');
+  expect(pushed({ user: { email: 'other.buyer@example.test' } })).toMatchObject({ pass: true, evidence: [] });
+  const own = pushed({ user: { email: 'buyer@example.test' } });
+  expect(own.pass).toBe(false);
+  expect(own.message).toContain('user.email: email');
+});
+
+test('a digest of the run email or phone is found under digest, percent-encoded, with no value in the message', () => {
+  const email = encodeURIComponent(hashEmail('buyer@example.test').base64);
+  const phone = encodeURIComponent(hashPhone(buyer.phone).base64);
+  argsHold({ digest: email }, email);
+  argsHold({ digest: phone }, phone);
+  const e = pushed({ digest: email });
+  expect(e.pass).toBe(false);
+  expect(e.message).toContain('digest: email hash');
+  const p = pushed({ digest: phone });
+  expect(p.pass).toBe(false);
+  expect(p.message).toContain('digest: phone hash');
+  const hashes = [hashEmail('buyer@example.test'), hashPhone(buyer.phone)].flatMap((h) => [h.hex, h.base64, h.base64url, encodeURIComponent(h.base64)]);
+  noneOf(`${e.message}${p.message}`, 'buyer@example.test', buyer.phone, '4512345678', ...hashes);
+});
+
+test('a key that is the run email is found whatever the child is, with the masked path', () => {
+  for (const child of [true, null, { a: 1 }]) {
+    const item = { 'buyer@example.test': child };
+    expect(Object.keys(item)[0]).toContain('buyer@example.test');
+    const r = pushed(item);
+    expect(r.pass).toBe(false);
+    expect(r.evidence).toHaveLength(1);
+    expect(r.message).toContain('(other): email');
+    noneOf(r.message, 'buyer@example.test', 'buyer');
+  }
+});
+
+test('the foreign pair of percent-encoded email, key and digest passes and the own pair fails', () => {
+  const foreignDigest = encodeURIComponent(hashEmail('other.buyer@example.test').base64);
+  const foreign = [{ e: 'other.buyer%40example.test' }, { 'other.buyer@example.test': true }, { digest: foreignDigest }];
+  argsHold(foreign[0], 'other.buyer');
+  argsHold(foreign[1], 'other.buyer');
+  for (const f of foreign) expect(pushed(f)).toMatchObject({ pass: true, evidence: [] });
+  const ownDigest = encodeURIComponent(hashEmail('buyer@example.test').base64);
+  const own = [{ e: 'buyer%40example.test' }, { 'buyer@example.test': true }, { digest: ownDigest }];
+  argsHold(own[0], 'buyer%40example.test');
+  argsHold(own[1], 'buyer@example.test');
+  argsHold(own[2], ownDigest);
+  for (const o of own) expect(pushed(o).pass).toBe(false);
+});
+
+test('a plain phone is the run own only when its digits are equal', () => {
+  for (const v of ['+45123456789', '+994512345678', '9912345678']) {
+    argsHold({ p: v }, v);
+    expect(pushed({ p: v })).toMatchObject({ pass: true, evidence: [] });
+  }
+  for (const v of ['+4512345678', '+45 12 34 56 78']) {
+    argsHold({ p: v }, v);
+    const r = pushed({ p: v });
+    expect(r.pass).toBe(false);
+    expect(r.message).toContain('p: phone');
+    noneOf(r.message, v, '12 34 56 78', '4512345678', '12345678');
+  }
+});
+
+test('known limit: base64 readings keep the contains rule', () => {
+  const email = Buffer.from('other.buyer@example.test').toString('base64');
+  const phone = Buffer.from('+994512345678').toString('base64');
+  expect(Buffer.from(email, 'base64').toString()).toContain('other.buyer@example.test');
+  expect(Buffer.from(phone, 'base64').toString()).toContain('+994512345678');
+  expect(pushed({ d: email }).pass).toBe(false);
+  expect(pushed({ d: phone }).pass).toBe(false);
+});

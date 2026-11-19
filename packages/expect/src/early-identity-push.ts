@@ -60,7 +60,16 @@ function ownLeaves(value: unknown, path: string, key: string, identity: Identity
     for (const item of value) ownLeaves(item, `${path}[]`, key, identity, depth + 1, out);
     return;
   }
-  for (const [k, child] of Object.entries(value)) ownLeaves(child, path === '' ? safeKey(k, identity) : `${path}.${safeKey(k, identity)}`, k, identity, depth + 1, out);
+  for (const [k, child] of Object.entries(value)) {
+    const childPath = path === '' ? safeKey(k, identity) : `${path}.${safeKey(k, identity)}`;
+    const keyKinds = ownValueKinds(k, identity);
+    if (keyKinds.size > 0) {
+      const found = out.get(childPath) ?? new Set<OwnValueKind>();
+      for (const kind of keyKinds) found.add(kind);
+      out.set(childPath, found);
+    }
+    ownLeaves(child, childPath, k, identity, depth + 1, out);
+  }
 }
 
 const withoutConsent = (epoch: ConsentEpoch): boolean =>
