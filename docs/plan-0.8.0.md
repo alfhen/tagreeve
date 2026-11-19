@@ -87,7 +87,7 @@ Decided in this plan:
 - **#1579: a rule that rests on missing server hits reads `cannot evaluate`** (choice: maintainer may change). A rule can read server hits when it has `sentBy: server`, or has no `sentBy` (the rule matches both senders). When `serverContainerRejected` warns or fails, such a rule whose verdict rests on absence, a `must` that failed or a `mustNot` that passed, gets `pass: false`, `severity: warn` and the new note `serverContainerRejected`. A `must` that passed and a `mustNot` that failed found real hits and keep their verdicts. A `sentBy: browser` rule keeps its verdict. The built-in already says the run is incomplete.
 - **#1532 is docs only** (choice: maintainer may change). The docs say a `consent default` counts in the gtag `arguments` form, recorded as an array or as a plain object with the keys `0`, `1` and `2`. A literal nested array such as `dataLayer.push(['consent', 'default', {...}])` does not count. E13 pins this in a unit test.
 - **#1513 starts with the test** (choice: maintainer may change). E13 shows where `gtm.uniqueEventId` can reach a recorded consent object, with a stand-in that is a guess at GTM's order (no GTM source is cited). If the key is in `args` in an order a real page could produce, E13 stops and asks the maintainer, because widening `argumentsListOf` changes the `--json` push shapes. If it appears in none, `argumentsListOf` stays as it is.
-- **`gtm.`-prefixed keys in an indexed consent default are left to the maintainer.** Whether they count is decided after E13's observation, not in this plan. #1513 stays open.
+- **`gtm.`-prefixed keys in an indexed consent default are ignored** (maintainer, 2026-11-19, after E13). E13 showed that a stand-in wrapper which stamps `gtm.uniqueEventId` after the recorder's own read leaves the key in `args`, and then `consentCommandOf` does not read the consent default. GTM's own keys never hold a consent setting, so `argumentsListOf` skips keys that start with `gtm.` before it checks the index keys. X13 builds it and closes #1513.
 - **#1519: whole emails** (choice: maintainer may change). An email matches the run's own email when the two normalised emails are equal. The contains rule stays only for readings that came from a base64 decode, where glued junk is expected, so the test "holds for own base64 emails with random junk glued on" still passes. So a foreign email glued to the run's email inside base64 still counts as the run's own (Flagged concerns). `scan` uses the same rule, so a foreign email in a plain or URL-decoded reading that contains the run's email, such as `other.buyer@example.test`, is now reported as `possibleRealData`. A whole decoded reading that equals one of the run's digests counts under any key. The matcher cache is keyed on the identity's values, not the object. `earlyIdentityPush` checks keys on their own.
 - **#1587 leaves history alone** (choice: maintainer may change). Released CHANGELOG sections and the `brand/` handoff files keep `@next`. `scripts/bump-version.sh` needs no change: its pattern starts at "The current".
 
@@ -95,7 +95,7 @@ Decided in this plan:
 
 ```mermaid
 flowchart LR
-  W1["Wave 1: I13, E13, G13, K13, Q13, Y13, H13, L13"] --> W2["Wave 2: N13, S13"]
+  W1["Wave 1: I13, E13, G13, K13, Q13, Y13, H13, L13"] --> W2["Wave 2: N13, S13, X13"]
   W2 --> W3["Wave 3: D13, C13, B13"]
   W3 --> W4["Wave 4: T13, U13"]
   W4 --> W5["Wave 5: J13, V13"]
@@ -170,7 +170,7 @@ Acceptance: the docs text test passes with the new rule, and fails on `main`, wh
 
 **E13 Consent commands: the nested array and the `gtm.uniqueEventId` stamp (#1532, #1513).** Round cap 3. Touches: `packages/core/src/consent-command.test.ts`, `fixtures/site/public/consent-mode-hits.html` (a new `?push=stamped` mode), `fixtures/site/src/pages-consent-mode.test.ts`, new `packages/recorder/test/e2e/datalayer-stamp.e2e.test.ts`.
 Refs #1532 (D13 closes it)
-Refs #1513 (stays open for the maintainer, Decisions)
+Refs #1513 (X13 closes it)
 - `consent-command.test.ts` pins that `[['consent', 'default', {...}]]`, a literal nested array, is not a consent command, and that the `arguments` form and the index-key object are.
 - `?push=stamped` pushes a gtag `consent default` as a plain object with the keys `0`, `1` and `2`, the only shape `argumentsListOf` reads, through a stand-in `push` wrapper that sets `gtm.uniqueEventId` on the pushed object. The stamping order of real GTM is not cited here, so the wrapper is a guess and the test covers each order a page could have. Modes: the default, which calls the inner push and then stamps; `order=inner`, which installs the wrapper before the page's first push, so the recorder's hook wraps it from outside and the key can be set after the recorder's own `record` call; and a control, `when=before`, which stamps before the inner push.
 - The e2e test reads the recorded `dataLayerEvent` of the push in each mode, also after the later length-growth read, and reports where `gtm.uniqueEventId` appears in `args`. The control must show the key, so the test can fail.
@@ -350,6 +350,23 @@ Evals:
 Acceptance: `e2e/suite-consent.e2e.test.ts` passes, and fails on `main`, where `--consent` is not an option.
 QA: run the plain journey with all four states and read the table and `suite.json`, and check that `tagreeve report` of the folder refuses with the message.
 
+**X13 Consent commands: ignore `gtm.` keys in an indexed consent default (#1513).** Round cap 3. Touches: `argumentsListOf` in `packages/core/src/consent-command.ts`, `packages/core/src/consent-command.test.ts`, `packages/expect/src/consent-mode-setup.test.ts`, `packages/expect/src/push-shape.test.ts`, `packages/recorder/test/e2e/datalayer-stamp.e2e.test.ts` (new in E13).
+Closes #1513
+- `argumentsListOf` leaves out the keys of the pushed object that start with `gtm.` and then reads the index keys `0` to `n-1` as before. Any other extra key still makes the object not an arguments list.
+- `consentCommandOf` then reads a `consent default` pushed as an index-key object that also holds `gtm.uniqueEventId`, so `consentModeSetup` counts it as pushed.
+- The push shape of such an object reads as `gtag`, the same as the object without the key.
+- The `datalayer-stamp` e2e test from E13 now expects `consentCommandOf` to return the default command in every mode, `order=inner` included.
+Invariants: An object with a non-`gtm.` extra key is still not an arguments list. No change to `packages/recorder/src/datalayer.ts`.
+Evals:
+
+| Id | Kind | What must be true | Check |
+| --- | --- | --- | --- |
+| X13-1 | behaviour | `argumentsListOf` reads `{0:'consent',1:'default',2:{...},'gtm.uniqueEventId':7}` as the three items, and `consentCommandOf` returns the default command for it. | `pnpm exec vitest run --project unit packages/core/src/consent-command.test.ts`; the case fails on main, where the extra key makes it `undefined`. |
+| X13-2 | error path | An index-key object with another extra key, such as `event` or `foo`, is still not an arguments list. | The same test file. |
+| X13-3 | behaviour | `consentModeSetup` counts a stamped index-key `consent default` as pushed. | `pnpm exec vitest run --project unit packages/expect/src/consent-mode-setup.test.ts`; the case fails on main. |
+| X13-4 | behaviour | The push shape of the stamped object is `gtag`, as without the key. | `pnpm exec vitest run --project unit packages/expect/src/push-shape.test.ts`. |
+| X13-5 | regression | In the `order=inner` mode of `/consent-mode-hits?push=stamped`, the recorded push gives the default command. | `pnpm exec vitest run --project e2e packages/recorder/test/e2e/datalayer-stamp.e2e.test.ts`. |
+
 ### Wave 3
 
 **D13 Docs: the wave 1 and 2 fixes, `platformHost`, the `Server container` line and consent command forms (#1533, #1583, #1532).** Round cap 3. Touches: `docs/cli.md` (the `Server container` paragraph of `run`, the `addToCart` paragraph, `diff`, `baseline save`, the `consentModeSetup` and `earlyIdentityPush` sections), `docs/design.md` (§4 the `Request` row, §5.4 the `addToCart` sentence, §11 the built-ins paragraph, the `diff` and `baseline` paragraph, §13 the own-values paragraph and the local server container paragraph), `docs/guide/what-it-checks.md` (Platform-specific checks), `docs/guide/server-container.md` (the `Server container` line).
@@ -358,7 +375,7 @@ Closes #1583
 Closes #1532
 - #1533: the guide says a request to a listed platform host gets the `platformHost` flag on any site, which never fails a run, and with `platformHosts: false` it is an `unknownDestination`. Design §11 says hashes of an extra email or phone count for `earlyIdentityPush`, as `docs/cli.md` does.
 - #1583: both pages say `forwarded` counts the requests the container itself sends to Google, and the rejected count is about browser requests.
-- #1532: the `consentModeSetup` text names the gtag `arguments` form, recorded as an array or as an index-key object, and says a literal nested array does not count. D13 says nothing about GTM's `gtm.uniqueEventId` stamp; #1513 stays open.
+- #1532: the `consentModeSetup` text names the gtag `arguments` form, recorded as an array or as an index-key object, and says a literal nested array does not count. It also says that `gtm.`-prefixed keys of an index-key consent default are ignored (X13).
 - The fixes: G13 (`gcd` letters), K13 (the message), Q13 (`secretsRedacted`), Y13 (whole emails, the `possibleRealData` change, and the known limit that a foreign email glued to the run's email inside base64 still counts as the run's own), N13 (`pathsMoved`).
 Evals:
 
