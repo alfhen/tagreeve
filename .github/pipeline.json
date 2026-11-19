@@ -24,6 +24,9 @@
     "vitest.config.ts",
     "**/tsconfig*.json",
     "scripts/release.sh",
+    "scripts/release-plan.ts",
+    "scripts/release-plan.test.ts",
+    "scripts/check-npm-dist-tag.ts",
     "scripts/release-workflow.test.ts",
     "packages/cli/src/test-payment-hosts.ts",
     "packages/expect/src/payment-providers.ts"

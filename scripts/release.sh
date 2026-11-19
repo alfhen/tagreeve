@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
-# Usage: scripts/release.sh [--no-tag] <version>
+# Usage: scripts/release.sh [--no-tag | --at <sha>] <version>
 # Builds a release commit with dist/ (and no build script) on a detached HEAD and tags it v<version>.
 # The commit is reachable only from its tag and is never merged to main.
 set -euo pipefail
 
 tag=1
+at=""
 if [ "${1:-}" = "--no-tag" ]; then
   tag=0
   shift
+elif [ "${1:-}" = "--at" ]; then
+  if [ $# -lt 2 ]; then
+    echo "usage: scripts/release.sh [--no-tag | --at <sha>] <version>" >&2
+    exit 2
+  fi
+  at="$2"
+  shift 2
 fi
 if [ $# -ne 1 ]; then
-  echo "usage: scripts/release.sh [--no-tag] <version>" >&2
+  echo "usage: scripts/release.sh [--no-tag | --at <sha>] <version>" >&2
   exit 2
 fi
 version="$1"
@@ -29,7 +37,27 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 # --no-tag runs in CI clones, where HEAD is a branch commit that is not on main.
-if [ "$tag" = 1 ]; then
+if [ -n "$at" ]; then
+  # CI builds the commit that triggered the run, which main may have moved past by now.
+  git fetch -q origin main
+  if ! [[ "$at" =~ ^[0123456789abcdef]{40}$ ]] || [ "$(git rev-parse HEAD)" != "$at" ]; then
+    echo "refusing: HEAD is not $at" >&2
+    exit 1
+  fi
+  if ! git merge-base --is-ancestor "$at" origin/main; then
+    echo "refusing: $at is not on origin/main" >&2
+    exit 1
+  fi
+  if [ -n "$(git ls-remote --tags origin "refs/tags/v$version")" ]; then
+    git fetch -q origin "refs/tags/v$version:refs/tags/v$version"
+    if [ "$(git rev-parse "v$version^{commit}^")" != "$at" ]; then
+      echo "refusing: tag v$version on origin is not built on $at" >&2
+      exit 1
+    fi
+    echo "Tag v$version is already on origin, built on $at."
+    exit 0
+  fi
+elif [ "$tag" = 1 ]; then
   git fetch -q origin main
   if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
     echo "refusing: HEAD is not origin/main" >&2

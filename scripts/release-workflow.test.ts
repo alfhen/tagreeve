@@ -1,6 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
 interface Action {
@@ -8,7 +11,7 @@ interface Action {
 }
 
 interface Workflow {
-  on: { push: { tags: string[] } };
+  on: { push: { tags: string[] }; workflow_call?: { inputs?: Record<string, unknown> } };
   permissions?: Record<string, string> | string;
   jobs: Record<string, { permissions?: Record<string, string> | string; secrets?: unknown; uses?: string; steps?: { run?: string; uses?: string }[] }>;
 }
@@ -109,7 +112,7 @@ const base = (extra: string, perms = 'permissions:\n  contents: read\n') =>
 describe('release-tag workflow', () => {
   it('runs on pushed v tags only', () => {
     expect(workflow.on.push.tags).toEqual(['v*']);
-    expect(Object.keys(workflow.on)).toEqual(['push']);
+    expect(Object.keys(workflow.on)).toEqual(['push', 'workflow_call']);
   });
 
   it('has read-only permissions and no id-token', () => {
@@ -314,5 +317,307 @@ describe('workflow rules', () => {
   it('still finds gh release behind a quoted #', () => {
     const wf = parse(base('      - run: |\n          NOTE="a #1" gh release create v1\n')) as Workflow;
     expect(runLinesOf(wf).filter((line) => /gh\s+release/.test(line))).not.toEqual([]);
+  });
+});
+
+describe('release-tag workflow as a called workflow', () => {
+  const steps = workflow.jobs['check-tag']!.steps as { run?: string; if?: string }[];
+  const peel = steps.find((step) => step.run?.includes('refs/tags/$tag:refs/tags/$tag'));
+
+  it('takes its tag and commit from the inputs or from the push', () => {
+    expect(Object.keys(workflow.on.workflow_call?.inputs ?? {})).toEqual(['ref', 'sha']);
+    expect(text).not.toMatch(/GITHUB_REF_NAME/);
+    expect(text).toMatch(/ref: \$\{\{ inputs\.sha \|\| github\.sha \}\}/);
+    expect(text.match(/inputs\.ref \|\| github\.ref_name/g)).toHaveLength(1);
+    expect(text).toMatch(/env:\n\s+tag: \$\{\{ inputs\.ref \|\| github\.ref_name \}\}/);
+    expect(text).toContain('test "$tag" = "v$version"');
+    expect(text).toContain('case "$tag" in');
+  });
+
+  it('runs the peel step for a pushed tag too', () => {
+    expect(peel).toBeDefined();
+    expect(peel).not.toHaveProperty('if');
+  });
+
+  describe('peel step', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'release-peel-'));
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+    const env = { ...process.env, GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 't@example.com' };
+    const git = (cwd: string, ...args: string[]): string => {
+      const run = spawnSync('git', args, { cwd, env, encoding: 'utf8' });
+      if (run.status !== 0) throw new Error(`git ${args.join(' ')}: ${run.stderr}`);
+      return run.stdout.trim();
+    };
+    const origin = join(dir, 'origin.git');
+    const seed = join(dir, 'seed');
+    git(dir, 'init', '-q', '--bare', origin);
+    git(dir, 'init', '-q', seed);
+    git(seed, 'commit', '-q', '--allow-empty', '-m', 'one');
+    const one = git(seed, 'rev-parse', 'HEAD');
+    git(seed, 'commit', '-q', '--allow-empty', '-m', 'two');
+    const two = git(seed, 'rev-parse', 'HEAD');
+    git(seed, 'tag', '-a', '-m', 'on one', 'v0.0.1', one);
+    git(seed, 'tag', '-a', '-m', 'on two', 'v0.0.2', two);
+    git(seed, 'push', '-q', origin, 'HEAD:refs/heads/main', 'v0.0.1', 'v0.0.2');
+
+    const runPeel = (tag: string, sha: string, n: number): number | null => {
+      const clone = join(dir, `clone${n}`);
+      git(dir, 'init', '-q', clone);
+      git(clone, 'remote', 'add', 'origin', `file://${origin}`);
+      git(clone, 'fetch', '-q', '--depth=1', 'origin', sha);
+      git(clone, 'checkout', '-q', '--detach', 'FETCH_HEAD');
+      return spawnSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', peel!.run!], { cwd: clone, env: { ...env, tag }, encoding: 'utf8' }).status;
+    };
+
+    it('passes when the tag peels to the checked-out commit', () => {
+      expect(runPeel('v0.0.2', two, 1)).toBe(0);
+    });
+
+    it('fails when the tag points at another commit', () => {
+      expect(runPeel('v0.0.1', two, 2)).not.toBe(0);
+    });
+
+    it('fails when the tag is not on the remote', () => {
+      expect(runPeel('v0.0.3', two, 3)).not.toBe(0);
+    });
+  });
+});
+
+interface ReleaseStep {
+  id?: string;
+  if?: string;
+  run?: string;
+  uses?: string;
+  env?: Record<string, string>;
+}
+
+interface ReleaseJob {
+  needs?: string | string[];
+  if?: string;
+  environment?: string | { name?: string };
+  permissions?: Record<string, string> | string;
+  secrets?: unknown;
+  uses?: string;
+  env?: Record<string, string>;
+  steps?: ReleaseStep[];
+}
+
+interface ReleaseWorkflow {
+  on: Record<string, { branches?: string[]; paths?: string[]; tags?: unknown } | undefined>;
+  permissions?: Record<string, string> | string;
+  concurrency?: unknown;
+  jobs: Record<string, ReleaseJob>;
+}
+
+const botName = 'github-actions[bot]';
+const botEmail = '41898282+github-actions[bot]@users.noreply.github.com';
+const minNpm = [11, 21, 0];
+const statusFunction = /\b(always|cancelled|failure|success)\s*\(/;
+const checkCall = './.github/workflows/release-tag.yml';
+
+const sameList = (value: unknown, expected: string[]): boolean => Array.isArray(value) && value.length === expected.length && expected.every((item, i) => value[i] === item);
+
+const needsOf = (job: ReleaseJob): string[] => (Array.isArray(job.needs) ? job.needs : job.needs ? [job.needs] : []);
+
+export function releaseProblems(source: string, readLocal: (rel: string) => string | undefined = readRepoFile): string[] {
+  const wf = parse(source) as ReleaseWorkflow;
+  const problems: string[] = [];
+  const on = wf.on ?? {};
+  if (!sameList(Object.keys(on), ['push'])) problems.push(`triggers are ${Object.keys(on).join(', ')}, not push only`);
+  const push = on.push ?? {};
+  if (!sameList(push.branches, ['main'])) problems.push('push branches are not [main]');
+  if (!sameList(push.paths, ['package.json'])) problems.push('push paths are not [package.json]');
+  if ('tags' in push) problems.push('push has tags');
+  const group = wf.concurrency as { group?: string; 'cancel-in-progress'?: boolean } | undefined;
+  if (group?.group !== 'release' || group['cancel-in-progress'] !== false) problems.push('concurrency is not release without cancel');
+
+  const writes = (permissions: ReleaseJob['permissions']): boolean =>
+    permissions === 'write-all' || (typeof permissions === 'object' && Object.values(permissions).includes('write'));
+  if (writes(wf.permissions)) problems.push('top-level permissions have write');
+
+  for (const [name, job] of Object.entries(wf.jobs)) {
+    if (job.permissions === 'write-all') problems.push(`job ${name} has write-all`);
+    if (typeof job.permissions === 'object') {
+      for (const [key, level] of Object.entries(job.permissions)) {
+        const allowed = (name === 'tag' && key === 'contents') || (name === 'publish' && key === 'id-token');
+        if (level === 'write' && !allowed) problems.push(`job ${name} has ${key}: write`);
+      }
+    }
+    if ('secrets' in job) problems.push(`job ${name} passes secrets`);
+    const calls = [job.uses, ...(job.steps ?? []).map((step) => step.uses)];
+    for (const use of calls) {
+      if (!use) continue;
+      const exempt = name === 'check' && use === checkCall;
+      if (/publish|release/i.test(use) && !exempt) problems.push(`uses ${use}`);
+      if (!use.startsWith('./') && !/@[0-9a-f]{40}$/.test(use)) problems.push(`uses ${use} is not pinned by commit SHA`);
+    }
+    for (const step of job.steps ?? []) {
+      if (step.uses?.startsWith('./')) problems.push(`local action ${step.uses}`);
+    }
+    if (job.uses === checkCall && name === 'check') {
+      const nested = readLocal(checkCall.slice(2));
+      if (nested === undefined) problems.push(`cannot check local workflow ${checkCall}`);
+      else problems.push(...workflowProblems(nested, readLocal, 1).map((problem) => `${checkCall}: ${problem}`));
+    } else if (job.uses?.startsWith('./') && !/publish|release/i.test(job.uses)) {
+      problems.push(`local workflow ${job.uses} is not the check call`);
+    }
+  }
+
+  if (/secrets\./i.test(source)) problems.push('secrets context');
+  if (/NODE_AUTH_TOKEN|NPM_TOKEN|GH_TOKEN|GITHUB_TOKEN/.test(source)) problems.push('token name');
+  if (/github\.token/i.test(source)) problems.push('github.token');
+  if (/_authToken|registry-url|\.npmrc/.test(source)) problems.push('npm auth setup');
+  for (const [name, job] of Object.entries(wf.jobs)) {
+    for (const line of runLinesOf({ jobs: { [name]: job } })) {
+      if (/\b(npm|pnpm|yarn)\b.*\bpublish\b/.test(line)) {
+        if (!line.includes('--tag')) problems.push(`publish without --tag: ${line.trim()}`);
+        if (!line.includes('--dry-run') && name !== 'publish') problems.push(`publish outside the publish job: ${line.trim()}`);
+      }
+      if (/\bnpm\s+stage\b/.test(line)) problems.push(`npm stage: ${line.trim()}`);
+      if (/gh\s+release/.test(line)) problems.push(`gh release: ${line.trim()}`);
+      if (/docker\s+(push|login)\b/.test(line)) problems.push(`docker publish: ${line.trim()}`);
+    }
+  }
+
+  const tag = wf.jobs.tag;
+  if (!tag) problems.push('no tag job');
+  else {
+    const envs = [tag.env, ...(tag.steps ?? []).map((step) => step.env)].map((env) => env ?? {});
+    for (const [key, value] of [
+      ['GIT_AUTHOR_NAME', botName],
+      ['GIT_COMMITTER_NAME', botName],
+      ['GIT_AUTHOR_EMAIL', botEmail],
+      ['GIT_COMMITTER_EMAIL', botEmail],
+    ] as const) {
+      const values = envs.map((env) => env[key]).filter((item) => item !== undefined);
+      if (values.length === 0 || values.some((item) => item !== value)) problems.push(`tag job ${key} is not ${value}`);
+    }
+  }
+  for (const match of source.matchAll(/GIT_(?:AUTHOR|COMMITTER)_EMAIL:\s*(\S+)/g)) {
+    if (match[1] !== botEmail) problems.push(`bot email ${match[1]}`);
+  }
+
+  const publish = wf.jobs.publish;
+  if (!publish) {
+    problems.push('no publish job');
+    return problems;
+  }
+  const environment = typeof publish.environment === 'object' ? publish.environment.name : publish.environment;
+  if (environment !== 'npm') problems.push('publish does not use environment npm');
+  for (const need of ['tag', 'check']) {
+    if (!needsOf(publish).includes(need)) problems.push(`publish does not need ${need}`);
+  }
+  for (const condition of [publish.if, ...(publish.steps ?? []).map((step) => step.if)]) {
+    if (condition !== undefined && statusFunction.test(String(condition))) problems.push(`status function in if: ${String(condition)}`);
+  }
+
+  const lines = runLinesOf({ jobs: { publish } }).map((line) => line.trim());
+  const install = lines.findIndex((line) => /^npm install -g npm@\S+$/.test(line));
+  const check = lines.findIndex((line) => /\bnpm --version\b/.test(line));
+  const publishing = lines.findIndex((line) => /^npm publish\b/.test(line));
+  const pinned = install < 0 ? undefined : /^npm install -g npm@(\d+)\.(\d+)\.(\d+)$/.exec(lines[install]!);
+  if (!pinned) problems.push('publish does not install an exact npm version');
+  else {
+    const have = pinned.slice(1).map(Number);
+    const differs = have.findIndex((part, i) => part !== minNpm[i]);
+    if (differs >= 0 && have[differs]! < minNpm[differs]!) problems.push(`npm ${pinned.slice(1).join('.')} is older than ${minNpm.join('.')}`);
+  }
+  if (check < 0 || !(publish.steps ?? []).some((step) => step.run?.includes('npm --version') && step.run.includes(minNpm.join('.')))) {
+    problems.push(`publish does not check npm --version against ${minNpm.join('.')}`);
+  }
+  if (publishing < 0) problems.push('publish has no npm publish');
+  if (install >= 0 && check >= 0 && install > check) problems.push('npm is installed after the version check');
+  if (check >= 0 && publishing >= 0 && check > publishing) problems.push('npm publish runs before the version check');
+
+  const steps = publish.steps ?? [];
+  const guardAt = steps.findIndex((step) => step.run?.includes('release-plan.ts --guard'));
+  const publishAt = steps.findIndex((step) => /^\s*npm publish\b/m.test(step.run ?? ''));
+  if (guardAt < 0 || !steps[guardAt]!.id) problems.push('publish has no release-plan.ts --guard step with an id');
+  else if (publishAt >= 0 && guardAt > publishAt) problems.push('the guard runs after npm publish');
+  else if (publishAt >= 0 && !String(steps[publishAt]!.if ?? '').includes(`steps.${steps[guardAt]!.id}.outputs`)) {
+    problems.push('the npm publish step does not depend on the guard output');
+  }
+  return problems;
+}
+
+describe('release workflow', () => {
+  const releaseText = readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
+  const release = parse(releaseText) as ReleaseWorkflow;
+
+  it('passes every rule', () => {
+    expect(releaseProblems(releaseText)).toEqual([]);
+  });
+
+  it('runs only on a push to main that changes package.json', () => {
+    expect(Object.keys(release.on)).toEqual(['push']);
+    expect(release.on.push).toEqual({ branches: ['main'], paths: ['package.json'] });
+  });
+
+  it('gives only tag contents: write and only publish id-token: write', () => {
+    expect(Object.entries(release.jobs).map(([name, job]) => [name, job.permissions])).toEqual([
+      ['plan', { contents: 'read' }],
+      ['tag', { contents: 'write' }],
+      ['check', { contents: 'read' }],
+      ['publish', { 'id-token': 'write', contents: 'read' }],
+      ['verify', { contents: 'read' }],
+    ]);
+    expect(releaseText.match(/id-token/g)).toHaveLength(1);
+  });
+
+  const pushTag = '      - name: Push the tag\n';
+  const installStep = '      - name: Install the pinned npm\n        run: npm install -g npm@11.21.2\n';
+  const guardIf = "        if: steps.guard.outputs.result == 'publish'\n";
+  const topPermissions = 'permissions:\n  contents: read\n\njobs:';
+  const edits: Array<[string, (text: string) => string]> = [
+    ['id-token: write on the tag job', (t) => t.replace('    permissions:\n      contents: write\n', '    permissions:\n      contents: write\n      id-token: write\n')],
+    ['contents: write on the publish job', (t) => t.replace('      id-token: write\n      contents: read\n', '      id-token: write\n      contents: write\n')],
+    ['a secrets expression', (t) => t.replace(pushTag, `      - run: echo \${{ secrets.X }}\n${pushTag}`)],
+    ['a token env name', (t) => t.replace('      VERSION: ${{ needs.plan.outputs.version }}\n      DIST_TAG', '      NPM_TOKEN: x\n      DIST_TAG')],
+    ['secrets: inherit on check', (t) => t.replace('    uses: ./.github/workflows/release-tag.yml\n', '    uses: ./.github/workflows/release-tag.yml\n    secrets: inherit\n')],
+    ['no --tag on npm publish', (t) => t.replace('npm publish --tag "$DIST_TAG"', 'npm publish')],
+    ['npm publish in the tag job', (t) => t.replace(pushTag, `      - run: npm publish --tag next\n${pushTag}`)],
+    ['no environment on publish', (t) => t.replace('    environment: npm\n', '')],
+    ['npm stage', (t) => t.replace(pushTag, `      - run: npm stage --help\n${pushTag}`)],
+    ['gh release', (t) => t.replace(pushTag, `      - run: gh release create v0\n${pushTag}`)],
+    ['check dropped from publish.needs', (t) => t.replace('needs: [plan, tag, check]', 'needs: [plan, tag]')],
+    ['if: always() on publish', (t) => t.replace('    environment: npm\n', '    environment: npm\n    if: always()\n')],
+    ['!cancelled() on a publish step', (t) => t.replace(guardIf, '        if: ${{ !cancelled() }}\n')],
+    ['failure() on a publish step', (t) => t.replace(guardIf, '        if: failure()\n')],
+    ['workflow_dispatch', (t) => t.replace('on:\n  push:', 'on:\n  workflow_dispatch:\n  push:')],
+    ['a second branch', (t) => t.replace('branches: [main]', 'branches: [main, dev]')],
+    ['a second path', (t) => t.replace('paths: [package.json]', 'paths: [package.json, pnpm-lock.yaml]')],
+    ['no npm install step', (t) => t.replace(installStep, '')],
+    ['an npm range', (t) => t.replace('npm@11.21.2', 'npm@^11.21.0')],
+    ['npm@latest', (t) => t.replace('npm@11.21.2', 'npm@latest')],
+    ['npm@11', (t) => t.replace('npm@11.21.2', 'npm@11')],
+    ['npm@11.20.0', (t) => t.replace('npm@11.21.2', 'npm@11.20.0')],
+    ['the install after the version check', (t) => t.replace(installStep, '').replace('      - name: Skip the publish', '      - run: npm install -g npm@11.21.2\n      - name: Skip the publish')],
+    ['the install after npm publish', (t) => t.replace(installStep, '').replace(/(npm publish --tag "\$DIST_TAG"\n)/, '$1      - run: npm install -g npm@11.21.2\n')],
+    ['top-level id-token: write', (t) => t.replace(topPermissions, 'permissions:\n  contents: read\n  id-token: write\n\njobs:')],
+    ['top-level contents: write', (t) => t.replace(topPermissions, 'permissions:\n  contents: write\n\njobs:')],
+    ['an action pinned to a tag', (t) => t.replace(/actions\/setup-node@[0-9a-f]{40} # v7\.1\.0/, 'actions/setup-node@v7')],
+    ['no guard step', (t) => t.replace(/      - name: Skip the publish when the version is on npm\n(?:        .*\n)+?(?=      - name: Publish)/, '')],
+    ['no if on npm publish', (t) => t.replace(guardIf, '')],
+    [
+      'a second check job',
+      (t) => t.replace('\n  publish:', '\n  check2:\n    needs: tag\n    permissions:\n      contents: read\n    uses: ./.github/workflows/release-tag.yml\n    with:\n      ref: ${{ needs.tag.outputs.tag }}\n      sha: ${{ needs.tag.outputs.sha }}\n\n  publish:'),
+    ],
+    ['another called workflow path', (t) => t.replace('    uses: ./.github/workflows/release-tag.yml\n', '    uses: ./.github/workflows/release-tag2.yml\n')],
+    ['another bot id', (t) => t.replaceAll('41898282+', '41898283+')],
+    ['another environment name', (t) => t.replace('environment: npm', 'environment: npm-ci')],
+  ];
+
+  it.each(edits)('fails on %s', (_name, edit) => {
+    const edited = edit(releaseText);
+    expect(edited).not.toBe(releaseText);
+    const read = (rel: string) => readRepoFile(rel.endsWith('release-tag2.yml') ? '.github/workflows/release-tag.yml' : rel);
+    expect(releaseProblems(edited, read).length).toBeGreaterThan(0);
+  });
+
+  it('names a copied called workflow as a uses problem', () => {
+    const edited = releaseText.replace('    uses: ./.github/workflows/release-tag.yml\n', '    uses: ./.github/workflows/release-tag2.yml\n');
+    const problems = releaseProblems(edited, readRepoFile);
+    expect(problems).toContain('uses ./.github/workflows/release-tag2.yml');
+    expect(problems.join('\n')).not.toContain('cannot check local workflow');
   });
 });
