@@ -356,6 +356,83 @@ The maintainer field-tests the 0.7.0 release candidate in `stub` mode, supervise
 - **D11 is the largest entry.** It shares `scenario.ts` and `evaluate.ts` with I11 in wave 2, in different functions. I11 rebases on D11 if both are open at once.
 - **The S11 shop is not a field observation.** It follows the common gtag and GTM pattern. The milestone asked for fixtures copied from field observations; for plain GTM there are none yet.
 
+## Release from CI (#1573)
+
+Added on 2026-11-19, after 0.7.0-rc.3. Today a person builds the release commit on a laptop with `scripts/release.sh`, pushes the tag, and runs `npm publish` by hand with a one-time password. The `release-tag` workflow only checks the tag and runs a dry-run publish. `docs/release.md` says "There is no provenance yet". This part of the plan moves the build, the tag and the publish into GitHub Actions. npm trusted publishing (OIDC) replaces the one-time password, and npm adds provenance on its own because the repo and the package are public. It serves the goal **Be safe by default**: no long-lived npm token exists, and each published version links to the commit and the workflow run that built it.
+
+### Decisions
+
+Decided by the maintainer on 2026-11-18 and 2026-11-19:
+
+1. **A merged version bump starts the release.** A push to `main` that changes `version` in `package.json` releases that version. There is no manual release button.
+2. **No approval step.** CI publishes with `npm publish`, not `npm stage publish`. The release decision is the merge of the release-prep PR, and `package.json` is gated, so a person merges it.
+3. **Two PRs after this plan:** T12 (the workflow) and V12 (the bump script).
+
+Decided in this plan:
+
+- **The build moves into CI.** `release.yml` runs `scripts/release.sh <version>` in CI, so the `dist/` that npm serves is the one CI built. Provenance would be close to meaningless if a laptop built `dist/`.
+- **The release commit and the tag stay as they are.** The release commit holds `dist/` and a `package.json` without the `build` script, and only the annotated tag `v<version>` points at it. It is never merged to `main`.
+- **The release commit uses the GitHub Actions bot identity.** `release.yml` sets `GIT_AUTHOR_NAME` and `GIT_COMMITTER_NAME` to `github-actions[bot]` and both emails to `41898283+github-actions[bot]@users.noreply.github.com`. `release.sh` already takes these variables. The maintainer can ask for another identity in the plan PR.
+- **The decision logic is a script with unit tests, not shell in YAML.** A new `scripts/release-plan.ts` reads the version on `HEAD` and on `HEAD^`, and prints one of `skip: version unchanged`, `skip: v<version> already on npm`, or `release <version> <dist-tag>`. It refuses a version that is not `X.Y.Z` or `X.Y.Z-rc.N`, with the same pattern as `release.sh` and `check-npm-dist-tag.ts`. It refuses a version that is not higher than the one on `HEAD^`. The dist-tag is `next` for `-rc.N` and `latest` otherwise.
+- **Each job does one thing, with the least permission.**
+  - `plan` (`contents: read`) runs `release-plan.ts`. The later jobs run only on a `release` line.
+  - `tag` (`contents: write`) runs `release.sh` and pushes the tag. When `v<version>` already exists on the remote, it checks that the tag points at a commit whose parent is the triggering commit, and goes on without pushing. Then a rerun of a failed publish does not tag twice.
+  - `check` calls the existing `release-tag.yml` checks as a reusable workflow at the tag. `release-tag.yml` gains `on: workflow_call` with a `ref` input and keeps its tag trigger, its read-only permissions and its dry-run publish. A tag pushed by `GITHUB_TOKEN` starts no other workflow, so the call is needed.
+  - `publish` (`id-token: write`, `contents: read`, environment `npm`) checks out the tag, sets up Node 24, checks that `npm --version` is 11.5.1 or newer, and runs `npm publish --tag <dist-tag>`. It runs only after `check` passed. It uses no token, secret or `.npmrc` auth line.
+  - `verify` (`contents: read`) runs `node scripts/check-npm-dist-tag.ts <version>` with up to 5 tries 30 s apart, because npm's view can lag by a minute or two. A failure turns the run red.
+- **One release at a time.** `release.yml` has `concurrency: { group: release, cancel-in-progress: false }`.
+- **A dry run before the first real release.** `release.yml` also has `workflow_dispatch` with no inputs. On a dispatch, `plan` prints the plan for the version on `main` as if it had just changed, `tag` runs `release.sh --no-tag` and pushes nothing, and `publish` runs `npm publish --dry-run --tag <dist-tag>`. `verify` does not run. A dispatch never pushes a tag or publishes.
+- **The settings are the maintainer's.** On npmjs.com, a trusted publisher for `tagreeve`: GitHub Actions, `alfhen/tagreeve`, workflow `release.yml`, environment `npm`. On GitHub, an environment `npm` whose deployment branches are `main` only. After the first CI publish works, "disallow tokens" on npmjs.com. No PR changes a repo or npm setting. T12 writes the steps in `docs/release.md`.
+- **The pipeline still never releases.** `autoRelease` stays `false` in `.github/pipeline.json`. No agent runs a publish command, pushes a tag or starts a dispatch. A release happens only when a person merges a version bump.
+- **The workflow rules test grows, it does not loosen.** `scripts/release-workflow.test.ts` keeps every rule for `release-tag.yml`. It gets a second rule set for `release.yml`: only `publish` has `id-token: write`, only `tag` has `contents: write`, no job passes secrets, the file names no token and no `secrets.` context, every `npm publish` line has `--tag`, the only publish without `--dry-run` sits in the `publish` job under `environment: npm`, there is no `gh release` and no `npm stage`, and the push trigger is `branches: [main]` with `paths: [package.json]`.
+- **CHANGELOG.** T12 and V12 add no CHANGELOG line. The release prep of the first version published from CI adds one line: the package is published from CI with provenance.
+
+### Entries
+
+**T12 Release from CI with trusted publishing (#1573).** Round cap 4. Touches: new `.github/workflows/release.yml`; `.github/workflows/release-tag.yml` (the `workflow_call` trigger and its `ref` input only); new `scripts/release-plan.ts` and `scripts/release-plan.test.ts`; `scripts/release-workflow.test.ts` (the `release.yml` rule set, with the existing cases unchanged); `docs/release.md`; the Releasing section of `AGENTS.md`.
+- `release-plan.ts` prints exactly one line in the forms above and exits 0. It exits 2 with a message on a bad or lower version. It reads `npm view tagreeve versions --json` to tell whether the version is already on npm, and treats a failed read as an error that stops the run, never as "not published".
+- `docs/release.md` describes the new flow from "merge the release-prep PR" to "check the result", the dispatch dry run, the npmjs.com and GitHub settings, and what to do when a job fails (rerun the failed job; `tag` and `publish` are safe to rerun). It drops "There is no provenance yet". It keeps a short section on a release by hand for when CI is down, and says that only the maintainer does it.
+- The Releasing section of `AGENTS.md` says that CI publishes after a person merges a version bump, and that no agent runs `npm publish`, pushes a tag or starts the release workflow.
+Invariants: No workflow names an npm token or a secret. Only the `publish` job can mint an OIDC token. A dispatch publishes nothing and pushes no tag. `release-tag.yml` keeps every rule it has today.
+Evals:
+
+| Id | Kind | What must be true | How to check |
+| --- | --- | --- | --- |
+| T12-1 | behaviour | A version change from `0.7.0-rc.3` to `0.7.0-rc.4` plans `release 0.7.0-rc.4 next`, and to `0.7.0` plans `release 0.7.0 latest`. | `pnpm exec vitest run --project unit scripts/release-plan.test.ts`. |
+| T12-2 | behaviour | No version change plans `skip: version unchanged`, and a version already on npm plans `skip: v<version> already on npm`. | The same test, with the npm read stubbed. |
+| T12-3 | error path | A lower version, a version like `0.7.0-beta.1`, and a failed npm read each exit 2. | The same test. |
+| T12-4 | behaviour | The `release.yml` rule set passes on the real file and fails on each of: `id-token: write` on another job, `contents: write` on another job, a `secrets.` context, a publish without `--tag`, a publish without `--dry-run` outside the `publish` job, a `publish` job without `environment: npm`, and `npm stage`. | `pnpm exec vitest run --project unit scripts/release-workflow.test.ts`. |
+| T12-5 | regression | Every existing `release-tag.yml` case still passes, and `release-tag.yml` still runs on `v*` tags. | The same test. |
+| T12-6 | quality bar | On a dispatch, no step pushes a tag or runs a publish without `--dry-run`. | The rule-set test reads the `if:` conditions of the `tag` push step and the real publish step. |
+
+Acceptance: `scripts/release-plan.test.ts` and the new cases of `scripts/release-workflow.test.ts` pass, and they fail on `main`, where neither `release-plan.ts` nor `release.yml` exists.
+QA: read `release.yml` job by job against the Decisions above. Read `docs/release.md` as the maintainer doing the first release. The first dispatch dry run happens after merge and is the maintainer's.
+
+**V12 Version bump script (#1573).** Round cap 3. After T12. Touches: new `scripts/bump-version.sh` and `scripts/bump-version.test.ts`; `packages/cli/src/summary.test.ts` (the `readVersion()` pin reads `package.json` instead of a literal); `docs/release.md` (the release-prep steps); the release-prep issue text in `AGENTS.md`, if it names the pin files.
+- `bump-version.sh <version>` refuses a bad version with the same pattern as `release.sh`. It refuses a version that is not higher than the current one. It sets `version` in `package.json` and rewrites each line that names the current release: the README Status line, the `docs/cli.md` sentence "The current release candidate is", and the `docs/design.md` status line. It prints each file it changed.
+- It does not write prose. The README "In 0.7.0-rc.N" line, the design §15 milestone line and the CHANGELOG section stay for the person or agent who writes the release prep, and the script prints a reminder that names them.
+- A test fails when any of those lines disagrees with `package.json`. `scripts/docs-text.docs.test.ts` already checks the README and `docs/cli.md`; V12 adds `docs/design.md` there if it is missing.
+- The builder finds the full pin set with `git grep -n "$(node -p 'require("./package.json").version')"` on `main` and lists it in the PR. A file that holds the version as test data (`scripts/check-npm-dist-tag.test.ts`) is left alone.
+Evals:
+
+| Id | Kind | What must be true | How to check |
+| --- | --- | --- | --- |
+| V12-1 | behaviour | `bump-version.sh 0.7.0-rc.4` in a temp copy of the repo changes `package.json` and the three lines, and then the docs version tests pass. | `pnpm exec vitest run --project unit scripts/bump-version.test.ts`. |
+| V12-2 | error path | A bad version and a lower version exit non-zero and change no file. | The same test. |
+| V12-3 | regression | `summary.test.ts` passes, and fails when `readVersion()` returns another string than `package.json`. | `pnpm exec vitest run --project unit packages/cli/src/summary.test.ts`. |
+
+Acceptance: `scripts/bump-version.test.ts` passes, and fails on `main`, where the script does not exist.
+
+### Order
+
+T12 first, then V12. Both edit `docs/release.md` and `AGENTS.md`, so they go one after the other. The first release after T12 merges is the first one published from CI. The maintainer runs the dispatch dry run before that release, after the npmjs.com and GitHub settings are in place.
+
+### Flagged concerns
+
+- **A bad merge to `main` can publish.** With no approval step, any merged change of `version` publishes. `package.json` is gated, so a person merges it. The GitHub environment `npm`, limited to `main`, and the trusted publisher, limited to `release.yml`, keep other branches and workflows out.
+- **A pushed tag starts no workflow.** A tag that `GITHUB_TOKEN` pushes does not trigger `release-tag.yml`, so `release.yml` calls it directly. A tag a person pushes by hand still triggers it as today.
+- **npm's view lags.** `check-npm-dist-tag.ts` read the old dist-tag for about two minutes after the rc.3 publish. `verify` retries for that reason.
+
 ## Out of scope
 
 | Item | Why it waits |
