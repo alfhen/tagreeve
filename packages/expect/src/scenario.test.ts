@@ -95,6 +95,11 @@ test('shows a dataLayer selector key that looks like a value as (other)', () => 
   expect(errorOf(`start: /\nexpect:\n  must:\n    - { dataLayer: { event: purchase, colour: red } }`)).toMatch(/colour/);
 });
 
+test('names the key own line for a masked dataLayer key', () => {
+  const msg = errorOf(`start: /\nexpect:\n  must:\n    - dataLayer:\n        event: purchase\n        "buyer@example.test": 1\n`);
+  expect(msg).toMatch(/line 6: expect\.must\[0\]\.dataLayer\.\(other\): unknown key/);
+});
+
 test('names the line of a bad consent value', () => {
   const msg = errorOf(`start: /\nexpect:\n  mustNot:\n    - { vendor: ga4, consent.analytics: maybe }\n`);
   expect(msg).toMatch(/line 4: expect\.mustNot\[0\]\.consent\.analytics: must be one of granted, denied, unknown/);

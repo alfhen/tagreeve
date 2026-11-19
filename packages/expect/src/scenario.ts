@@ -737,7 +737,11 @@ export function parseScenario(text: string, extraVendorKeys: readonly string[] =
     };
     for (const [key, raw] of Object.entries(v)) {
       const p = [...path, key];
-      if (!PUSH_SELECTOR_KEYS.includes(key)) fail(pathProblem(key) === undefined ? p : [...path, OTHER_NAME], `unknown key, expected one of ${PUSH_SELECTOR_KEYS.join(', ')}`);
+      if (!PUSH_SELECTOR_KEYS.includes(key)) {
+        const message = `unknown key, expected one of ${PUSH_SELECTOR_KEYS.join(', ')}`;
+        if (pathProblem(key) === undefined) fail(p, message);
+        else issues.push(`line ${lineOf(p)}: ${[...path, OTHER_NAME].reduce<string>((acc, x) => (typeof x === 'number' ? `${acc}[${x}]` : acc ? `${acc}.${x}` : x), '')}: ${message}`);
+      }
       else if (key === 'event') {
         if (typeof raw === 'string' && raw !== '' && raw.length <= MAX_PUSH_PATH && isEventLabel(raw)) event = raw;
         else fail(p, 'must be an event name as the --json push shapes show it, such as purchase. A name that reads (other) there cannot be matched');
