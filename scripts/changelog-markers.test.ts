@@ -124,6 +124,24 @@ describe('CHANGELOG.md', () => {
     expect(markerProblems(text, pkg.version)).toEqual([]);
   });
 
+  describe('released section 0.7.0-rc.4', () => {
+    const section = (() => {
+      const start = text.indexOf('## 0.7.0-rc.4\n');
+      const next = text.indexOf('\n## ', start + 1);
+      return start === -1 ? '' : text.slice(start, next === -1 ? undefined : next);
+    })();
+
+    it('exists with the install line', () => {
+      expect(section).not.toBe('');
+      expect(section).toContain('Install it with `npm i -g tagreeve@next`.');
+    });
+
+    it('has no marker and no "Not released yet" line', () => {
+      expect(section).not.toMatch(/^<!-- [A-Z]\d{2} -->$/m);
+      expect(section).not.toContain('Not released yet');
+    });
+  });
+
   describe('released section 0.7.0-rc.3', () => {
     const section = (() => {
       const start = text.indexOf('## 0.7.0-rc.3\n');
