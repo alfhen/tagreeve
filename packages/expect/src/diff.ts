@@ -1,4 +1,4 @@
-import { maskValuePath, stripSandboxPrefix } from '@tagreeve/decoders';
+import { maskValuePath, sameGcdState, stripSandboxPrefix } from '@tagreeve/decoders';
 import type { ConsentEpoch, Hit, HitIds, RunRecords } from '@tagreeve/core';
 import { consentFields } from './scenario.ts';
 import { epochForHit, judgeIndex, judgedAt } from './evaluate.ts';
@@ -442,10 +442,19 @@ export interface ShapeCountChange extends ShapeFields {
   b: number;
 }
 
+export interface ShapeGcdLetters extends ShapeFields {
+  key: DiffKey;
+  /** The `gcd` of the first side and of the second. */
+  a: string;
+  b: string;
+}
+
 export interface ShapeDiff {
   added: ShapeChange[];
   removed: ShapeChange[];
   countChanges: ShapeCountChange[];
+  /** Tuples that differ only in `gcd` letters of the same state. Not drift. */
+  gcdLetters: ShapeGcdLetters[];
   moved: ShapeMove[];
   /** A key or tuple on one side only. A count change is not drift. */
   drift: boolean;
@@ -498,6 +507,12 @@ const groupId = (k: DiffKey) => JSON.stringify([k.vendor, k.event, k.page ?? nul
 // Sorted, so a file saved with sorted keys (`jq -S`) gives the same id as one in field order.
 const tupleId = (t: ShapeFields) => JSON.stringify([Object.entries(t.consent).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)), t.ids]);
 
+function sameButGcdLetters(x: ShapeTuple, y: ShapeTuple): boolean {
+  const { gcd: gx = '', ...cx } = x.consent;
+  const { gcd: gy = '', ...cy } = y.consent;
+  return JSON.stringify([Object.entries(cx).sort(), x.ids]) === JSON.stringify([Object.entries(cy).sort(), y.ids]) && sameGcdState(gx, gy);
+}
+
 const total = (k: ShapeKey | undefined) => (k?.tuples ?? []).reduce((n, t) => n + t.count, 0);
 
 function tupleCounts(k: ShapeKey | undefined): Map<string, number> {
@@ -549,7 +564,7 @@ function findMove(epochs: Map<string, { a?: ShapeKey; b?: ShapeKey }>, order: st
 
 /** Drift is a key or tuple on one side only. The order of hits and their counts do not matter. Hits that moved across one consent answer are listed in `moved` and are not drift. */
 export function diffShapes(a: ShapeKey[], b: ShapeKey[], options: ShapeDiffOptions = {}): ShapeDiff {
-  const result: ShapeDiff = { added: [], removed: [], countChanges: [], moved: [], drift: false };
+  const result: ShapeDiff = { added: [], removed: [], countChanges: [], gcdLetters: [], moved: [], drift: false };
   const ia = new Map(a.map((k) => [keyId(k.key), k]));
   const ib = new Map(b.map((k) => [keyId(k.key), k]));
 
@@ -577,10 +592,20 @@ export function diffShapes(a: ShapeKey[], b: ShapeKey[], options: ShapeDiffOptio
     const key = (ka ?? kb)!.key;
     const ta = new Map((ka?.tuples ?? []).map((t) => [tupleId(t), t]));
     const tb = new Map((kb?.tuples ?? []).map((t) => [tupleId(t), t]));
+    const lost = [...ta].filter(([tid]) => !tb.has(tid));
     for (const [tid, t] of tb) {
       const before = ta.get(tid);
-      if (!before) result.added.push({ key, consent: t.consent, ids: t.ids, wholeKey: !ka });
-      else if (before.count !== t.count) result.countChanges.push({ key, consent: t.consent, ids: t.ids, a: before.count, b: t.count });
+      if (!before) {
+        const at = lost.findIndex(([, old]) => sameButGcdLetters(old, t));
+        if (at >= 0) {
+          const [[oldId, old]] = lost.splice(at, 1) as [[string, ShapeTuple]];
+          ta.delete(oldId);
+          result.gcdLetters.push({ key, consent: t.consent, ids: t.ids, a: old.consent.gcd ?? '', b: t.consent.gcd ?? '' });
+          if (old.count !== t.count) result.countChanges.push({ key, consent: t.consent, ids: t.ids, a: old.count, b: t.count });
+        } else {
+          result.added.push({ key, consent: t.consent, ids: t.ids, wholeKey: !ka });
+        }
+      } else if (before.count !== t.count) result.countChanges.push({ key, consent: t.consent, ids: t.ids, a: before.count, b: t.count });
     }
     for (const [tid, t] of ta) {
       if (!tb.has(tid)) result.removed.push({ key, consent: t.consent, ids: t.ids, wholeKey: !kb });

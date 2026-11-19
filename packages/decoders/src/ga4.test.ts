@@ -1,6 +1,6 @@
 import { newId, type Request } from '@tagreeve/core';
 import { expect, test } from 'vitest';
-import { decodeRequest, decoders, ga4HitIds, gcdLetters, gcdSignals, isCollectionEndpoint, isSandboxPageUrl } from './index.ts';
+import { decodeRequest, decoders, ga4HitIds, gcdLetters, gcdSignals, isCollectionEndpoint, isSandboxPageUrl, sameGcdState } from './index.ts';
 
 const PAGE = 'http://localhost:3000/products/fake-tee';
 const SANDBOX = 'http://localhost:3000/web-pixels@0.0.0-fixture/sandbox/modern/';
@@ -293,4 +293,19 @@ test('ga4HitIds returns an empty list for a request that is not GA4 or has an un
   expect(ga4HitIds(req('https://example.com/other?cid=1'))).toEqual([]);
   expect(() => ga4HitIds(req('not a url'))).not.toThrow();
   expect(ga4HitIds(req('not a url'))).toEqual([]);
+});
+
+test('sameGcdState pairs p with q and t with v at the signal letters only', () => {
+  for (const [a, b] of [['13p3p3p2p5l1', '13q3q3q2q5l1'], ['13q3q3q2q5l1', '13p3p3p2p5l1'], ['13t3t3t2t5l1', '13v3v3v2v5l1'], ['13p3t3p2p5l1', '13q3v3p2p5l1']] as const) {
+    expect(sameGcdState(a, b)).toBe(true);
+  }
+  for (const [a, b] of [['13p3p3p2p5l1', '13r3p3p2p5l1'], ['13l3p3p2p5l1', '13p3p3p2p5l1'], ['13p3p3p2p5l1', '13t3p3p2p5l1'], ['13p3p3p2p5l1', '14q3q3q2q5l1'], ['13p3p3p2p5l1', '13p3p3p2p5p1'], ['13p3p3p', '13q3q3q']] as const) {
+    expect(sameGcdState(a, b)).toBe(false);
+  }
+});
+
+test('sameGcdState is false and does not throw for an empty, short or unequal-length string', () => {
+  for (const [a, b] of [['', '13p3p3p2p5l1'], ['13p3p3p2p5l1', ''], ['13p3', '13q3'], ['13p3p3p2p5l1', '13q3q3q2q5l1~1']] as const) {
+    expect(sameGcdState(a, b)).toBe(false);
+  }
 });

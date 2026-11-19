@@ -53,6 +53,19 @@ export function gcdSignals(gcd: string | undefined): Record<GcdSignalName, GcdSi
   return out;
 }
 
+const SAME_STATE_PAIRS = new Set(['pq', 'qp', 'tv', 'vt']);
+
+/** True when two `gcd` strings differ only at the four signal letters, and each differing pair is `p` and `q` or `t` and `v`. Those pairs share an effective state. */
+export function sameGcdState(a: string, b: string): boolean {
+  if (a.length < 9 || a.length !== b.length) return false;
+  const signalIndexes = GCD_SIGNALS.map((_, i) => 2 + 2 * i);
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] === b[i]) continue;
+    if (!signalIndexes.includes(i) || !SAME_STATE_PAIRS.has(a[i]! + b[i]!)) return false;
+  }
+  return true;
+}
+
 /** The four signal letters in `GCD_SIGNALS` order, `?` for a letter outside the table. Undefined when `gcdSignals` is. */
 export function gcdLetters(gcd: string | undefined): string[] | undefined {
   if (!gcdSignals(gcd)) return undefined;
