@@ -13,6 +13,8 @@ const readme = (version: string): string =>
   `# Tagreeve\n\n> **Status: 0.7 (\`${version}\`).** Plays a visitor.\n\n> **In ${version}:** the prose line.\n`;
 const cliLine = (version: string): string =>
   `\`npm i -g tagreeve@next\` installs the newest release candidate. The current release candidate is \`${version}\`. The newest final release is 0.6.2. The first Tagreeve release was 0.4.0-rc.1.`;
+const CLI_HEAD = '`npm i -g tagreeve@next` installs the newest release candidate.';
+const CLI_TAIL = 'The first Tagreeve release was 0.4.0-rc.1.';
 const design = (version: string): string =>
   `# Tagreeve design\n\nStatus: revision 20, for release ${version}. Milestones are built.\n\n7. **0.7 (built, \`${version}\`):** the milestone prose.\n`;
 
@@ -32,6 +34,7 @@ function copyAt(version: string): string {
 
 const read = (dir: string, file: string): string => readFileSync(join(dir, file), 'utf8');
 const snapshot = (dir: string): string[] => files.map((file) => read(dir, file));
+const cliText = (dir: string): string => read(dir, 'docs/cli.md').split('\n')[2] ?? '';
 const bump = (dir: string, version: string) =>
   spawnSync('bash', [join(dir, 'scripts/bump-version.sh'), version], { cwd: dir, encoding: 'utf8' });
 const versionOf = (dir: string): string => (JSON.parse(read(dir, 'package.json')) as { version: string }).version;
@@ -51,7 +54,7 @@ describe('bump-version.sh', () => {
     expect(status).toContain('`0.7.0-rc.4`');
     expect(status).not.toContain('`0.7.0-rc.3`');
     expect(read(dir, 'docs/cli.md')).toContain('The current release candidate is `0.7.0-rc.4`.');
-    expect(read(dir, 'docs/cli.md')).toContain('The newest final release is 0.6.2.');
+    expect(cliText(dir)).toBe(`${CLI_HEAD} The current release candidate is \`0.7.0-rc.4\`. The newest final release is 0.6.2. ${CLI_TAIL}`);
     expect(read(dir, 'docs/design.md').split('\n')[2]).toMatch(/^Status: revision 20, for release 0\.7\.0-rc\.4\./);
     expect(read(dir, 'README.md')).toContain('> **In 0.7.0-rc.3:** the prose line.');
     expect(read(dir, 'docs/design.md')).toContain('7. **0.7 (built, `0.7.0-rc.3`):** the milestone prose.');
@@ -65,16 +68,15 @@ describe('bump-version.sh', () => {
     const dir = copyAt('0.7.0-rc.3');
     expect(bump(dir, '0.7.0').status).toBe(0);
     const cli = read(dir, 'docs/cli.md');
-    const line = cli.split('\n').find((l) => l.includes('The current release is')) ?? '';
-    expect(line).toContain('The current release is `0.7.0`.');
-    expect(line).toContain('The newest final release is 0.7.0.');
+    const line = cliText(dir);
+    expect(line).toBe(`${CLI_HEAD} The current release is \`0.7.0\`. The newest final release is 0.7.0. ${CLI_TAIL}`);
     expect(cli).not.toContain('The current release candidate is');
     expect(line.match(/`[^`]*`/g)).toEqual(['`npm i -g tagreeve@next`', '`0.7.0`']);
     expect(versionOf(dir)).toBe('0.7.0');
     expect(read(dir, 'README.md')).toContain('(`0.7.0`)');
     expect(read(dir, 'docs/design.md').split('\n')[2]).toContain('for release 0.7.0.');
     expect(bump(dir, '0.7.1-rc.1').status).toBe(0);
-    expect(read(dir, 'docs/cli.md')).toContain('The current release candidate is `0.7.1-rc.1`. The newest final release is 0.7.0.');
+    expect(cliText(dir)).toBe(`${CLI_HEAD} The current release candidate is \`0.7.1-rc.1\`. The newest final release is 0.7.0. ${CLI_TAIL}`);
   });
 
   const refused = ['0.7.0-beta.1', 'v0.7.0', '0.7', '0.7.0-rc', '0.7.0-rc.1-x', ' 0.7.0', '0.7.0\n', '٠.7.0', '', '0.7.0-rc.2', '0.7.0-rc.3'];

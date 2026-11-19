@@ -56,7 +56,7 @@ edit('README.md', (text) => {
 });
 
 edit('docs/cli.md', (text) => {
-  const pattern = /The current (release candidate|release) is `[^`]*`\.(?: The newest final release is ([^ ]+?)\.)?/;
+  const pattern = /The current (release candidate|release) is `[^`]*`\.(?: The newest final release is (\d+\.\d+\.\d+)\.)?/;
   const found = text.match(pattern);
   if (!found) refuse('docs/cli.md has no current-release sentence');
   const wasFinal = found[1] === 'release';
