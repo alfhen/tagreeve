@@ -160,4 +160,6 @@ The config lets anyone run your container. Treat it like a password. Keep it out
 
 Tagreeve does not print the config and does not write it to a record or a log line. Delete the file when you no longer need it.
 
+A call the container makes can carry a secret of its own, such as an `access_token` in the URL or body, or an `Authorization` header. The record replaces the value with `[redacted]`. A call with a secret replaced has `secretsRedacted` on its request, a sorted list of the lower-case names, for example `["access_token"]`. The list never holds a value. A call with no secret has no such field.
+
 If a crash leaves a container or network behind, the next run removes the ones whose owner process is gone. Objects that carry another host's label, for example on a shared remote Docker, you remove by hand with `docker rm` and `docker network rm`. They are named `tagreeve-sgtm-*` and carry the labels `tagreeve.owner.pid` and `tagreeve.owner.host`.

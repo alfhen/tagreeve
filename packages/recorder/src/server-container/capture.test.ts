@@ -206,3 +206,83 @@ describe('waitForQuiet', () => {
     expect(c.now()).toBe(MAX_QUIET_WAIT_MS);
   });
 });
+
+describe('secretsRedacted', () => {
+  const capture = (over: Parameters<typeof call>[0]) => captureServerContainerCall(call(over), context);
+  const q2 = {
+    url: `https://graph.facebook.com/v21.0/1/events?access_token=${TOKEN}`,
+    body: `{"appsecret_proof":"${PROOF}","access_token":"${TOKEN}","data":[]}`,
+  };
+
+  test('names from the query and a JSON body are merged, sorted, once each', () => {
+    expect(capture(q2).secretsRedacted).toEqual(['access_token', 'appsecret_proof']);
+  });
+
+  test('an x-api-key header alone', () => {
+    const request = capture({ headers: { 'x-api-key': TOKEN, accept: 'application/json' } });
+    expect(request.secretsRedacted).toEqual(['x-api-key']);
+    expect(request.headers['x-api-key']).toBe('[redacted]');
+  });
+
+  test('an Authorization header alone', () => {
+    const request = capture({ headers: { Authorization: TOKEN, accept: 'application/json' } });
+    expect(request.headers.Authorization).toBe('[redacted]');
+    expect(request.headers.accept).toBe('application/json');
+    expect(request.secretsRedacted).toEqual(['authorization']);
+    expect(JSON.stringify(request)).not.toContain(TOKEN);
+  });
+
+  test('names are lower-case whatever case the call used', () => {
+    const upper = capture({ url: `https://graph.facebook.com/v21.0/1/events?ACCESS_TOKEN=${TOKEN}` });
+    expect(upper.secretsRedacted).toEqual(['access_token']);
+    expect(upper.url).toContain('[redacted]');
+    expect(upper.url).not.toContain(TOKEN);
+    const mixed = capture({
+      url: `https://graph.facebook.com/v21.0/1/events?appsecret_proof=${PROOF}`,
+      headers: { 'X-API-KEY': TOKEN, Cookie: TOKEN },
+    });
+    expect(mixed.secretsRedacted).toEqual(['appsecret_proof', 'cookie', 'x-api-key']);
+  });
+
+  test.each(['AUTHORIZATION', 'Proxy-Authorization', 'COOKIE', 'Set-Cookie', 'Access-Token', 'X-Api-Key'])('header %s', (name) => {
+    const request = capture({ headers: { [name]: TOKEN } });
+    expect(request.secretsRedacted).toEqual([name.toLowerCase()]);
+    expect(request.headers[name]).toBe('[redacted]');
+  });
+
+  test('a call with other names has no key and nothing is replaced', () => {
+    const request = capture({
+      url: `https://graph.facebook.com/v21.0/1/events?token=${TOKEN}`,
+      body: `{"proof":"${PROOF}","token":"${TOKEN}","data":[]}`,
+      headers: { 'x-api-token': TOKEN },
+    });
+    expect(request.url).toContain(`token=${TOKEN}`);
+    expect(request.postData).toContain(TOKEN);
+    expect(request.postData).toContain(PROOF);
+    expect(request.headers['x-api-token']).toBe(TOKEN);
+    expect('secretsRedacted' in request).toBe(false);
+  });
+
+  test('a name inside a string value of a body is not marked', () => {
+    const request = capture({ body: `{"event_source_url":"https://shop.example/p?access_token=${TOKEN}","data":[]}` });
+    expect('secretsRedacted' in request).toBe(false);
+  });
+
+  test('a GA4 call has no key', () => {
+    const request = capture({ url: 'https://www.google-analytics.com/g/collect?v=2&tid=G-PWTEST0001', body: 'en=Purchase' });
+    expect('secretsRedacted' in request).toBe(false);
+  });
+
+  test('no value reaches the record and redacted stays unset', () => {
+    const input = { ...q2, headers: { 'x-api-key': TOKEN } };
+    expect(input.url).toContain(TOKEN);
+    expect(input.body).toContain(PROOF);
+    const request = capture(input);
+    const text = JSON.stringify(request);
+    expect(text).not.toContain(TOKEN);
+    expect(text).not.toContain(PROOF);
+    const allowed = ['access_token', 'appsecret_proof', 'authorization', 'proxy-authorization', 'cookie', 'set-cookie', 'access-token', 'x-api-key'];
+    for (const name of request.secretsRedacted ?? []) expect(allowed).toContain(name);
+    expect(request.redacted).toBeUndefined();
+  });
+});

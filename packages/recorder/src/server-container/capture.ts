@@ -9,7 +9,7 @@ import {
   type ServerContainerPassThrough,
 } from '@tagreeve/core';
 import { isLoopbackHost } from '../guard.ts';
-import { redactHeaders, redactSecretsInBody, redactSecretsInUrl } from '../redact.ts';
+import { redactHeaders, redactSecretsInBody, redactSecretsInUrl, secretHeaderNamesIn, secretNamesInBody, secretNamesInUrl } from '../redact.ts';
 import { stubResponse } from '../stub.ts';
 import { createRunCa } from './ca.ts';
 import type { RunCa } from './ca.ts';
@@ -45,6 +45,10 @@ export interface CaptureContext {
 /** Turns a call the container made into a request record. Secrets are replaced before anything else reads it. */
 export function captureServerContainerCall(call: ProxyRequest, context: CaptureContext): Request {
   const text = call.body.length === 0 ? null : call.body.toString('utf8');
+  const headers = flattenHeaders(call.headers);
+  const secretsRedacted = [
+    ...new Set([...secretNamesInUrl(call.url), ...(text === null ? [] : secretNamesInBody(text)), ...secretHeaderNamesIn(headers)]),
+  ].sort();
   return {
     type: 'request',
     id: newId('request'),
@@ -56,10 +60,11 @@ export function captureServerContainerCall(call: ProxyRequest, context: CaptureC
     resourceType: 'fetch',
     frameUrl: null,
     initiator: 'serverContainer',
-    headers: redactHeaders(flattenHeaders(call.headers)),
+    headers: redactHeaders(headers),
     postData: text === null ? null : redactSecretsInBody(text).slice(0, MAX_POST_DATA),
     outcome: 'stubbed',
     captured: 'serverContainer',
+    ...(secretsRedacted.length > 0 && { secretsRedacted }),
   };
 }
 

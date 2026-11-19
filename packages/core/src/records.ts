@@ -165,6 +165,8 @@ export interface Request {
   failure?: string;
   /** Set when `postData` and the URL's query values were replaced because a person was typing during a handoff. */
   redacted?: 'handoff';
+  /** Sorted lower-case names of the secrets replaced in a server container call's URL, body or headers. Never values. */
+  secretsRedacted?: string[];
   /**
    * Absent when a browser hook saw the request. `netlog`: found in Chromium's net log only, so `postData` is null.
    * `serverContainer`: a call the server container made, seen by the recording proxy. It was answered locally.
