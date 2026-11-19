@@ -138,12 +138,8 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
       add(`${kind}: ${rule.description}`, pass, evidence, message, countRests ? 'warn' : outcome.severity, countRests ? 'serverSendProbableLink' : note, scoped && (pass || failureRests));
     }
 
-  builtInChecks(records, scenario, ctx, add);
-  const containerRan = runRecord && (runRecord.serverContainer || runRecord.testServerContainer) && !runRecord.serverContainer?.error;
-  if (containerRan) {
-    const rejected = serverContainerRejected([...allRequests.values()], ctx.responses, scenario.options.serverHosts ?? []);
-    add('builtin: serverContainerRejected', rejected.pass, rejected.evidence, rejected.message, scenario.options.builtins?.serverContainerRejected ?? 'warn');
-  }
+  const containerRan = Boolean(runRecord && (runRecord.serverContainer || runRecord.testServerContainer) && !runRecord.serverContainer?.error);
+  builtInChecks(records, scenario, ctx, add, containerRan);
   return results;
 }
 
@@ -1117,13 +1113,14 @@ function countByHost(flags: readonly Flag[], ctx: Context): string {
 }
 
 /** Built-in checks whose default is not `fail`. */
-const DEFAULT_SEVERITY: Partial<Record<BuiltinName, Severity>> = { earlyIdentifiers: 'warn', consentModeSetup: 'warn', earlyIdentityPush: 'warn', idHandover: 'warn' };
+const DEFAULT_SEVERITY: Partial<Record<BuiltinName, Severity>> = { earlyIdentifiers: 'warn', consentModeSetup: 'warn', earlyIdentityPush: 'warn', idHandover: 'warn', serverContainerRejected: 'warn' };
 
 function builtInChecks(
   records: readonly Input[],
   scenario: Scenario,
   ctx: Context,
   addResult: (expectation: string, pass: boolean, evidence: string[], message: string, severity?: Severity, note?: ResultNote, timeJudged?: boolean) => void,
+  containerRan: boolean,
 ) {
   const add = (name: BuiltinName, pass: boolean, evidence: string[], message: string, note?: ResultNote, timeJudged = false) =>
     addResult(
@@ -1206,16 +1203,21 @@ function builtInChecks(
       [],
       'Cannot check for data that is not from the run identity: no identity was given and no possibleRealData flags exist.',
     );
-    return;
+  } else {
+    add(
+      'possibleRealData',
+      problems.length === 0,
+      evidence,
+      problems.length === 0
+        ? 'Expected no data that is not from the run identity, found none.'
+        : `Expected no data that is not from the run identity, found ${problems.length}: ${shown}${more}.`,
+    );
   }
-  add(
-    'possibleRealData',
-    problems.length === 0,
-    evidence,
-    problems.length === 0
-      ? 'Expected no data that is not from the run identity, found none.'
-      : `Expected no data that is not from the run identity, found ${problems.length}: ${shown}${more}.`,
-  );
+
+  if (containerRan) {
+    const rejected = serverContainerRejected([...ctx.requests.values()], ctx.responses, scenario.options.serverHosts ?? []);
+    add('serverContainerRejected', rejected.pass, rejected.evidence, rejected.message);
+  }
 }
 
 const DENIABLE = ['analytics', 'ads', 'adUserData'] as const;
