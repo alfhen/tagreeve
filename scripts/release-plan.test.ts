@@ -86,6 +86,10 @@ describe('guard', () => {
     await expect(guard(rc4, 'next', stub)).resolves.toBe('published');
   });
 
+  it('prints published when the dist-tag names the version although the version reads miss it', async () => {
+    await expect(guard(rc4, 'next', guardDeps([[]], { next: rc4 }).stub)).resolves.toBe('published');
+  });
+
   it('prints publish when the dist-tag does not exist or holds a lower version', async () => {
     await expect(guard(rc4, 'next', guardDeps([[]], { latest: '0.6.2' }).stub)).resolves.toBe('publish');
     await expect(guard(rc4, 'next', guardDeps([[]], { next: '0.7.0-rc.3' }).stub)).resolves.toBe('publish');

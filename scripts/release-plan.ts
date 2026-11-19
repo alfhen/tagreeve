@@ -55,6 +55,7 @@ export async function guard(version: string, distTag: string, deps: GuardDeps): 
   }
   const held = deps.npmDistTags()[distTag];
   if (held === undefined) return 'publish';
+  if (held === version) return 'published';
   if (typeof held !== 'string' || compareVersions(held, version) > 0) {
     throw new Error(`dist-tag ${distTag} holds ${String(held)}, which is higher than ${version}`);
   }

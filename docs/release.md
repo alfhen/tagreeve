@@ -53,7 +53,7 @@ A rerun uses the workflow file of the original commit, so a bug in `release.yml`
 
 Only the maintainer does this, when CI is down.
 
-1. Check out main at the merge commit, with a clean tree.
+1. Check out main at the merge commit, with a clean tree. If CI already pushed the tag `v<version>`, run `git fetch origin tag v<version>`, check out the tag, check that it is built on the merge commit (`git rev-parse v<version>^{commit}^`), and skip to step 4.
 2. Run `scripts/release.sh <version>`. It builds, then commits `dist/` and a `package.json` without the `build` script on a detached HEAD and creates the annotated tag `v<version>`. The commit and tag use the maintainer's identity (`user.name` and `user.email`, or `GIT_AUTHOR_NAME` and `GIT_AUTHOR_EMAIL`).
 3. Push the tag with the command the script prints, and wait for the `release-tag` workflow.
 4. Publish from the tag commit with your own one-time password: `npm publish --tag next` for a release candidate, or `npm publish --tag latest` for a final release. Then run `node scripts/check-npm-dist-tag.ts <version>`.
