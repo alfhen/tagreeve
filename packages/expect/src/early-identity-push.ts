@@ -39,7 +39,7 @@ const holdsLocalPart = (key: string, identity: Identity): boolean => {
 // A key can itself hold a value, so only a plain name is shown.
 const safeKey = (key: string, identity: Identity) => {
   if (guardFieldName(key) !== key || isValueSegment(key)) return OTHER_NAME;
-  return holdsLocalPart(key, identity) || ownValueKinds(key, identity).size > 0 ? OTHER_NAME : key;
+  return holdsLocalPart(key, identity) || ownValueKinds(key, identity, { literal: true }).size > 0 ? OTHER_NAME : key;
 };
 
 /** Collects the key path and kinds of every leaf that holds one of the identity's own values. Never keeps a value. */
@@ -62,7 +62,7 @@ function ownLeaves(value: unknown, path: string, key: string, identity: Identity
   }
   for (const [k, child] of Object.entries(value)) {
     const childPath = path === '' ? safeKey(k, identity) : `${path}.${safeKey(k, identity)}`;
-    const keyKinds = ownValueKinds(k, identity);
+    const keyKinds = ownValueKinds(k, identity, { literal: true });
     if (keyKinds.size > 0) {
       const found = out.get(childPath) ?? new Set<OwnValueKind>();
       for (const kind of keyKinds) found.add(kind);

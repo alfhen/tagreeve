@@ -414,16 +414,16 @@ interface Candidate {
 }
 
 /** Every email, phone and SHA-256 candidate in the text and its decoded variants, whoever owns it. */
-function* candidates(text: string): Generator<Candidate> {
+function* candidates(text: string, literal = false): Generator<Candidate> {
   for (const { text: variant, fromBase64 } of readingsOf(text)) {
     // Escaped text is matched through its decoded variant, so adjacent escapes never join a local part.
     if (!hasUrlEscapes(variant)) {
       for (const raw of variant.match(EMAIL) ?? []) {
         // A '+' may be a form-encoded space ("Order+for+a@b.com"), so only the part after the last one counts.
-        const m = raw.slice(raw.lastIndexOf('+') + 1);
+        const m = literal ? raw : raw.slice(raw.lastIndexOf('+') + 1);
         if (!m.includes('@') || FILE_EXTENSION.test(m)) continue;
         // One '+' is either a form-encoded space or a plus-address tag, so both readings are reported.
-        const both = raw !== m && raw.indexOf('+') === raw.lastIndexOf('+') && !raw.startsWith('+');
+        const both = !literal && raw !== m && raw.indexOf('+') === raw.lastIndexOf('+') && !raw.startsWith('+');
         yield { kind: 'email', value: m, alternate: both ? raw : undefined, variant, index: 0, fromBase64 };
       }
     }
@@ -465,9 +465,10 @@ export type OwnValueKind = 'email' | 'phone' | 'email hash' | 'phone hash';
 
 /**
  * The kinds of the identity's own values found in text: its email, phone, `extra` emails and phones, and the hex,
- * base64 and base64url SHA-256 of those. A hash reads as an email or phone hash by what it hashes.
+ * base64 and base64url SHA-256 of those. A hash reads as an email or phone hash by what it hashes. With `literal`, a
+ * plus is part of the address, as in an object key, and not a form-encoded space.
  */
-export function ownValueKinds(text: string, identity: Identity): Set<OwnValueKind> {
+export function ownValueKinds(text: string, identity: Identity, options: { literal?: boolean } = {}): Set<OwnValueKind> {
   const { own, emailHashes, phoneHashes } = ownMatcher(identity);
   const kinds = new Set<OwnValueKind>();
   const addHash = (value: string) => {
@@ -475,7 +476,7 @@ export function ownValueKinds(text: string, identity: Identity): Set<OwnValueKin
     if (emailHashes.has(bare)) kinds.add('email hash');
     if (phoneHashes.has(bare)) kinds.add('phone hash');
   };
-  for (const c of candidates(text)) {
+  for (const c of candidates(text, options.literal)) {
     if (c.kind === 'email') {
       if (isOwnEmail(c.value, own, c.fromBase64)) kinds.add('email');
     } else if (c.kind === 'phone') {

@@ -297,3 +297,8 @@ test('known limit: base64 readings keep the contains rule', () => {
   expect(pushed({ d: email }).pass).toBe(false);
   expect(pushed({ d: phone }).pass).toBe(false);
 });
+
+test('a key with a plus before the run email is foreign and the exact key still matches', () => {
+  expect(pushed({ 'a+buyer@example.test': true })).toMatchObject({ pass: true, evidence: [] });
+  expect(pushed({ 'buyer@example.test': true }).pass).toBe(false);
+});
