@@ -64,6 +64,9 @@ test('the version in the README and cli.md equals package.json', () => {
     expect(named.length).toBeGreaterThan(0);
     expect(new Set(named)).toEqual(new Set([`\`${version}\``]));
   }
+  const line3 = read('docs/design.md').split('\n')[2] ?? '';
+  expect(line3).toMatch(/^Status: revision \d+, for release /);
+  expect(line3.match(/^Status: revision \d+, for release (\d+\.\d+\.\d+(?:-rc\.\d+)?)\./)?.[1]).toBe(version);
 });
 
 test('design section 11 lists deniedIdentifiers as a built-in check', () => {
