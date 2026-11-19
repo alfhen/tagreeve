@@ -1,5 +1,6 @@
-import type { DataLayerEvent } from '@tagreeve/core';
+import { createIdentity, newId, type DataLayerEvent, type Flag, type Request, type Step } from '@tagreeve/core';
 import { describe, expect, test } from 'vitest';
+import { evaluate } from './evaluate.ts';
 import { evaluatePushRule, type PushRuleInput } from './push-rules.ts';
 import { labelKind, pushShapes, NO_EVENT } from './push-shape.ts';
 import { parseScenario, type Count, type PushSelector, type Rule } from './scenario.ts';
@@ -338,5 +339,69 @@ describe('a push past the pushShapes caps', () => {
     expect(out.message).toContain('found none (1 before narrowing)');
     const warn = evaluatePushRule(rule('mustNot', dl({ has: ['coupon'] })), everywhere([plain], { hookIncomplete: true }));
     expect(warn).toMatchObject({ pass: false, severity: 'warn' });
+  });
+});
+
+describe('a loader and its document boundaries', () => {
+  const runId = newId('run');
+  const text = `steps:\n  - { wait: 1s, label: first }\n  - { wait: 1s, label: second }\nexpect:\n  mustNot:\n    - { dataLayer: { event: purchase }, after: first }`;
+  type Frame = { main: boolean; n: number } | undefined;
+  const req = (t: number, over: Partial<Request>): Request =>
+    ({ type: 'request', id: newId('request'), runId, stepId: null, t, method: 'GET', url: 'https://fake.test/x', resourceType: 'script', frameUrl: null, initiator: null, headers: {}, postData: null, outcome: 'passed', ...over }) as Request;
+  const step = (label: string, index: number, startedAt: number, endedAt: number) => ({ type: 'step', id: newId('step'), runId, index, label, startedAt, endedAt }) as unknown as Step;
+  function verdict(loaderFrame: Frame, doc: Partial<Request>) {
+    const loader = req(500, { frame: loaderFrame });
+    const flag = { type: 'flag', id: newId('flag'), runId, kind: 'dataLayerNotHooked', recordIds: [loader.id], detail: 'fake' } as Flag;
+    const records = [step('first', 1, 100, 1000), step('second', 2, 1000, 2000), loader, flag, req(800, { resourceType: 'document', ...doc })];
+    const out = evaluate(records as never, parseScenario(`start: /\n${text}`), { identity: createIdentity(1) })[0]!;
+    return { pass: out.pass, severity: out.severity, message: out.message };
+  }
+  const main0 = { main: true, n: 0 };
+  const warns = { pass: false, severity: 'warn' };
+  const passes = { pass: true, severity: undefined };
+
+  test('an aborted main-frame navigation is not a boundary', () => {
+    const aborted = verdict(main0, { frame: main0, outcome: 'failed', failure: 'net::ERR_ABORTED' });
+    expect(aborted).toMatchObject(warns);
+    expect(aborted.message).toContain('could not all be read');
+    expect(verdict(main0, { frame: main0 })).toMatchObject(passes);
+  });
+
+  test('a document request in a popup or another frame is not a boundary for a main-frame loader', () => {
+    expect(verdict(main0, { frame: { main: true, n: 2 } })).toMatchObject(warns);
+    expect(verdict(main0, { frame: { main: false, n: 1 } })).toMatchObject(warns);
+    expect(verdict({ main: true, n: 2 }, { frame: main0 })).toMatchObject(warns);
+    expect(verdict({ main: true, n: 2 }, { frame: { main: true, n: 2 } })).toMatchObject(passes);
+  });
+
+  test('for an embedded-frame loader only that frame is a boundary', () => {
+    expect(verdict({ main: false, n: 1 }, { frame: { main: false, n: 1 } })).toMatchObject(passes);
+    expect(verdict({ main: false, n: 1 }, { frame: { main: false, n: 3 } })).toMatchObject(warns);
+  });
+
+  test('a loader or a document request with no frame keeps the main-frame rule', () => {
+    expect(verdict(undefined, { frame: { main: true, n: 2 } })).toMatchObject(passes);
+    expect(verdict(main0, { frame: undefined })).toMatchObject(passes);
+  });
+});
+
+describe('types keyed __proto__', () => {
+  const parsed = parseScenario('start: /\nexpect:\n  must:\n    - { dataLayer: { event: purchase, types: { "__proto__": number } } }');
+  const sel = parsed.expect.must[0]!;
+  const withProto = (json: string) => {
+    const arg = JSON.parse(json);
+    expect(Object.hasOwn(arg, '__proto__')).toBe(true);
+    return evaluatePushRule(sel, everywhere([push(['event', 'purchase', arg])]));
+  };
+
+  test('the path is kept and checked', () => {
+    const types = sel.dataLayer!.types!;
+    expect(Object.hasOwn(types, '__proto__')).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(types, '__proto__')!.value).toBe('number');
+    const bad = withProto('{"__proto__":"pw-fake-text"}');
+    expect(bad.pass).toBe(false);
+    expect(bad.message).toContain('__proto__');
+    expect(bad.message).not.toContain('pw-fake-text');
+    expect(withProto('{"__proto__":12}').pass).toBe(true);
   });
 });

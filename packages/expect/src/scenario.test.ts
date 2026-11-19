@@ -85,6 +85,16 @@ test('names the line and key of an unknown filter', () => {
   expect(msg).toContain('expect.must[0].colour');
 });
 
+test('shows a dataLayer selector key that looks like a value as (other)', () => {
+  const text = `start: /\nexpect:\n  must:\n    - { dataLayer: { event: purchase, "buyer@example.test": 1 } }`;
+  expect(text).toContain('buyer@example.test');
+  const msg = errorOf(text);
+  expect(msg).toContain('(other)');
+  expect(msg).toContain('unknown key');
+  expect(msg).not.toContain('buyer@example.test');
+  expect(errorOf(`start: /\nexpect:\n  must:\n    - { dataLayer: { event: purchase, colour: red } }`)).toMatch(/colour/);
+});
+
 test('names the line of a bad consent value', () => {
   const msg = errorOf(`start: /\nexpect:\n  mustNot:\n    - { vendor: ga4, consent.analytics: maybe }\n`);
   expect(msg).toMatch(/line 4: expect\.mustNot\[0\]\.consent\.analytics: must be one of granted, denied, unknown/);

@@ -525,12 +525,14 @@ function evaluatePushRuleIn(rule: Rule, ctx: Context): RuleOutcome {
   return evaluatePushRule(rule, { pushes: ctx.dataLayerEvents, inScope, where: narrowed.length ? ` ${narrowed.join(', ')}` : '', hookIncomplete });
 }
 
-/** An unhooked loader leaves its whole document unread: from the last navigation at or before it to the next one. */
+/** An unhooked loader leaves its whole document unread: from the last navigation at or before it to the next one. A navigation is a document request of the loader's own frame that did not abort; without a frame on either side, any main-frame request counts. */
 function loaderReachesScope(loader: Request | undefined, ctx: Context, inScope: (t: number) => boolean, windowStartAt: number | undefined): boolean {
   if (!loader) return true;
+  const sameFrame = (r: Request) => (loader.frame && r.frame ? r.frame.n === loader.frame.n : r.frame?.main !== false);
+  const aborted = (r: Request) => r.outcome === 'failed' && r.failure === 'net::ERR_ABORTED';
   const navigations = [
     ...ctx.visitTimes,
-    ...[...ctx.requests.values()].filter((r) => r.resourceType === 'document' && r.frame?.main !== false).map((r) => r.t),
+    ...[...ctx.requests.values()].filter((r) => r.resourceType === 'document' && !aborted(r) && sameFrame(r)).map((r) => r.t),
   ];
   const start = Math.max(-Infinity, ...navigations.filter((t) => t <= loader.t));
   const end = Math.min(Infinity, ...navigations.filter((t) => t > loader.t));
