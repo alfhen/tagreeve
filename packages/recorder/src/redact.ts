@@ -50,7 +50,7 @@ export function secretNamesInUrl(url: string): string[] {
 /** The lower-case secret names whose values `redactSecretsInBody` replaces in the body. */
 export function secretNamesInBody(body: string): string[] {
   return collectNames((note) => {
-    body.replace(IN_JSON, (m) => note(m, m.slice(1, m.indexOf('"', 1))));
-    body.replace(IN_FORM, note);
+    const afterJson = body.replace(IN_JSON, (m) => note(m, m.slice(1, m.indexOf('"', 1))) + `"${REDACTED}"`);
+    afterJson.replace(IN_FORM, note);
   });
 }

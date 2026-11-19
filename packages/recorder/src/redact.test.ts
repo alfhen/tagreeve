@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { redactHeaders, redactSecretsInBody, redactSecretsInUrl } from './redact.ts';
+import { redactHeaders, redactSecretsInBody, redactSecretsInUrl, secretNamesInBody } from './redact.ts';
 
 const value = 'pwfake-cookie-value-9f3a';
 
@@ -32,4 +32,9 @@ test('redacts the names in form and JSON bodies and leaves other fields', () => 
   expect(redactSecretsInBody(`a=1&appsecret_proof=${token}`)).toBe('a=1&appsecret_proof=[redacted]');
   expect(JSON.parse(redactSecretsInBody(`{"access_token":"${token}","n":{"appsecret_proof":"a\\"b"},"k":[1]}`))).toEqual({ access_token: '[redacted]', n: { appsecret_proof: '[redacted]' }, k: [1] });
   expect(redactSecretsInBody('{"data":[]}')).toBe('{"data":[]}');
+});
+
+test('names only the secrets whose values are replaced', () => {
+  expect(secretNamesInBody('{"access_token":"x&appsecret_proof=y"}')).toEqual(['access_token']);
+  expect(secretNamesInBody('access_token=x&appsecret_proof=y')).toEqual(['access_token', 'appsecret_proof']);
 });
