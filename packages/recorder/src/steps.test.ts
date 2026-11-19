@@ -665,6 +665,18 @@ describe('the addToCart failure message', () => {
     for (const leak of ['12345678', 'form_key', '?', 'shop.example.com', 'PWFAKE-BODY-0001']) expect(message).not.toContain(leak);
   });
 
+  test('masks value segments inside a sandbox prefix', async () => {
+    const message = await answered([post('req_1', '/web-pixels@build/12345678/sandbox/strict/cart/add.js')], [{ requestId: 'req_1', status: 404 }]);
+    expect(message).toContain('the store answered 404');
+    expect(message).not.toContain('12345678');
+  });
+
+  test('ignores a response of a cart request that later failed', async () => {
+    const failed = post('req_1', '/cart/add.js', { outcome: 'failed' } as Partial<Request>);
+    const message = await answered([failed], [{ requestId: 'req_1', status: 429 }]);
+    expect(message).toMatch(/click did not add to cart$/);
+  });
+
   test('keeps the plain message with no cart request, a pending one or a failed one', async () => {
     const failed = post('req_1', '/cart/add.js', { outcome: 'failed' } as Partial<Request>);
     for (const requests of [[], [post('req_1', '/cart/add.js')], [failed]]) {
