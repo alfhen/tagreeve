@@ -7,6 +7,12 @@ export interface ServerContainerRejected {
 }
 
 const NO_ANSWER = 'no answer';
+const COUNTS = /^(\d+) of (\d+) requests to the server container were rejected/;
+
+export function rejectedCounts(message: string | undefined): { rejected: number; counted: number } | null {
+  const m = COUNTS.exec(message ?? '');
+  return m ? { rejected: Number(m[1]), counted: Number(m[2]) } : null;
+}
 
 /**
  * Browser requests that the local server container answered, judged by their status. The message holds counts and

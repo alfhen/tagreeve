@@ -1,6 +1,6 @@
 import { guardFieldName, maskValuePath, OTHER_NAME, platformHostFor } from '@tagreeve/decoders';
 import type { FlagKind, HitLinkMiss, Result, ResultNote, RunRecords, ServerContainerErrorClass, Severity } from '@tagreeve/core';
-import { expectedTagsOf, isServerHit, judgeIndex, labelKind, listWithMore, NO_EVENT, pushShapes, summarizeTags, tagLabel, viaHitOf, type PushShape, type PushShapes, type TagsContainerSummary } from '@tagreeve/expect';
+import { expectedTagsOf, isServerHit, judgeIndex, labelKind, listWithMore, NO_EVENT, pushShapes, rejectedCounts, summarizeTags, tagLabel, viaHitOf, type PushShape, type PushShapes, type TagsContainerSummary } from '@tagreeve/expect';
 import { formatDefaultsLine, type DefaultUsed } from './defaults.ts';
 import { NOTE_TEXT } from './report/model.ts';
 
@@ -260,12 +260,10 @@ export function formatDuration(ms: number): string {
 const SERVER_CONTAINER_LIMITS =
   '  Not shown: Stape-only features, tags that need the hosting layer, unpublished workspaces, calls no decoder matched (flagged unknown)';
 
-const REJECTED_COUNTS = /^(\d+) of (\d+) requests to the server container were rejected/;
-
 function rejectedSuffix(summary: Summary): string {
   const result = summary.results.find((r) => r.expectation === 'builtin: serverContainerRejected');
-  const counts = result && !result.pass ? REJECTED_COUNTS.exec(result.message ?? '') : null;
-  return counts ? `; ${counts[1]} of ${counts[2]} requests rejected` : '';
+  const counts = result && !result.pass ? rejectedCounts(result.message) : null;
+  return counts ? `; ${counts.rejected} of ${counts.counted} requests rejected` : '';
 }
 
 function serverContainerLines(summary: Summary): string[] {

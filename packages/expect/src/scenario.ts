@@ -150,7 +150,7 @@ export interface ScenarioOptions {
   serverHosts?: string[];
   /** Browser viewport in CSS pixels. `--viewport` overrides it. */
   viewport?: Viewport;
-  /** Severity per built-in check. A check that is not listed is `fail`, except `earlyIdentifiers`, `consentModeSetup`, `earlyIdentityPush` and `idHandover`, which are `warn`. */
+  /** Severity per built-in check. A check that is not listed is `fail`, except `earlyIdentifiers`, `consentModeSetup`, `earlyIdentityPush`, `idHandover` and `serverContainerRejected`, which are `warn`. */
   builtins?: Partial<Record<BuiltinName, Severity>>;
 }
 
