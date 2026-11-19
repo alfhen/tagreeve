@@ -13,6 +13,7 @@ import {
   ServerContainerFailure,
   stderrPrint,
   stdinResolver,
+  StepError,
 } from './steps.ts';
 
 const field = (over: Partial<Parameters<typeof isSensitiveField>[0]> = {}) => ({
@@ -619,7 +620,11 @@ describe('handoff text streams', () => {
 
 describe('the addToCart failure message', () => {
   const SHOP = 'https://shop.example.com';
-  const answered = async (requests: Request[], responses: { requestId: string; status: number }[]): Promise<string> => {
+  const answered = async (
+    requests: Request[],
+    responses: { requestId: string; status: number }[],
+    scenarioYaml = 'start: /\nsteps:\n  - addToCart: "#add"\n',
+  ): Promise<string> => {
     const page = { goto: () => Promise.resolve(), locator: () => ({ first: () => ({ click: () => Promise.resolve() }) }) };
     const recorder = {
       site: SHOP,
@@ -631,11 +636,12 @@ describe('the addToCart failure message', () => {
       wait: () => Promise.resolve(),
       stepActivity: () => ({ requests, responses, dataLayerEvents: [] }),
     };
-    const scenario = parseScenario('start: /\nsteps:\n  - addToCart: "#add"\n');
+    const scenario = parseScenario(scenarioYaml);
     const error = await playScenario(recorder as never, scenario, { seed: 1, cartTimeoutMs: 50 }).then(
       () => undefined,
       (e: unknown) => e,
     );
+    expect(error).toBeInstanceOf(StepError);
     return (error as Error).message;
   };
   const post = (id: `req_${string}`, path: string, over: Partial<Request> = {}) => request({ id, method: 'POST', url: `${SHOP}${path}`, ...over });
@@ -677,6 +683,12 @@ describe('the addToCart failure message', () => {
     expect(b).toContain('the store answered 500 to /cart/add.js');
     expect(b).not.toContain('429');
     expect(b).not.toContain('rate limited');
+  });
+
+  test('names an answer to a request that matches the scenario cartRequest pattern', async () => {
+    const yaml = 'start: /\nsteps:\n  - addToCart: "#add"\noptions: { cartRequest: /basket }\n';
+    const message = await answered([post('req_1', '/basket')], [{ requestId: 'req_1', status: 422 }], yaml);
+    expect(message).toContain('the store answered 422 to /basket');
   });
 
   test('does not name an answer to a request that is not a cart request', async () => {
