@@ -1,5 +1,6 @@
 import { createInterface } from 'node:readline/promises';
 import { createIdentity, hasCountryFormat, type Identity, type Request, type Step as StepRecord } from '@tagreeve/core';
+import { OTHER_NAME, isValueSegment } from '@tagreeve/decoders';
 import { IDENTITY_FIELDS, SECRET_FIELD, type IdentityField, type Locator, type Scenario, type Step, type UrlMatcher } from '@tagreeve/expect';
 import type { Frame, JSHandle, Locator as PlaywrightLocator, Page } from 'playwright';
 import { Scrubber } from './gtm-scrub.ts';
@@ -417,11 +418,28 @@ async function waitForUrl(recorder: Recorder, url: UrlMatcher, timeout: number):
   }
 }
 
+function cartAnswerNote(activity: StepActivity, custom: RegExp | undefined): string {
+  const cart = new Set(activity.requests.filter((r) => isCartRequest(r) || custom?.test(r.url) === true).map((r) => r.id));
+  const answers = activity.responses.filter((x) => cart.has(x.requestId) && x.status >= 400);
+  const last = answers.at(-1);
+  if (last === undefined) return '';
+  const request = activity.requests.find((r) => r.id === last.requestId);
+  if (request === undefined) return '';
+  const path = new URL(request.url).pathname
+    .split('/')
+    .map((segment) => (isValueSegment(segment) ? OTHER_NAME : segment))
+    .join('/');
+  return `: the store answered ${last.status}${last.status === 429 ? ' (rate limited)' : ''} to ${path}`;
+}
+
 async function waitForCart(recorder: Recorder, record: StepRecord, scenario: Scenario, options: PlayOptions): Promise<void> {
   const check = options.cartCheck ?? createCartCheck(scenario.options.cartRequest);
   const deadline = Date.now() + (options.cartTimeoutMs ?? 5000);
   while (!check(recorder.stepActivity(record))) {
-    if (Date.now() >= deadline) throw new Error('click did not add to cart');
+    if (Date.now() >= deadline) {
+      const custom = scenario.options.cartRequest === undefined ? undefined : new RegExp(scenario.options.cartRequest);
+      throw new Error(`click did not add to cart${options.cartCheck ? '' : cartAnswerNote(recorder.stepActivity(record), custom)}`);
+    }
     await recorder.wait(100);
   }
 }
