@@ -33,15 +33,24 @@ export function redactSecretsInBody(body: string): string {
   return body.replace(IN_JSON, `$1"${REDACTED}"`).replace(IN_FORM, `$1$2=${REDACTED}`);
 }
 
-/** The lower-case secret names whose values `redactSecretsInUrl` or `redactSecretsInBody` replace in the text. */
-export function secretNamesIn(text: string): string[] {
+function collectNames(scan: (note: (m: string, ...groups: unknown[]) => string) => void): string[] {
   const found = new Set<string>();
-  const note = (_: string, ...groups: unknown[]): string => {
+  scan((_, ...groups) => {
     for (const g of groups) if (typeof g === 'string' && SECRET_NAME_SET.has(g.toLowerCase())) found.add(g.toLowerCase());
     return '';
-  };
-  text.replace(IN_URL, note);
-  text.replace(IN_JSON, (m) => note(m, m.slice(1, m.indexOf('"', 1))));
-  text.replace(IN_FORM, note);
+  });
   return [...found];
+}
+
+/** The lower-case secret names whose values `redactSecretsInUrl` replaces in the URL. */
+export function secretNamesInUrl(url: string): string[] {
+  return collectNames((note) => url.replace(IN_URL, note));
+}
+
+/** The lower-case secret names whose values `redactSecretsInBody` replaces in the body. */
+export function secretNamesInBody(body: string): string[] {
+  return collectNames((note) => {
+    body.replace(IN_JSON, (m) => note(m, m.slice(1, m.indexOf('"', 1))));
+    body.replace(IN_FORM, note);
+  });
 }

@@ -263,6 +263,11 @@ describe('secretsRedacted', () => {
     expect('secretsRedacted' in request).toBe(false);
   });
 
+  test('a name inside a string value of a body is not marked', () => {
+    const request = capture({ body: `{"event_source_url":"https://shop.example/p?access_token=${TOKEN}","data":[]}` });
+    expect('secretsRedacted' in request).toBe(false);
+  });
+
   test('a GA4 call has no key', () => {
     const request = capture({ url: 'https://www.google-analytics.com/g/collect?v=2&tid=G-PWTEST0001', body: 'en=Purchase' });
     expect('secretsRedacted' in request).toBe(false);

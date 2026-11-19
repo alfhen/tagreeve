@@ -9,7 +9,7 @@ import {
   type ServerContainerPassThrough,
 } from '@tagreeve/core';
 import { isLoopbackHost } from '../guard.ts';
-import { redactHeaders, redactSecretsInBody, redactSecretsInUrl, secretHeaderNamesIn, secretNamesIn } from '../redact.ts';
+import { redactHeaders, redactSecretsInBody, redactSecretsInUrl, secretHeaderNamesIn, secretNamesInBody, secretNamesInUrl } from '../redact.ts';
 import { stubResponse } from '../stub.ts';
 import { createRunCa } from './ca.ts';
 import type { RunCa } from './ca.ts';
@@ -47,7 +47,7 @@ export function captureServerContainerCall(call: ProxyRequest, context: CaptureC
   const text = call.body.length === 0 ? null : call.body.toString('utf8');
   const headers = flattenHeaders(call.headers);
   const secretsRedacted = [
-    ...new Set([...secretNamesIn(call.url), ...(text === null ? [] : secretNamesIn(text)), ...secretHeaderNamesIn(headers)]),
+    ...new Set([...secretNamesInUrl(call.url), ...(text === null ? [] : secretNamesInBody(text)), ...secretHeaderNamesIn(headers)]),
   ].sort();
   return {
     type: 'request',
