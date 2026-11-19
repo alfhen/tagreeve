@@ -33,6 +33,7 @@ import { GA4_BODY_ONLY_IGNORE, type MultipartBody, bodyEntries, guardFieldName, 
 import { consentModeSetup, GOOGLE_VENDORS } from './consent-mode-setup.ts';
 import { earlyIdentityPush } from './early-identity-push.ts';
 import { idHandover } from './id-handover.ts';
+import { serverContainerRejected } from './server-container-rejected.ts';
 import { hostMatches } from './hosts.ts';
 import { evaluatePushRule, fieldGlob } from './push-rules.ts';
 import { evaluateTagRule, expectedTagsOf, type ExpectedTags } from './tags.ts';
@@ -138,6 +139,11 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
     }
 
   builtInChecks(records, scenario, ctx, add);
+  const containerRan = runRecord && (runRecord.serverContainer || runRecord.testServerContainer) && !runRecord.serverContainer?.error;
+  if (containerRan) {
+    const rejected = serverContainerRejected([...allRequests.values()], ctx.responses, scenario.options.serverHosts ?? []);
+    add('builtin: serverContainerRejected', rejected.pass, rejected.evidence, rejected.message, scenario.options.builtins?.serverContainerRejected ?? 'warn');
+  }
   return results;
 }
 

@@ -154,7 +154,7 @@ export interface ScenarioOptions {
   builtins?: Partial<Record<BuiltinName, Severity>>;
 }
 
-export const BUILTIN_NAMES = ['unknownDestination', 'sandboxPageUrl', 'possibleRealData', 'deniedIdentifiers', 'earlyIdentifiers', 'consentModeSetup', 'earlyIdentityPush', 'idHandover'] as const;
+export const BUILTIN_NAMES = ['unknownDestination', 'sandboxPageUrl', 'possibleRealData', 'deniedIdentifiers', 'earlyIdentifiers', 'consentModeSetup', 'earlyIdentityPush', 'idHandover', 'serverContainerRejected'] as const;
 export type BuiltinName = (typeof BUILTIN_NAMES)[number];
 export const SEVERITIES = ['fail', 'warn'] as const;
 
