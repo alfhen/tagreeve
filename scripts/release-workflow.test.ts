@@ -607,11 +607,48 @@ describe('release workflow', () => {
     ['another environment name', (t) => t.replace('environment: npm', 'environment: npm-ci')],
   ];
 
+  const expectedProblem: Record<string, string> = {
+    'id-token: write on the tag job': 'job tag has id-token: write',
+    'contents: write on the publish job': 'job publish has contents: write',
+    'a secrets expression': 'secrets context',
+    'a token env name': 'token name',
+    'secrets: inherit on check': 'job check passes secrets',
+    'no --tag on npm publish': 'publish without --tag',
+    'npm publish in the tag job': 'publish outside the publish job',
+    'no environment on publish': 'publish does not use environment npm',
+    'npm stage': 'npm stage',
+    'gh release': 'gh release',
+    'check dropped from publish.needs': 'publish does not need check',
+    'if: always() on publish': 'status function in if',
+    '!cancelled() on a publish step': 'status function in if',
+    'failure() on a publish step': 'status function in if',
+    'workflow_dispatch': 'not push only',
+    'a second branch': 'push branches are not [main]',
+    'a second path': 'push paths are not [package.json]',
+    'no npm install step': 'does not install an exact npm version',
+    'an npm range': 'does not install an exact npm version',
+    'npm@latest': 'does not install an exact npm version',
+    'npm@11': 'does not install an exact npm version',
+    'npm@11.20.0': 'npm 11.20.0 is older than 11.21.0',
+    'the install after the version check': 'npm is installed after the version check',
+    'the install after npm publish': 'npm is installed after the version check',
+    'top-level id-token: write': 'top-level permissions have write',
+    'top-level contents: write': 'top-level permissions have write',
+    'an action pinned to a tag': 'is not pinned by commit SHA',
+    'no guard step': 'no release-plan.ts --guard step',
+    'no if on npm publish': 'does not depend on the guard output',
+    'a second check job': 'uses ./.github/workflows/release-tag.yml',
+    'another called workflow path': 'uses ./.github/workflows/release-tag2.yml',
+    'another bot id': 'bot email 41898283+',
+    'another environment name': 'publish does not use environment npm',
+  };
+
   it.each(edits)('fails on %s', (_name, edit) => {
+    expect(expectedProblem[_name]).toBeDefined();
     const edited = edit(releaseText);
     expect(edited).not.toBe(releaseText);
     const read = (rel: string) => readRepoFile(rel.endsWith('release-tag2.yml') ? '.github/workflows/release-tag.yml' : rel);
-    expect(releaseProblems(edited, read).length).toBeGreaterThan(0);
+    expect(releaseProblems(edited, read).join('\n')).toContain(expectedProblem[_name]);
   });
 
   it('names a copied called workflow as a uses problem', () => {

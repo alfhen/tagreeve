@@ -145,7 +145,7 @@ describe('release.sh --at', () => {
     const clone = cloneAt(aPrime);
     const run = release(clone, '--at', aPrime, '0.7.0-rc.4');
     expect(run.status).not.toBe(0);
-    expect(run.stderr).toMatch(/^refusing:/m);
+    expect(run.stderr).toContain(`refusing: ${aPrime} is not on origin/main`);
     expect(localTag(clone)).toBe('');
     expect(tagLine()).toBe('');
   });
@@ -170,7 +170,7 @@ describe('release.sh --at', () => {
     const pushed = tagLine();
     const run = release(cloneAt(a), '--at', a, '0.7.0-rc.4');
     expect(run.status).not.toBe(0);
-    expect(run.stderr).toMatch(/^refusing:/m);
+    expect(run.stderr).toContain(`refusing: tag v0.7.0-rc.4 on origin is not built on ${a}`);
     expect(tagLine()).toBe(pushed);
   });
 
