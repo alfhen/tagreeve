@@ -342,14 +342,18 @@ function* keyedDigests(text: string): Generator<string> {
 }
 
 // Only base64 decoding spends depth; URL decoding is cheap and a disguised Stape URL layers it between base64 steps.
-function* variants(text: string, depth = 0, seen = new Set<string>()): Generator<string> {
+function* readingsOf(text: string, fromBase64 = false, depth = 0, seen = new Set<string>()): Generator<{ text: string; fromBase64: boolean }> {
   if (seen.has(text)) return;
   seen.add(text);
-  yield text;
+  yield { text, fromBase64 };
   const url = tryUrlDecode(text);
-  if (url !== undefined && url !== text) yield* variants(url, depth, seen);
+  if (url !== undefined && url !== text) yield* readingsOf(url, fromBase64, depth, seen);
   if (depth >= MAX_DEPTH) return;
-  for (const decoded of base64Decodes(text)) yield* variants(decoded, depth + 1, seen);
+  for (const decoded of base64Decodes(text)) yield* readingsOf(decoded, true, depth + 1, seen);
+}
+
+function* variants(text: string): Generator<string> {
+  for (const reading of readingsOf(text)) yield reading.text;
 }
 
 /** The forms of a text that `scan()` reads: the text, its percent-decoded layers and its base64 decodes, with glued edges. */
@@ -405,20 +409,22 @@ interface Candidate {
   alternate?: string;
   variant: string;
   index: number;
+  /** The reading came from a base64 decode, where junk glued to a value is expected. */
+  fromBase64: boolean;
 }
 
 /** Every email, phone and SHA-256 candidate in the text and its decoded variants, whoever owns it. */
-function* candidates(text: string): Generator<Candidate> {
-  for (const variant of variants(text)) {
+function* candidates(text: string, literal = false): Generator<Candidate> {
+  for (const { text: variant, fromBase64 } of readingsOf(text)) {
     // Escaped text is matched through its decoded variant, so adjacent escapes never join a local part.
     if (!hasUrlEscapes(variant)) {
       for (const raw of variant.match(EMAIL) ?? []) {
         // A '+' may be a form-encoded space ("Order+for+a@b.com"), so only the part after the last one counts.
-        const m = raw.slice(raw.lastIndexOf('+') + 1);
+        const m = literal ? raw : raw.slice(raw.lastIndexOf('+') + 1);
         if (!m.includes('@') || FILE_EXTENSION.test(m)) continue;
         // One '+' is either a form-encoded space or a plus-address tag, so both readings are reported.
-        const both = raw !== m && raw.indexOf('+') === raw.lastIndexOf('+') && !raw.startsWith('+');
-        yield { kind: 'email', value: m, alternate: both ? raw : undefined, variant, index: 0 };
+        const both = !literal && raw !== m && raw.indexOf('+') === raw.lastIndexOf('+') && !raw.startsWith('+');
+        yield { kind: 'email', value: m, alternate: both ? raw : undefined, variant, index: 0, fromBase64 };
       }
     }
     for (const m of variant.match(PHONE) ?? []) {
@@ -426,11 +432,11 @@ function* candidates(text: string): Generator<Candidate> {
       if (digits.length < 8 || digits.length > 15) continue;
       // In the form-encoded "+cc+nn+nn" shape the first group is a country code, which has 1 to 3 digits.
       if (/^\+\d+\+/.test(m) && !/^\+\d{1,3}\+/.test(m)) continue;
-      yield { kind: 'phone', value: m, variant, index: 0 };
+      yield { kind: 'phone', value: m, variant, index: 0, fromBase64 };
     }
     // The decoded variant carries the same hex, with its key readable.
     if (!hasUrlEscapes(variant)) {
-      for (const m of variant.matchAll(HASH)) yield { kind: 'hash', value: m[0].toLowerCase(), variant, index: m.index };
+      for (const m of variant.matchAll(HASH)) yield { kind: 'hash', value: m[0].toLowerCase(), variant, index: m.index, fromBase64 };
     }
   }
 }
@@ -442,47 +448,69 @@ export function valueKinds(text: string): Set<LeakKind> {
   return kinds;
 }
 
+type Own = ReturnType<typeof ownValues>;
+
+// Plain and percent-decoded readings need the whole value; a base64 decode may carry glued junk, so it keeps contains.
+function isOwnEmail(value: string, own: Own, fromBase64: boolean): boolean {
+  const email = normalizeEmail(value);
+  return own.extraEmails.includes(email) || (fromBase64 ? email.includes(own.email) : email === own.email);
+}
+
+function isOwnPhone(digits: string, own: Own, fromBase64: boolean): boolean {
+  if (own.extraPhones.includes(digits)) return true;
+  return fromBase64 ? digits.includes(own.phoneDigits) || digits.includes(own.nationalDigits) : digits === own.phoneDigits || digits === own.nationalDigits;
+}
+
 export type OwnValueKind = 'email' | 'phone' | 'email hash' | 'phone hash';
 
 /**
  * The kinds of the identity's own values found in text: its email, phone, `extra` emails and phones, and the hex,
- * base64 and base64url SHA-256 of those. A hash reads as an email or phone hash by what it hashes.
+ * base64 and base64url SHA-256 of those. A hash reads as an email or phone hash by what it hashes. With `literal`, a
+ * plus is part of the address, as in an object key, and not a form-encoded space.
  */
-export function ownValueKinds(text: string, identity: Identity): Set<OwnValueKind> {
+export function ownValueKinds(text: string, identity: Identity, options: { literal?: boolean } = {}): Set<OwnValueKind> {
   const { own, emailHashes, phoneHashes } = ownMatcher(identity);
   const kinds = new Set<OwnValueKind>();
-  const isPhone = (digits: string) => digits.includes(own.phoneDigits) || digits.includes(own.nationalDigits) || own.extraPhones.includes(digits);
   const addHash = (value: string) => {
     const bare = value.replace(/=+$/, '');
     if (emailHashes.has(bare)) kinds.add('email hash');
     if (phoneHashes.has(bare)) kinds.add('phone hash');
   };
-  for (const c of candidates(text)) {
+  for (const c of candidates(text, options.literal)) {
     if (c.kind === 'email') {
-      const email = normalizeEmail(c.value);
-      if (email.includes(own.email) || own.extraEmails.includes(email)) kinds.add('email');
+      if (isOwnEmail(c.value, own, c.fromBase64)) kinds.add('email');
     } else if (c.kind === 'phone') {
-      if (isPhone(c.value.replace(/\D/g, ''))) kinds.add('phone');
+      if (isOwnPhone(c.value.replace(/\D/g, ''), own, c.fromBase64)) kinds.add('phone');
     } else addHash(c.value.toLowerCase());
   }
-  if (/^[+\d\s().-]+$/.test(text) && isPhone(text.replace(/\D/g, ''))) kinds.add('phone');
-  const trimmed = text.trim();
-  addHash(trimmed);
-  addHash(trimmed.toLowerCase());
+  if (/^[+\d\s().-]+$/.test(text) && isOwnPhone(text.replace(/\D/g, ''), own, false)) kinds.add('phone');
   for (const variant of variants(text)) {
+    const trimmed = variant.trim();
+    addHash(trimmed);
+    addHash(trimmed.toLowerCase());
     for (const token of hasUrlEscapes(variant) ? [] : keyedDigests(variant)) addHash(token);
   }
   return kinds;
 }
 
-const matchers = new WeakMap<Identity, { own: ReturnType<typeof ownValues>; emailHashes: Set<string>; phoneHashes: Set<string> }>();
+interface OwnMatcher {
+  signature: string;
+  own: Own;
+  emailHashes: Set<string>;
+  phoneHashes: Set<string>;
+}
 
-function ownMatcher(identity: Identity) {
+const matchers = new WeakMap<Identity, OwnMatcher>();
+
+function ownMatcher(identity: Identity): OwnMatcher {
+  // The identity is a plain mutable object, so the cache must notice a changed value.
+  const signature = JSON.stringify([identity.email, identity.phone, identity.country, identity.extra ?? []]);
   let matcher = matchers.get(identity);
-  if (!matcher) {
+  if (!matcher || matcher.signature !== signature) {
     const own = ownValues(identity);
     const phoneExtras = (identity.extra ?? []).filter((v) => /^[+\d\s().-]+$/.test(v) && own.extraPhones.includes(v.replace(/\D/g, '')));
     matcher = {
+      signature,
       own,
       emailHashes: fieldHashes(own.email, ...own.extraEmails),
       phoneHashes: fieldHashes('+' + own.phoneDigits, own.phoneDigits, ...phoneExtras, ...phoneExtras.map((v) => v.replace(/\D/g, '')), ...phoneExtras.map((v) => '+' + v.replace(/\D/g, ''))),
@@ -502,12 +530,12 @@ export function scan(text: string, identity: Identity, options: { stableHashes?:
   };
   for (const c of candidates(text)) {
     if (c.kind === 'email') {
-      if (normalizeEmail(c.value).includes(own.email) || own.extraEmails.includes(normalizeEmail(c.value))) continue;
+      if (isOwnEmail(c.value, own, c.fromBase64)) continue;
       add('email', c.value);
       if (c.alternate) add('email', c.alternate);
     } else if (c.kind === 'phone') {
       const digits = c.value.replace(/\D/g, '');
-      if (!digits.includes(own.phoneDigits) && !digits.includes(own.nationalDigits) && !own.extraPhones.includes(digits)) add('phone', c.value);
+      if (!isOwnPhone(digits, own, c.fromBase64)) add('phone', c.value);
     } else if (!own.hashes.has(c.value) && !options.stableHashes?.has(c.value) && !isNonPersonalKey(c.variant, c.index)) {
       add('hash', c.value);
     }

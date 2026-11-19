@@ -733,3 +733,44 @@ describe('ownValueKinds', () => {
     expect([...ownValueKinds(sha256('berlin').hex, withCity)]).toEqual([]);
   });
 });
+
+describe('whole-value matching', () => {
+  const phoneId = { ...createIdentity(1), email: 'buyer@example.test', phone: '+4512345678', country: 'SE' };
+  const b64 = (v: string) => Buffer.from(v).toString('base64');
+
+  it('reads a base64 digest of the email or phone as the run own hash, also percent-encoded', () => {
+    expect([...ownValueKinds(encodeURIComponent(hashEmail('buyer@example.test').base64), phoneId)]).toEqual(['email hash']);
+    expect([...ownValueKinds(encodeURIComponent(hashPhone(phoneId.phone).base64), phoneId)]).toEqual(['phone hash']);
+  });
+
+  it('follows a change of email, phone or extra on the same object', () => {
+    const m = { ...createIdentity(1), email: 'buyer@example.test', phone: '+12125550101', extra: [] as string[] };
+    expect([...ownValueKinds('buyer@example.test', m)]).toEqual(['email']);
+    m.email = 'new.one@example.test';
+    expect([...ownValueKinds('new.one@example.test', m)]).toEqual(['email']);
+    expect([...ownValueKinds('buyer@example.test', m)]).toEqual([]);
+    m.phone = '+12125550102';
+    expect([...ownValueKinds('+12125550102', m)]).toEqual(['phone']);
+    expect([...ownValueKinds('+12125550101', m)]).toEqual([]);
+    m.extra = ['+12125550177'];
+    expect([...ownValueKinds('+12125550177', m)]).toEqual(['phone']);
+  });
+
+  it('reports a foreign email that contains the run email, and skips the run email', () => {
+    expect(scan('e=other.buyer@example.test', phoneId)).toEqual([{ kind: 'email', value: 'other.buyer@example.test' }]);
+    expect(scan('e=buyer@example.test', phoneId)).toEqual([]);
+  });
+
+  it('reports a plain phone only when its digits equal the run digits', () => {
+    expect(scan('ph=+45123456789', phoneId).map((m) => m.kind)).toEqual(['phone']);
+    expect(scan('ph=+994512345678', phoneId).map((m) => m.kind)).toEqual(['phone']);
+    expect(scan('ph=+4512345678', phoneId)).toEqual([]);
+    expect(scan('ph=+45 12 34 56 78', phoneId)).toEqual([]);
+  });
+
+  it('keeps the contains rule for base64 readings', () => {
+    expect(scan('d=' + b64('other.buyer@example.test'), phoneId)).toEqual([]);
+    expect(scan('d=' + b64('+994512345678'), phoneId)).toEqual([]);
+    expect(scan('d=' + b64('fake.person@example.test'), phoneId)).toEqual([{ kind: 'email', value: 'fake.person@example.test' }]);
+  });
+});

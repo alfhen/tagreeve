@@ -651,3 +651,19 @@ test.each([
   expect(leak!.detail).toContain('carries 2 email value(s)');
   expect(leak!.detail).toMatch(/in note, the body$/);
 });
+
+test('possibleRealData flags a foreign email that contains the run email, and skips the run email', () => {
+  const id = { ...identity, email: 'buyer@example.test' };
+  const mk = (email: string): Request => ({
+    type: 'request', id: newId('request'), runId, stepId: null, t: 0, method: 'GET',
+    url: `https://tracker.example.com/p?e=${email}`,
+    resourceType: 'fetch', frameUrl: null, initiator: null, headers: {}, postData: null, outcome: 'stubbed',
+  });
+  const foreign = mk('other.buyer@example.test');
+  expect(foreign.url).toContain('other.buyer@example.test');
+  const leaks = findForeignData([foreign], [], id);
+  expect(leaks).toHaveLength(1);
+  expect(leaks[0]!.detail).toContain('carries 1 email value');
+  expect(leaks[0]!.detail).not.toContain('other.buyer@example.test');
+  expect(findForeignData([mk('buyer@example.test')], [], id)).toHaveLength(0);
+});

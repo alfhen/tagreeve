@@ -39,14 +39,14 @@ const holdsLocalPart = (key: string, identity: Identity): boolean => {
 // A key can itself hold a value, so only a plain name is shown.
 const safeKey = (key: string, identity: Identity) => {
   if (guardFieldName(key) !== key || isValueSegment(key)) return OTHER_NAME;
-  return holdsLocalPart(key, identity) || ownValueKinds(key, identity).size > 0 ? OTHER_NAME : key;
+  return holdsLocalPart(key, identity) || ownValueKinds(key, identity, { literal: true }).size > 0 ? OTHER_NAME : key;
 };
 
 /** Collects the key path and kinds of every leaf that holds one of the identity's own values. Never keeps a value. */
 function ownLeaves(value: unknown, path: string, key: string, identity: Identity, depth: number, out: Leaves): void {
   if (depth > MAX_DEPTH) return;
   if (typeof value === 'string' || typeof value === 'number') {
-    const kinds = ownValueKinds(`${key}=${value}`, identity);
+    const kinds = ownValueKinds(`${key}=${value}`, identity, { literal: true });
     for (const k of ownValueKinds(String(value), identity)) kinds.add(k);
     if (kinds.size === 0) return;
     const name = path || '(value)';
@@ -60,7 +60,16 @@ function ownLeaves(value: unknown, path: string, key: string, identity: Identity
     for (const item of value) ownLeaves(item, `${path}[]`, key, identity, depth + 1, out);
     return;
   }
-  for (const [k, child] of Object.entries(value)) ownLeaves(child, path === '' ? safeKey(k, identity) : `${path}.${safeKey(k, identity)}`, k, identity, depth + 1, out);
+  for (const [k, child] of Object.entries(value)) {
+    const childPath = path === '' ? safeKey(k, identity) : `${path}.${safeKey(k, identity)}`;
+    const keyKinds = ownValueKinds(k, identity, { literal: true });
+    if (keyKinds.size > 0) {
+      const found = out.get(childPath) ?? new Set<OwnValueKind>();
+      for (const kind of keyKinds) found.add(kind);
+      out.set(childPath, found);
+    }
+    ownLeaves(child, childPath, k, identity, depth + 1, out);
+  }
 }
 
 const withoutConsent = (epoch: ConsentEpoch): boolean =>
