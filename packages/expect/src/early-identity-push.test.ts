@@ -250,9 +250,10 @@ test('a key that is the run email is found whatever the child is, with the maske
   for (const child of [true, null, { a: 1 }]) {
     const item = { 'buyer@example.test': child };
     expect(Object.keys(item)[0]).toContain('buyer@example.test');
-    const r = pushed(item);
+    const p = push(10, item);
+    const r = check([...undecided, p], { identity: buyer });
     expect(r.pass).toBe(false);
-    expect(r.evidence).toHaveLength(1);
+    expect(r.evidence).toEqual([p.id]);
     expect(r.message).toContain('(other): email');
     noneOf(r.message, 'buyer@example.test', 'buyer');
   }
@@ -263,10 +264,12 @@ test('the foreign pair of percent-encoded email, key and digest passes and the o
   const foreign = [{ e: 'other.buyer%40example.test' }, { 'other.buyer@example.test': true }, { digest: foreignDigest }];
   argsHold(foreign[0], 'other.buyer');
   argsHold(foreign[1], 'other.buyer');
+  expect(foreign[2]).toEqual({ digest: encodeURIComponent(hashEmail('other.buyer@example.test').base64) });
   for (const f of foreign) expect(pushed(f)).toMatchObject({ pass: true, evidence: [] });
   const ownDigest = encodeURIComponent(hashEmail('buyer@example.test').base64);
-  const own = [{ e: 'buyer%40example.test' }, { 'buyer@example.test': true }, { digest: ownDigest }];
+  const own: Array<Record<string, unknown>> = [{ e: 'buyer%40example.test' }, { 'buyer@example.test': true }, { digest: ownDigest }];
   argsHold(own[0], 'buyer%40example.test');
+  expect(decodeURIComponent(String(own[0]?.e))).toBe('buyer@example.test');
   argsHold(own[1], 'buyer@example.test');
   argsHold(own[2], ownDigest);
   for (const o of own) expect(pushed(o).pass).toBe(false);
