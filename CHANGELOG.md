@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0-rc.3
+
+The third release candidate, after the rc.2 field test. Install it with `npm i -g tagreeve@next`.
+
+- `earlyIdentityPush` reads a `dataLayer` key as `(other)` when it holds the local part of the test email, with any run of separators, next to an at-marker, or next to the domain label when the key ends there, a separator follows or the next domain label follows. A key that only starts like the domain label, such as `user_examples`, is shown (#1555).
+- `idHandover` with one qualifying context still passes, and its message now says nothing was compared, for example `Only one context qualified for comparison (checkout), so nothing was compared.` (#1563).
+- The npm package includes `CHANGELOG.md` (#1564).
+- The CA certificates that Tagreeve makes for the server container runner always load, because the serial is now always a minimal positive DER integer (#1560).
+- Release checks: `scripts/release.sh` and the npm dist-tag checker accept the same versions, `X.Y.Z` or `X.Y.Z-rc.N` with ASCII digits, and `check-docs-dist.ts` runs its checks on Node 23.x and 24.0 and 24.1 (#1556, #1559).
+
+Tests: a fixture for `idHandover` with GA4 hits from the top frame and a sandbox frame, and a steadier e2e test. No change in output (#1557, #1558).
+
 ## 0.7.0-rc.2
 
 The second release candidate, after the rc.1 field test. Install it with `npm i -g tagreeve@next`.
