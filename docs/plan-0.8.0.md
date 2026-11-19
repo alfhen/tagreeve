@@ -75,18 +75,19 @@ Decided in this plan:
 - **The recorder searches for canaries when the run closes,** on the raw records, as it scans for `possibleRealData` today (choice: maintainer may change). The matcher is pure code in `@tagreeve/core`. Each finding is an `identifierRoute` flag. One `canarySearch` flag per run says what was searched and what was skipped. The search covers request URLs, bodies and decoded `Hit.params` values. It does not search headers, including `Referer` and `Cookie`, and every message that says what was searched says so. The built-in `identifierRoute` in `@tagreeve/expect` judges the flags, so `evaluate` of a stored run judges them too.
 - **Route kinds** (choice: maintainer may change): `pageUrl` when the canary is only in a field that holds the page URL or the referrer (GA4 `dl` and `dr`, Meta `dl` and `rl`, Google Ads `url` and `ref`); `direct` when the sink holds the canary under its own parameter name, or the canary is the identity; `cookie` (V13) when a checkpoint saw it in a first-party cookie before the sink; `unknown` otherwise.
 - **A sink is a request to a host outside the site, `firstPartyHosts` and `serverHosts`** (choice: maintainer may change). A request to the site or to the user's own server container is a hop, not a leak.
-- **`identifierRoute` fails by default, and a `pageUrl` route warns** (choice: maintainer may change). A sink request that decoded into a hit is judged as `deniedIdentifiers` judges it, by `effectiveConsentAt` of that hit: a Google hit by the consent inside it (`gcs`, `gcd`), as design §7.3 says, and a hit of another vendor by its epoch with the grace window. A sink that decoded into no hit is judged by its epoch: it fails in an `undecided`, `denied` or `withdrawn` epoch, or in a `mixed` epoch where `ad_user_data` or `analytics_storage` is denied. A `pageUrl` route only warns, because a cookieless ping sends the page URL by design. The result exists only on a run that planted canaries, so no existing run changes.
-- **Docs owners** (choice: maintainer may change). To keep the files of one wave apart, some code entries leave `docs/cli.md` and `docs/design.md` to a later entry: D13 documents G13, K13, Q13, Y13 and N13; T13 documents S13; J13 documents C13 and U13; W13 documents V13; A13 documents F13 and O13. The release candidate is cut only after all of them merge.
+- **`identifierRoute` fails by default, and a `pageUrl` route warns** (choice: maintainer may change). One rule judges every sink. A sink that decoded into a Google hit that carries its own consent (`gcs` or `gcd`, design §7.3) takes that consent. Every other sink, a hit of another vendor or a request that decoded into no hit, takes the consent of its epoch, with the grace window. The sink fails when that consent is `undecided`, `denied` or `withdrawn`, or `mixed` with `ad_user_data` or `analytics_storage` denied. A `pageUrl` route only warns, because a cookieless ping sends the page URL by design. The result exists only on a run that planted canaries, so no existing run changes.
+- **Docs owners** (choice: maintainer may change). To keep the files of one wave apart, some code entries leave `docs/cli.md` and `docs/design.md` to a later entry: D13 documents G13, K13, Q13, Y13 and N13; T13 documents S13; J13 documents C13 and U13; W13 documents V13; A13 documents F13. The release candidate is cut only after all of them merge.
 - **CHANGELOG** (choice: maintainer may change). No entry edits `CHANGELOG.md`. Each PR body ends with the one CHANGELOG line it wants, and R18 writes the `## 0.8.0-rc.1` section from them.
 - **#1569: a `gcd` letter change is a warning, not drift.** An added and a removed tuple of one key pair up when their IDs, four consent states and `gcs` are equal, and `gcd` differs only in signal letters where each pair is `p` and `q`, or `t` and `v`. The pair gives a warning line and no drift. The letter rule lives next to `GCD_LETTERS` in `packages/decoders/src/ga4.ts`. Only these two pairs count (choice: maintainer may change).
 - **#1576: the message keeps its prefix** (choice: maintainer may change). It reads `click did not add to cart: the store answered 429 (rate limited) to /cart/add.js`. Other 4xx and 5xx answers read the same way without `(rate limited)`. The path is the pathname only, with value-like segments read as `(other)` by `isValueSegment`. With no cart request, or one with no answer, the message stays as it is.
 - **#1583 is docs only** (choice: maintainer may change). The line keeps its text. `docs/cli.md` and `docs/guide/server-container.md` say that `forwarded` counts the requests the container itself sends to Google, and that the rejected count is about browser requests.
 - **#1584: a path move is a new list, `pathsMoved`** (choice: maintainer may change). A missing path and a new path of the same event, push kind, frame, path and types, in two neighbour epochs, become one entry `{ event, path, types, frame, pushKind, from, to }`. `moved` keeps its two kinds. Like an event move, a path move does not set `changed`.
-- **#1585: `Request.secretsRedacted`** (choice: maintainer may change). It is a sorted list of the names whose values were replaced (`access_token`, `appsecret_proof`, and the headers `access-token` and `x-api-key`), set only on a server container call that had one. `redacted` keeps its `handoff` meaning. No summary count.
+- **#1585: `Request.secretsRedacted`** (choice: maintainer may change). It is a sorted list of the names whose values were replaced in the URL, the body or the headers, set only on a server container call that had one. The URL and body names are `SECRET_VALUE_NAMES` (`access_token`, `appsecret_proof`). The header names come from the same set `redactHeaders` uses (`authorization`, `proxy-authorization`, `cookie`, `set-cookie`, `access-token`, `x-api-key`), so the two cannot drift. `redacted` keeps its `handoff` meaning. No summary count.
 - **#1579: a rule that rests on missing server hits reads `cannot evaluate`** (choice: maintainer may change). A rule can read server hits when it has `sentBy: server`, or has no `sentBy` (the rule matches both senders). When `serverContainerRejected` warns or fails, such a rule whose verdict rests on absence, a `must` that failed or a `mustNot` that passed, gets `pass: false`, `severity: warn` and the new note `serverContainerRejected`. A `must` that passed and a `mustNot` that failed found real hits and keep their verdicts. A `sentBy: browser` rule keeps its verdict. The built-in already says the run is incomplete.
 - **#1532 is docs only** (choice: maintainer may change). The docs say a `consent default` counts in the gtag `arguments` form, recorded as an array or as a plain object with the keys `0`, `1` and `2`. A literal nested array such as `dataLayer.push(['consent', 'default', {...}])` does not count. E13 pins this in a unit test.
 - **#1513 starts with the test** (choice: maintainer may change). E13 shows where `gtm.uniqueEventId` can reach a recorded consent object, with a stand-in that is a guess at GTM's order (no GTM source is cited). If the key is in `args` in an order a real page could produce, E13 stops and asks the maintainer, because widening `argumentsListOf` changes the `--json` push shapes. If it appears in none, `argumentsListOf` stays as it is.
-- **#1519: whole emails** (choice: maintainer may change). An email matches the run's own email when the two normalised emails are equal. The contains rule stays only for readings that came from a base64 decode, where glued junk is expected, so the test "holds for own base64 emails with random junk glued on" still passes. `scan` uses the same rule, so a foreign email that contains the run's email, such as `other.buyer@example.test`, is now reported as `possibleRealData`. A whole decoded reading that equals one of the run's digests counts under any key. The matcher cache is keyed on the identity's values, not the object. `earlyIdentityPush` checks keys on their own.
+- **`gtm.`-prefixed keys in an indexed consent default are left to the maintainer.** Whether they count is decided after E13's observation, not in this plan. #1513 stays open.
+- **#1519: whole emails** (choice: maintainer may change). An email matches the run's own email when the two normalised emails are equal. The contains rule stays only for readings that came from a base64 decode, where glued junk is expected, so the test "holds for own base64 emails with random junk glued on" still passes. So a foreign email glued to the run's email inside base64 still counts as the run's own (Flagged concerns). `scan` uses the same rule, so a foreign email in a plain or URL-decoded reading that contains the run's email, such as `other.buyer@example.test`, is now reported as `possibleRealData`. A whole decoded reading that equals one of the run's digests counts under any key. The matcher cache is keyed on the identity's values, not the object. `earlyIdentityPush` checks keys on their own.
 - **#1587 leaves history alone** (choice: maintainer may change). Released CHANGELOG sections and the `brand/` handoff files keep `@next`. `scripts/bump-version.sh` needs no change: its pattern starts at "The current".
 
 ## Order and waves
@@ -98,27 +99,28 @@ flowchart LR
   W3 --> W4["Wave 4: T13, U13"]
   W4 --> W5["Wave 5: J13, V13"]
   W5 --> W6["Wave 6: W13, F13"]
-  W6 --> W7["Wave 7: A13, O13"]
-  W7 --> R["R18: release prep for 0.8.0-rc.1"]
+  W6 --> W7["Wave 7: A13"]
+  W7 --> W8["Wave 8: O13"]
+  W8 --> R["R18: release prep for 0.8.0-rc.1"]
 ```
 
 The small fixes first, then the matrix, then the canaries, then the report.
 
 No two entries of one wave touch the same file. Why the waves are this way:
 
-- **O13 in wave 7.** It edits `packages/core/src/records.ts`, which has one entry per wave from wave 1 to wave 5 (S13 takes wave 2), and `packages/cli/src/report/model.ts`, which F13 edits in wave 6. Wave 7 is free of both. A13 documents it.
+- **O13 in wave 8.** It edits `packages/core/src/records.ts`, which has one entry per wave from wave 1 to wave 5 (S13 takes wave 2), `packages/cli/src/report/model.ts`, which F13 edits in wave 6, and `docs/cli.md` and `docs/design.md`, which A13 edits in wave 7. Wave 8 is free of all of them. O13 documents itself.
 - **Small fixes in waves 1 to 3.** They do not depend on #1391. G13 and N13 both edit `packages/expect/src/diff.ts`, so N13 waits for wave 2. D13 documents the code fixes of waves 1 and 2, so it is in wave 3.
 - **The matrix: S13 in wave 2, T13 in wave 4.** S13 and L13 both edit `packages/expect/src/scenario.ts`. T13 needs S13's cells and writes the matrix docs, so it is not in wave 3 with D13.
 - **The canaries: C13, U13, J13, then V13 and W13.** C13 needs S13's cell name in `packages/cli/src/run.ts`. U13 needs C13's canaries. J13 judges U13's flags. V13 adds the cookie hop to U13's routes and runs next to J13, because they share no file. W13 needs J13's judge and V13's routes.
 - **The report: F13 in wave 6, A13 in wave 7.** F13 reads J13's results. A13 needs T13's table and F13's route view, and writes the report docs.
-- **`docs/cli.md` and `docs/design.md`.** One entry per wave edits them: I13 (wave 1, `docs/cli.md` only), S13 (wave 2), D13 (wave 3), T13 (wave 4), J13 (wave 5), W13 (wave 6), A13 (wave 7). The other entries leave them to their docs owner (Decisions).
-- **`packages/core/src/records.ts`.** Q13 (wave 1), S13 (wave 2), C13 (wave 3), U13 (wave 4), V13 (wave 5), O13 (wave 7): one per wave.
+- **`docs/cli.md` and `docs/design.md`.** At most one entry per wave edits them: I13 (wave 1, `docs/cli.md` only), D13 (wave 3), T13 (wave 4), J13 (wave 5), W13 (wave 6), A13 (wave 7), O13 (wave 8). The other entries leave them to their docs owner (Decisions).
+- **`packages/core/src/records.ts`.** Q13 (wave 1), S13 (wave 2), C13 (wave 3), U13 (wave 4), V13 (wave 5), O13 (wave 8): one per wave.
 - **`packages/expect/src/scenario.ts`.** L13 (wave 1), S13 (wave 2), C13 (wave 3), J13 (wave 5).
 - **`packages/cli/src/run.ts`.** S13 (wave 2), C13 (wave 3), U13 (wave 4).
 - **`packages/cli/src/summary.ts`.** C13 (wave 3), U13 (wave 4).
 - **`packages/recorder/src/canary-routes.ts`.** U13 makes it (wave 4); V13 (wave 5) and W13 (wave 6) extend it.
 - **`packages/cli/src/suite.ts` and `packages/cli/src/report/suite.ts`.** S13 (wave 2, the refusal of a consent suite), T13 (wave 4), A13 (wave 7, report only).
-- **`packages/cli/src/report/model.ts`.** F13 (wave 6), O13 (wave 7).
+- **`packages/cli/src/report/model.ts`.** F13 (wave 6), O13 (wave 8).
 - **`packages/cli/src/baseline.ts`.** G13 (wave 1), S13 (wave 2).
 - **`README.md`.** I13 (wave 1), J13 (wave 5), A13 (wave 7).
 
@@ -164,7 +166,7 @@ Acceptance: the docs text test passes with the new rule, and fails on `main`, wh
 
 **E13 Consent commands: the nested array and the `gtm.uniqueEventId` stamp (#1532, #1513).** Round cap 3. Touches: `packages/core/src/consent-command.test.ts`, `fixtures/site/public/consent-mode-hits.html` (a new `?push=stamped` mode), `fixtures/site/src/pages-consent-mode.test.ts`, new `packages/recorder/test/e2e/datalayer-stamp.e2e.test.ts`.
 Refs #1532 (D13 closes it)
-Closes #1513
+Refs #1513 (stays open for the maintainer, Decisions)
 - `consent-command.test.ts` pins that `[['consent', 'default', {...}]]`, a literal nested array, is not a consent command, and that the `arguments` form and the index-key object are.
 - `?push=stamped` pushes a gtag `consent default` as a plain object with the keys `0`, `1` and `2`, the only shape `argumentsListOf` reads, through a stand-in `push` wrapper that sets `gtm.uniqueEventId` on the pushed object. The stamping order of real GTM is not cited here, so the wrapper is a guess and the test covers each order a page could have. Modes: the default, which calls the inner push and then stamps; `order=inner`, which installs the wrapper before the page's first push, so the recorder's hook wraps it from outside and the key can be set after the recorder's own `record` call; and a control, `when=before`, which stamps before the inner push.
 - The e2e test reads the recorded `dataLayerEvent` of the push in each mode, also after the later length-growth read, and reports where `gtm.uniqueEventId` appears in `args`. The control must show the key, so the test can fail.
@@ -176,11 +178,11 @@ Evals:
 | --- | --- | --- | --- |
 | E13-1 | behaviour | A literal nested array is not a consent command; the two gtag forms are. | `pnpm exec vitest run --project unit packages/core/src/consent-command.test.ts`. |
 | E13-2 | behaviour | The page really stamps the key: after the push, the page's own `dataLayer` object holds `gtm.uniqueEventId`, in every mode. | The e2e test reads it with `page.evaluate` before it reads the record. |
-| E13-3 | behaviour | The recorded push has no `gtm.uniqueEventId` key in the default order and in `order=inner`, and `consentCommandOf(args)` returns `default`. | `pnpm exec vitest run --project e2e packages/recorder/test/e2e/datalayer-stamp.e2e.test.ts`. |
+| E13-3 | behaviour | For the default order and `order=inner`, the test reports and prints whether the recorded push has `gtm.uniqueEventId` in `args` and what `consentCommandOf(args)` returns. This is an observation: a key in `args` is the stop rule, not a failed eval. | `pnpm exec vitest run --project e2e packages/recorder/test/e2e/datalayer-stamp.e2e.test.ts`. |
 | E13-4 | regression | The other consent-mode pages serve as before. | `pnpm exec vitest run --project unit fixtures/site/src/pages-consent-mode.test.ts`. |
 | E13-5 | behaviour | The control `?push=stamped&when=before` records the key in `args`, so the test can show it. | The same e2e file. |
 
-Acceptance: `datalayer-stamp.e2e.test.ts` passes and reports where the key appears in each mode. E13-2 and E13-5 show the stamp exists and can be recorded, so the test does not pass on a page that never stamps. A key in the default order or in `order=inner` is the stop rule, not a pass.
+Acceptance: `datalayer-stamp.e2e.test.ts` passes and reports where the key appears in each mode. E13-2 and E13-5 show the stamp exists and can be recorded, so the test does not pass on a page that never stamps. A key in the default order or in `order=inner` is the stop rule: E13-3 reports it and the PR asks the maintainer.
 
 **G13 Baseline: a `gcd` default or update letter is not drift (#1569).** Round cap 3. Touches: `packages/decoders/src/ga4.ts` (a new `sameGcdState(a, b)` next to `GCD_LETTERS`) and `packages/decoders/src/ga4.test.ts`; `diffShapes` and `ShapeDiff` in `packages/expect/src/diff.ts` and `packages/expect/src/diff.test.ts`; `compareBaseline` and its describe helpers in `packages/cli/src/baseline.ts` and `packages/cli/src/baseline.test.ts`.
 Closes #1569
@@ -220,9 +222,9 @@ Evals:
 
 Acceptance: K13-1 passes, and fails on `main`, where the message does not name 429.
 
-**Q13 Mark scrubbed secrets on server container requests (#1585).** Round cap 3. Touches: `Request` in `packages/core/src/records.ts` (optional `secretsRedacted`); `packages/recorder/src/redact.ts` (new `secretNamesIn` for a URL or body and a header name helper, beside the redact functions, which keep their signatures and text) and `packages/recorder/src/redact.test.ts` (added cases only); the request build in `packages/recorder/src/server-container/capture.ts` and `packages/recorder/src/server-container/capture.test.ts`; `e2e/server-container.e2e.test.ts` (the Conversions API case).
+**Q13 Mark scrubbed secrets on server container requests (#1585).** Round cap 3. Touches: `Request` in `packages/core/src/records.ts` (optional `secretsRedacted`); `packages/recorder/src/redact.ts` (new `secretNamesIn` for a URL or body and a header name helper that reads the set `redactHeaders` uses, beside the redact functions, which keep their signatures and text) and `packages/recorder/src/redact.test.ts` (added cases only); the request build in `packages/recorder/src/server-container/capture.ts` and `packages/recorder/src/server-container/capture.test.ts`; `e2e/server-container.e2e.test.ts` (the Conversions API case).
 Closes #1585
-- A server container call whose URL, body or headers had a secret replaced gets `secretsRedacted`, a sorted, unique list of the names: `access_token`, `appsecret_proof`, `access-token`, `x-api-key`.
+- A server container call that had any value replaced in its URL, body or headers gets `secretsRedacted`, a sorted, unique list of the replaced names. URL and body names come from `SECRET_VALUE_NAMES` (`access_token`, `appsecret_proof`). Header names, lower-cased, come from the same set `redactHeaders` uses (`authorization`, `proxy-authorization`, `cookie`, `set-cookie`, `access-token`, `x-api-key`), so the list and the redaction cannot drift.
 - A call with no secret has no field. Browser requests never get it.
 - The values stay `[redacted]` as today. `redactSecretsInUrl` and `redactSecretsInBody` still return a string; `capture.ts` gets the names from the new functions.
 - Docs owner: D13.
@@ -235,18 +237,20 @@ Evals:
 | Q13-2 | behaviour | A token in the query and a proof in a JSON body give both names, sorted, once each. | `pnpm exec vitest run --project unit packages/recorder/src/server-container/capture.test.ts`. |
 | Q13-3 | behaviour | An `x-api-key` header gives `x-api-key`. | The same file. |
 | Q13-4 | error path | A call with no secret has no `secretsRedacted` key. | The same file, paired case. |
+| Q13-6 | behaviour | An `Authorization` header gives `authorization`, and its recorded value is `[redacted]`. | `pnpm exec vitest run --project unit packages/recorder/src/server-container/capture.test.ts`, an `Authorization` case. |
 | Q13-5 | regression | The redact functions return the same text as before. | `pnpm exec vitest run --project unit packages/recorder/src/redact.test.ts`. `git diff main -- packages/recorder/src/redact.test.ts` shows only added lines. |
 
 Acceptance: Q13-1 passes, and fails on `main`, where the record has no `secretsRedacted`.
 
 **Y13 Identity matcher: whole emails, standalone digests, keys (#1519).** Round cap 4. Touches: `ownValueKinds`, `ownMatcher`, `candidates` (if the reading kind must travel) and the own-email check in `scan` in `packages/core/src/identity.ts`, `packages/core/src/identity.test.ts`; `ownLeaves` in `packages/expect/src/early-identity-push.ts`, `packages/expect/src/early-identity-push.test.ts`; `packages/expect/src/identity-values.test.ts` (a `possibleRealData` case for a foreign email that contains the run's email).
 Closes #1519
-- An email is the run's own when the two normalised emails are equal, or, in a reading that came from a base64 decode, when it contains the run's email.
+- In a plain or URL-decoded reading, an email is the run's own only when the two normalised emails are equal.
+- In a reading that came from a base64 decode, an email is the run's own when it contains the run's email. So a foreign email glued to the run's email inside base64 still counts as the run's own (Flagged concerns).
 - A whole decoded reading that equals one of the run's email or phone digests counts, under any key.
 - The matcher cache is keyed on the identity's email, phone and `extra` values.
 - `earlyIdentityPush` checks each key of a push on its own, also when its child is `null`, an object or `true`.
-- Docs owner: D13.
-Invariants: A push with only foreign values never gives `earlyIdentityPush`. No identity value or hash in any message. The test "holds for own base64 emails with random junk glued on" passes unchanged.
+- Docs owner: D13. The PR body asks D13 to write that a foreign email glued to the run's email inside base64 still counts as the run's own.
+Invariants: A foreign value in a plain or URL-decoded reading never gives `earlyIdentityPush`. A base64 reading keeps the contains rule (Flagged concerns). No identity value or hash in any message. The test "holds for own base64 emails with random junk glued on" passes unchanged.
 Evals:
 
 | Id | Kind | What must be true | How to check |
@@ -256,6 +260,7 @@ Evals:
 | Y13-3 | behaviour | Changing `identity.email` after a first call changes the next result. | The same file. |
 | Y13-4 | behaviour | `{ [email]: true }` and `{ [email]: null }` before consent give the finding, with the path and no value. | `early-identity-push.test.ts`. |
 | Y13-5 | behaviour | `scan` now reports `other.buyer@example.test` as a foreign email, and still skips `buyer@example.test`. | `pnpm exec vitest run --project unit packages/expect/src/identity-values.test.ts packages/core/src/identity.test.ts`. |
+| Y13-7 | behaviour | Known behaviour: with run email `buyer@example.test`, a push before consent of the base64 of `other.buyer@example.test` gives `earlyIdentityPush`, because base64 readings keep the contains rule. | `early-identity-push.test.ts`, a case that pins this as the known limit. |
 | Y13-6 | regression | The earlyIdentityPush and real-data e2e files pass unchanged. | `pnpm exec vitest run --project e2e e2e/datalayer-identity-push.e2e.test.ts e2e/datalayer-push-real-data.e2e.test.ts`. |
 
 Acceptance: Y13-1 passes, and fails on `main`, where the foreign email gives the finding.
@@ -348,7 +353,7 @@ Closes #1532
 - #1533: the guide says a request to a listed platform host gets the `platformHost` flag on any site, which never fails a run, and with `platformHosts: false` it is an `unknownDestination`. Design §11 says hashes of an extra email or phone count for `earlyIdentityPush`, as `docs/cli.md` does.
 - #1583: both pages say `forwarded` counts the requests the container itself sends to Google, and the rejected count is about browser requests.
 - #1532: the `consentModeSetup` text names the gtag `arguments` form, recorded as an array or as an index-key object, and says a literal nested array does not count. It says GTM's `gtm.uniqueEventId` stamp is not in the record, as E13 showed.
-- The fixes: G13 (`gcd` letters), K13 (the message), Q13 (`secretsRedacted`), Y13 (whole emails and the `possibleRealData` change), N13 (`pathsMoved`).
+- The fixes: G13 (`gcd` letters), K13 (the message), Q13 (`secretsRedacted`), Y13 (whole emails, the `possibleRealData` change, and the known limit that a foreign email glued to the run's email inside base64 still counts as the run's own), N13 (`pathsMoved`).
 Evals:
 
 | Id | Kind | What must be true | How to check |
@@ -430,7 +435,7 @@ Acceptance: `e2e/identifier-route.e2e.test.ts` passes, and fails on `main`, wher
 Refs #1391
 - The result is added only when the run has a `canarySearch` flag.
 - A route fails when its sink forbids it (Decisions), with the grace window. A `pageUrl` route warns. A route that the consent allows passes.
-- A sink that decoded into a hit is judged by `effectiveConsentAt` of that hit, and a sink with no hit by its epoch (Decisions). `effectiveConsentAt` is in `packages/expect/src/evaluate.ts`; J13 imports it and does not change it.
+- One rule for every sink (Decisions). A sink that decoded into a Google hit that carries its own consent (`gcs` or `gcd`) takes that consent, and every other sink takes the consent of its epoch. It fails when that consent is `undecided`, `denied` or `withdrawn`, or `mixed` with `ad_user_data` or `analytics_storage` denied. `effectiveConsentAt` is in `packages/expect/src/evaluate.ts`; J13 imports it and does not change it.
 - A server container call (a sink with `captured: "serverContainer"`) fails when every epoch up to the call forbids it, whatever its link, and otherwise warns with the note `serverSendUnlinked`, until W13 links it.
 - The pass message says what was searched and what was skipped, from the `canarySearch` flag, for example `No planted value found in the searched forms (exact, URL-encoded, base64, base64url, SHA-256 hex, base64 and base64url, GCL. and fb.1. prefixes) in the URL, body and decoded fields of 41 requests; headers, including Referer and Cookie, not searched; skipped 1 (1 compressed body).` It never says "no leaks".
 - A failing message lists up to 5 route lines. Evidence is request IDs.
@@ -442,12 +447,12 @@ Evals:
 | Id | Kind | What must be true | How to check |
 | --- | --- | --- | --- |
 | J13-1 | behaviour | The U13 reject journey fails with `builtin: identifierRoute` and the gclid route line; the run exits 1. | `pnpm exec vitest run --project e2e e2e/identifier-route-policy.e2e.test.ts`. |
-| J13-2 | behaviour | The same journey with accept and `?send=granted` passes, and its message names the forms searched and the skipped count. | The same file, paired case. |
+| J13-2 | behaviour | The same journey with accept and `?send=granted` passes, and its message names the forms and the parts searched, says headers were not searched, and gives the skipped count. | The same file, paired case; it asserts the message matches `/headers/i` next to the searched forms. |
 | J13-3 | behaviour | A `pageUrl` route alone under reject warns and the run exits 0. | `pnpm exec vitest run --project unit packages/expect/src/identifier-route.test.ts`. |
 | J13-4 | behaviour | `builtins: { identifierRoute: warn }` exits 0 on the J13-1 run. | The e2e file. |
 | J13-5 | error path | `evaluate` of a record with no canary flags adds no `identifierRoute` result. | `identifier-route.test.ts`. |
 | J13-7 | behaviour | A Google sink hit with `gcs` denied in a granted epoch fails, and one with `gcs` granted in a denied epoch inside the grace window passes. A sink with no decoded hit in a denied epoch fails. | `identifier-route.test.ts`. |
-| J13-8 | behaviour | The pass message names the parts searched and says headers were not searched. | `e2e/identifier-route-policy.e2e.test.ts` (the granted journey) asserts the message matches `/headers/i` next to the searched forms. |
+| J13-9 | behaviour | A decoded Meta hit carrying a canary in an `undecided` epoch with no Consent Mode default fails `identifierRoute`. | `identifier-route.test.ts`. |
 | J13-6 | behaviour | The docs describe the option, both flags and the check, and say what a pass means and which request parts were not searched. | `grep -n "identifierRoute" docs/cli.md README.md docs/design.md` prints lines; `pnpm docs:build && pnpm docs:test` pass. |
 
 Acceptance: J13-1 passes, and fails on `main`, where there is no such check. J13-1 asserts the verdict, not the route kind, because V13 changes the kind in the same wave.
@@ -527,7 +532,7 @@ Evals:
 
 | Id | Kind | What must be true | How to check |
 | --- | --- | --- | --- |
-| A13-1 | behaviour | The report of a four-state matrix of the relay journey with canaries has the section, four state columns, the gclid route under reject and none, and the `consentModeSetup` result per state. | `pnpm exec vitest run --project e2e e2e/report-consent-audit.e2e.test.ts`. |
+| A13-1 | behaviour | The report of a four-state matrix of the relay journey with canaries has the section, four state columns, the gclid route under reject and none, and the `consentModeSetup` result per state. The none cell's `identifierRoute` result is a fail. | `pnpm exec vitest run --project e2e e2e/report-consent-audit.e2e.test.ts`. |
 | A13-2 | behaviour | The section holds the fixed line on what a pass means and who decides. | The same file. |
 | A13-3 | regression | The report of a suite without `--consent` is unchanged. | `pnpm exec vitest run --project unit packages/cli/src/report/suite.test.ts`, every existing case; `pnpm exec vitest run --project e2e e2e/report-suite.e2e.test.ts`. |
 | A13-4 | behaviour | The guide is published, listed in the sidebar and its links work. | `pnpm docs:build && pnpm docs:test && pnpm exec vitest run --project unit site/src/lib/docs-pages.test.ts`. |
@@ -536,6 +541,8 @@ Evals:
 
 Acceptance: A13-1 passes, and fails on `main` of wave 6, where the suite report has no consent audit.
 QA: run the one command on the fixture site, open the report, and read it as a DPO would.
+
+### Wave 8
 
 **O13 Server-side rules cannot evaluate when the container rejects requests (#1579).** Round cap 4. Touches: `evaluate()` and the `serverContainerRejected` block of `builtInChecks` in `packages/expect/src/evaluate.ts` (the check runs once, before the rules); `ResultNote` in `packages/core/src/records.ts`; `NOTE_TEXT` and `CANNOT_EVALUATE_NOTES` in `packages/cli/src/report/model.ts`; `packages/expect/src/server-sends.test.ts`; new `e2e/server-rules-rejected.e2e.test.ts` with new `e2e/scenarios/server-rules-rejected.yml`; `e2e/server-container-rejected.e2e.test.ts` (only assertions that fail because of the new result); `docs/cli.md` ("Rules by sender" and the `serverContainerRejected` section), `docs/design.md` (§11 the `serverContainerRejected` paragraph).
 Closes #1579
@@ -577,6 +584,7 @@ The maintainer field-tests 0.8.0-rc.1 in `stub` mode, supervised:
 - **Server epoch attribution rests on the link rules.** On multi-page runs the link is rarely `exact` (#1084). W13 does not weaken the rules to raise the rate.
 - **A pass is a lower bound.** Salted, rebuilt or swapped IDs, compressed bodies, request headers (including `Referer` and `Cookie`) and the container's internals are not searched. `canarySearch` says what was skipped.
 - **Y13 changes `possibleRealData`.** A foreign email that contains the run's email is now reported, so a run can newly fail on it.
+- **Y13 keeps the contains rule inside base64.** A foreign email glued to the run's email inside a base64 reading still counts as the run's own, for `earlyIdentityPush` and `scan`. Y13-7 pins it as known behaviour.
 - **Docs lag inside the release.** Some features are documented one or two waves after their code merges (Decisions). The release candidate is cut only after all docs owners merge.
 
 ## Out of scope
