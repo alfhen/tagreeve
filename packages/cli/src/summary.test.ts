@@ -2,6 +2,7 @@ import type { DataLayerEvent, Hit, Request, Result, RunRecords } from '@tagreeve
 import type { PushShape } from '@tagreeve/expect';
 import { buildDataLayerNotHookedFlag, buildDataLayerReassignedFlags, buildFlags, buildTallyFlags, buildUnloadGapFlags, PayloadCounts } from '@tagreeve/recorder';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,6 +13,7 @@ import { main } from './main.ts';
 import { runCommand } from './run.ts';
 import { readVersion } from './version.ts';
 
+const packageVersion = (JSON.parse(readFileSync(join(import.meta.dirname, '../../../package.json'), 'utf8')) as { version: string }).version;
 const hit = (vendor: string, event: string | null) => ({ vendor, event }) as Hit;
 const result = (pass: boolean) => ({ expectation: 'x', pass, evidence: [] }) as unknown as Result;
 
@@ -101,7 +103,7 @@ test('main prints the version and exits 2 on a usage error', async () => {
   const io = { stdout: (t: string) => void out.push(t), stderr: (t: string) => void err.push(t) };
   expect(await main(['--version'], io)).toBe(0);
   expect(out.join('')).toBe(`${readVersion()}\n`);
-  expect(readVersion()).toBe('0.7.0-rc.3');
+  expect(readVersion()).toBe(packageVersion);
   out.length = 0;
   expect(await main(['run', '--help'], io)).toBe(0);
   expect(out.join('')).toContain('Usage: tagreeve run <scenario.yml>');

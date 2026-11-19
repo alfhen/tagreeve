@@ -24,6 +24,7 @@
     "vitest.config.ts",
     "**/tsconfig*.json",
     "scripts/release.sh",
+    "scripts/bump-version.sh",
     "scripts/release-plan.ts",
     "scripts/release-plan.test.ts",
     "scripts/check-npm-dist-tag.ts",
