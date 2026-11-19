@@ -1,6 +1,6 @@
 import { FICTIONAL_PHONE_HINT, GTM_TAG_STATUSES } from '@tagreeve/core';
 import type { ConsentValue, NetworkMode, RequestOutcome, Severity } from '@tagreeve/core';
-import { trackerVendorKeys, vendorKeys } from '@tagreeve/decoders';
+import { OTHER_NAME, trackerVendorKeys, vendorKeys } from '@tagreeve/decoders';
 import { LineCounter, parseDocument } from 'yaml';
 import { isHostPattern, isServerHostPattern, isSpecificServerHost } from './hosts.ts';
 import { isEventLabel, MAX_PUSH_PATH, pathProblem, PUSH_FRAME_KINDS, PUSH_KINDS, PUSH_TYPES, type PushFrameKind, type PushKind } from './push-shape.ts';
@@ -737,7 +737,11 @@ export function parseScenario(text: string, extraVendorKeys: readonly string[] =
     };
     for (const [key, raw] of Object.entries(v)) {
       const p = [...path, key];
-      if (!PUSH_SELECTOR_KEYS.includes(key)) fail(p, `unknown key, expected one of ${PUSH_SELECTOR_KEYS.join(', ')}`);
+      if (!PUSH_SELECTOR_KEYS.includes(key)) {
+        const message = `unknown key, expected one of ${PUSH_SELECTOR_KEYS.join(', ')}`;
+        if (pathProblem(key) === undefined) fail(p, message);
+        else issues.push(`line ${lineOf(p)}: ${[...path, OTHER_NAME].reduce<string>((acc, x) => (typeof x === 'number' ? `${acc}[${x}]` : acc ? `${acc}.${x}` : x), '')}: ${message}`);
+      }
       else if (key === 'event') {
         if (typeof raw === 'string' && raw !== '' && raw.length <= MAX_PUSH_PATH && isEventLabel(raw)) event = raw;
         else fail(p, 'must be an event name as the --json push shapes show it, such as purchase. A name that reads (other) there cannot be matched');
@@ -749,7 +753,7 @@ export function parseScenario(text: string, extraVendorKeys: readonly string[] =
         const entries = isMap(raw) ? Object.entries(raw) : [];
         if (entries.length === 0 || entries.length > MAX_PUSH_PATHS) fail(p, `must be a mapping of 1 to ${MAX_PUSH_PATHS} key paths to a type, such as ecommerce.value: number`);
         else if (paths(key, entries.map(([k]) => k))) {
-          const types: Record<string, string> = {};
+          const types: Record<string, string> = Object.create(null);
           for (const [k, t] of entries) {
             if (typeof t === 'string' && (PUSH_TYPES as readonly string[]).includes(t)) types[k] = t;
             else fail([...p, k], `must be one of ${PUSH_TYPES.join(', ')}`);
