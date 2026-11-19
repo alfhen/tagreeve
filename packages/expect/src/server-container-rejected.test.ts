@@ -55,6 +55,13 @@ function check(statuses: (number | null)[], runOver: Partial<Run> = {}, hosts?: 
   return { out, requests };
 }
 
+test('requests the container never answered (outcome passed) are not counted', () => {
+  const { requests, responses } = records([400, 400], { outcome: 'passed' });
+  const out = evaluate([run(), ...requests, ...responses], scenario()).filter((r) => r.expectation === NAME);
+  expect(out[0]!.pass).toBe(true);
+  expect(out[0]!.message).toContain('No requests');
+});
+
 describe('when it warns', () => {
   test.each([
     [[400, 400, 200, 200], false],

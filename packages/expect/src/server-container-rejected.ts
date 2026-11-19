@@ -15,7 +15,8 @@ export function rejectedCounts(message: string | undefined): { rejected: number;
 }
 
 /**
- * Browser requests that the local server container answered, judged by their status. The message holds counts and
+ * Browser requests that the local server container answered, judged by their status. A `passed` request never reached
+ * the container (a service worker took it), so it is left out. The message holds counts and
  * status codes only, because a provider path can hold a loader ID.
  */
 export function serverContainerRejected(
@@ -25,7 +26,7 @@ export function serverContainerRejected(
 ): ServerContainerRejected {
   const statusOf = new Map(responses.map((r) => [r.requestId, r.status]));
   const counted = requests.filter(
-    (r) => !r.captured && r.initiator !== 'unload' && r.initiator !== 'redirect' && isServerContainerRequest(r, serverHosts),
+    (r) => !r.captured && r.outcome !== 'passed' && r.initiator !== 'unload' && r.initiator !== 'redirect' && isServerContainerRequest(r, serverHosts),
   );
   if (counted.length === 0) return { pass: true, evidence: [], message: 'No requests to the server container to check.' };
   const rejected = counted.filter((r) => {
