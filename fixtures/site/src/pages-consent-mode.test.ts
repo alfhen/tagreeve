@@ -32,3 +32,12 @@ test('/consent-mode-hits relays a consent default from a sandboxed frame only wi
   expect(html).toContain('postMessage');
   expect(html).not.toMatch(/shopify|web-pixels|banner\.js/i);
 });
+
+test('/consent-mode-hits pushes a stamped consent default object only with push=stamped', async () => {
+  const html = await (await fetch(`${site.url}/consent-mode-hits`)).text();
+  expect(html).toContain("q.get('push') === 'stamped'");
+  expect(html).toContain("q.get('when') === 'before'");
+  expect(html).toContain("q.get('order') === 'inner'");
+  expect(html).toContain("{ 0: 'consent', 1: 'default', 2: signals }");
+  expect(html).toContain("item['gtm.uniqueEventId']");
+});
