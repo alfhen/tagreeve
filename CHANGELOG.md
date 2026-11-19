@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.0-rc.4
+
+The fourth release candidate, after the rc.3 field test. Install it with `npm i -g tagreeve@next`.
+
+- New built-in check `serverContainerRejected`: with `--server-container`, it warns when more than half of the browser requests to the local server container, and at least 2, get status 400 or higher or no response. The message gives counts and status codes only, for example `22 of 27 requests to the server container were rejected (400: 22).` The `Server container` line then ends with `; <n> of <m> requests rejected`. It is `warn` by default and can be set to `fail`. Runs without a server container keep their results (#1570).
+- The package is published from CI with npm provenance. A merged version bump on main tags, checks and publishes the release, and `scripts/bump-version.sh` sets the version in `package.json` and the docs (#1573).
+- The Public Suffix List in `tldts` is updated to 7.4.19.
+
 ## 0.7.0-rc.3
 
 The third release candidate, after the rc.2 field test. Install it with `npm i -g tagreeve@next`.

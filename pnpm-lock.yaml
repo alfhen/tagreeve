@@ -21,8 +21,8 @@ importers:
         specifier: 1.64.1
         version: 1.64.1
       tldts:
-        specifier: 7.4.18
-        version: 7.4.18
+        specifier: 7.4.19
+        version: 7.4.19
       yaml:
         specifier: 2.9.1
         version: 2.9.1
@@ -139,8 +139,8 @@ importers:
         specifier: workspace:*
         version: link:../decoders
       tldts:
-        specifier: 7.4.18
-        version: 7.4.18
+        specifier: 7.4.19
+        version: 7.4.19
       yaml:
         specifier: 2.9.1
         version: 2.9.1
@@ -166,8 +166,8 @@ importers:
         specifier: 1.64.1
         version: 1.64.1
       tldts:
-        specifier: 7.4.18
-        version: 7.4.18
+        specifier: 7.4.19
+        version: 7.4.19
     devDependencies:
       '@tagreeve/fixture-site':
         specifier: workspace:*
@@ -2979,11 +2979,14 @@ packages:
   tldts-core@7.4.18:
     resolution: {integrity: sha512-KI2PKvCmvQI/xD6ypPqkU0i7oxNXR/O58RLRaHR4svsgVUQ2JE/XC8BtMbG6PSehD27I8sZJRcC1ASnCy6lp3g==}
 
+  tldts-core@7.4.19:
+    resolution: {integrity: sha512-goNXV6Ho9TIOfpJZanTd6CKG5DyYgYAL+k+22T0SLh8l6+KHIfBUPFuePuSZv05UttIaaLmI9tb7TmGIdK5AkQ==}
+
   tldts-experimental@7.4.18:
     resolution: {integrity: sha512-IErxVvjgDme6GfcjahlKkVpjgrtvOIzUs8oSc9vftTjFen8/R+oKlBlJ1jIY/ffVo/eYAZVzf3he/aBC304PyQ==}
 
-  tldts@7.4.18:
-    resolution: {integrity: sha512-somxA8xKAUzlAxl0TX/jMSYIbRNFIVGnI96pVGJPeMc5BsHmfVXn6mOJT6U++ELnl04eGfzpfcEuZe8WiASkXg==}
+  tldts@7.4.19:
+    resolution: {integrity: sha512-48dH6aSpQnpbzDUc4vIQZ1VjB8tkK+e8c1yx05/SZK+rkssgjEOlxDd/yU8/a4vGYQ9vRgJr9dwMq9TJ0b3X2Q==}
     hasBin: true
 
   totalist@3.0.1:
@@ -6338,13 +6341,15 @@ snapshots:
 
   tldts-core@7.4.18: {}
 
+  tldts-core@7.4.19: {}
+
   tldts-experimental@7.4.18:
     dependencies:
       tldts-core: 7.4.18
 
-  tldts@7.4.18:
+  tldts@7.4.19:
     dependencies:
-      tldts-core: 7.4.18
+      tldts-core: 7.4.19
 
   totalist@3.0.1: {}
 
