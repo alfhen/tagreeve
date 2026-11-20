@@ -25,7 +25,7 @@ your-repo/
 
 - `tagreeve/scenarios/` holds your scenario files. Commit them.
 - `tagreeve/config.yml` holds the site, the record folder and the scenario options that every run shares. Commit it. It never holds a secret: Tagreeve refuses the keys that could. See "Project config" in the [CLI reference](../cli.md).
-- `tagreeve/baselines/` holds the files from `tagreeve baseline save <record>`, named `<scenario>[.<store>][.<variant>].json`. Commit them, so a review shows when the expected behaviour changes. `run <scenario> --baseline` and `suite --baseline` read them with no path.
+- `tagreeve/baselines/` holds the files from `tagreeve baseline save <record>`, named `<scenario>[.<store>][.<variant>].json`. A cell baseline of `suite --consent` is saved under `tagreeve/baselines/consent/<state>/` with the same name, and you compare it by giving its path to `run --baseline`. `run` has no consent option, so that comparison is only meaningful for the cell whose state is the scenario's own first consent step. The other cells have no `run` comparison path. Commit them, so a review shows when the expected behaviour changes. `run <scenario> --baseline` and `suite --baseline` read the plain files with no path.
 - `tagreeve/runs/` holds records, reports and suite folders. A record has the pages you visited and the requests they made, so do not commit it. Add this line to `.gitignore`:
 
 ```text

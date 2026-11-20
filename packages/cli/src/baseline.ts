@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
 import { readRun, type RunRecords } from '@tagreeve/core';
-import { diffPushes, diffShapes, hitShape, kindChangeWarning, kindsMerged, PUSH_FRAME_KINDS, pushGroups, type DiffKey, type PushGroup, type ShapeDiff, type ShapeKey, type ShapeMove } from '@tagreeve/expect';
+import { diffPushes, isConsentState, diffShapes, hitShape, kindChangeWarning, kindsMerged, PUSH_FRAME_KINDS, pushGroups, type DiffKey, type PushGroup, type ShapeDiff, type ShapeKey, type ShapeMove } from '@tagreeve/expect';
 import { PUBLISHED_VARIANT, VARIANT_NAME, type BaselineArgs } from './args.ts';
 import { describePushDiff } from './diff.ts';
 import { DEFAULT_BASELINES } from './defaults.ts';
@@ -163,9 +163,11 @@ export function defaultBaselineName(run: RunRecords['run']): string {
     !name || unsafe(name) ? 'scenario'
     : unsafe(run.store ?? '') || (run.store !== undefined && !STORE_NAME.test(run.store)) ? 'store'
     : unsafe(run.variant ?? '') || (run.variant !== undefined && !VARIANT_NAME.test(run.variant)) ? 'variant'
+    : run.consentCell !== undefined && !isConsentState(run.consentCell) ? 'consent state'
     : undefined;
   if (bad) throw new BaselineError(`The ${bad} in this record cannot name a baseline file. Give the baseline path.`, 'usage');
-  return baselineFileName(run.scenario, run.store, run.variant);
+  const plain = baselineFileName(run.scenario, run.store, run.variant);
+  return run.consentCell === undefined ? plain : join('consent', run.consentCell, plain);
 }
 
 export function insideBaselines(path: string): boolean {

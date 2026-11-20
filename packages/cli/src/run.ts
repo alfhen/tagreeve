@@ -98,6 +98,8 @@ export interface RunSpec {
   label?: string;
   /** Set by `suite --stores`. Written to `Run.store`. */
   store?: string;
+  /** Set by `suite --consent`. Written to `Run.consentCell` and put in the record's file name. */
+  consentCell?: NonNullable<Run['consentCell']>;
   seed: number | undefined;
   headed: boolean;
   /** From `--viewport`. It wins over `options.viewport`. */
@@ -198,8 +200,8 @@ function storeCellSite(site: string): string {
   return new URL(site).origin;
 }
 
-export async function labelRecord(path: string, spec: Pick<RunSpec, 'label' | 'store' | 'variant' | 'out' | 'site'>): Promise<string> {
-  const { label, store, variant, out, site } = spec;
+export async function labelRecord(path: string, spec: Pick<RunSpec, 'label' | 'store' | 'consentCell' | 'variant' | 'out' | 'site'>): Promise<string> {
+  const { label, store, consentCell, variant, out, site } = spec;
   if (label === undefined && store === undefined && !variant) return path;
   const text = await readFile(path, 'utf8');
   const newline = text.indexOf('\n');
@@ -207,11 +209,12 @@ export async function labelRecord(path: string, spec: Pick<RunSpec, 'label' | 's
     ...(JSON.parse(text.slice(0, newline)) as Run),
     ...(label !== undefined && { label }),
     ...(store !== undefined && { store, site: storeCellSite(site) }),
+    ...(consentCell !== undefined && { consentCell }),
     ...(variant && { variant: variant.name }),
   };
   await writeFile(path, `${JSON.stringify(run)}${text.slice(newline)}`);
   if (!variant) return path;
-  const target = join(out, `${variant.fileStem}.${variant.name}.jsonl`);
+  const target = join(out, `${[variant.fileStem, consentCell, variant.name].filter(Boolean).join('.')}.jsonl`);
   await rename(path, target);
   return target;
 }
@@ -294,6 +297,7 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
     records.run.store = spec.store;
     records.run.site = storeCellSite(spec.site);
   }
+  if (spec.consentCell !== undefined) records.run.consentCell = spec.consentCell;
   if (variant) records.run.variant = variant.name;
   let results: Result[] = evaluate(allRecords(records), parsed);
   if (scrubber) results = scrubber.deep(results);

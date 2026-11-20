@@ -334,6 +334,24 @@ test('a manifest whose cell failed field is malformed exits 2 with the manifest 
   }
 });
 
+test('a consent suite is refused and the same manifest without the consent fields loads', async () => {
+  const consentDir = await mkdtemp(join(tmpdir(), 'pw-suite-consent-'));
+  try {
+    const withConsent = { ...manifest, consent: ['accept', 'reject'], cells: manifest.cells.map((c) => ({ ...c, labels: { ...c.labels, consent: 'accept' } })) };
+    await writeFile(join(consentDir, 'suite.json'), JSON.stringify(withConsent));
+    await expect(loadSuite(consentDir)).rejects.toThrow('consent suites are shown from 0.8.0-rc.1');
+    expect(() => buildSuiteModel(withConsent as unknown as SuiteManifest, loaded)).toThrow('consent suites are shown from 0.8.0-rc.1');
+    const html = join(consentDir, 'a.html');
+    const capture = io();
+    expect(await main(['report', consentDir, '--html', html], capture.io)).toBe(2);
+    expect(capture.err.join('')).toContain('consent suites are shown from 0.8.0-rc.1');
+    await writeFile(join(consentDir, 'suite.json'), JSON.stringify({ ...manifest, cells: manifest.cells.map((c) => ({ ...c, labels: {} })) }));
+    await expect(loadSuite(consentDir)).resolves.toBeDefined();
+  } finally {
+    await rm(consentDir, { recursive: true, force: true });
+  }
+});
+
 test('a truncated record puts its line number on the page', () => {
   const cut = new Map(loaded);
   cut.set(recordKey('checkout', 'published'), { ...loaded.get(recordKey('checkout', 'published'))!, truncatedAtLine: 7 });

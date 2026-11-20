@@ -79,8 +79,36 @@ test('server-container build', () => {
 
 const suiteBase = ['suite', 'dir', '--site', 'https://shop.example.com'];
 
+test('suite accepts a variant named like a consent state', () => {
+  expect(parseCli([...suiteBase, '--variant', 'none=f.json'])).toMatchObject({ variants: [{ name: 'none', file: 'f.json' }] });
+});
+
 test('suite defaults to the published variant', () => {
   expect(parseCli(suiteBase)).toMatchObject({ command: 'suite', dir: 'dir', variants: [{ name: 'published' }], out: undefined, withHandoff: false, json: false });
+});
+
+test('suite --consent takes a list of states in order', () => {
+  expect(parseCli(['suite', 'd', '--consent', 'accept,reject'])).toMatchObject({ command: 'suite', consent: ['accept', 'reject'] });
+  expect(parseCli(['suite', 'd', '--consent', 'accept,reject,none,withdraw'])).toMatchObject({ consent: ['accept', 'reject', 'none', 'withdraw'] });
+  expect(parseCli(suiteBase)).not.toHaveProperty('consent');
+});
+
+test('suite --consent refuses an unknown or repeated state', () => {
+  expect(() => parseCli(['suite', 'd', '--consent', 'maybe'])).toThrow(UsageError);
+  expect(() => parseCli(['suite', 'd', '--consent', 'accept,accept'])).toThrow(UsageError);
+  expect(() => parseCli(['suite', 'd', '--consent', ''])).toThrow(UsageError);
+  expect(() => parseCli(['suite', 'd', '--consent', 'accept,'])).toThrow(UsageError);
+});
+
+test('suite --consent refuses --baseline and a second variant', () => {
+  expect(() => parseCli(['suite', 'd', '--consent', 'accept', '--baseline', 'b'])).toThrow(UsageError);
+  expect(() => parseCli(['suite', 'd', '--consent', 'accept', '--baseline'])).toThrow(UsageError);
+  expect(() => parseCli(['suite', 'd', '--consent', 'accept', '--variant', 'published', '--variant', 'ws=o.json'])).toThrow(UsageError);
+  expect(parseCli(['suite', 'd', '--consent', 'accept', '--variant', 'ws=o.json'])).toMatchObject({ consent: ['accept'] });
+});
+
+test('run does not take --consent', () => {
+  expect(() => parseCli(['run', 's.yml', '--consent', 'accept'])).toThrow('not an option of run');
 });
 
 test('suite parses variants, name=file and the options of run', () => {

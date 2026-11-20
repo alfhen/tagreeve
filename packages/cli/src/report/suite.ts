@@ -84,8 +84,16 @@ function diffView(scenario: string, store: string | undefined, from: string, to:
   };
 }
 
+export const CONSENT_SUITE_REFUSAL = 'consent suites are shown from 0.8.0-rc.1';
+
+/** The model keeps one cell per scenario, store and variant, and the cells of a consent suite share them. */
+function refuseConsentSuite(manifest: SuiteManifest): void {
+  if (manifest.consent !== undefined || manifest.cells.some((c) => c.labels?.consent !== undefined)) throw new Error(CONSENT_SUITE_REFUSAL);
+}
+
 /** Diffs run from the first variant to each other, within one store, as the suite table does. */
 export function buildSuiteModel(manifest: SuiteManifest, records: SuiteRecords): SuiteReportModel {
+  refuseConsentSuite(manifest);
   const warnings: string[] = [];
   const names = [...new Set(manifest.cells.map((c) => c.scenario))];
   const storeNames = manifest.stores.map((s) => s.name);
@@ -213,6 +221,7 @@ export async function loadSuite(dir: string): Promise<{ manifest: SuiteManifest;
     throw new Error(`${dir} has no readable suite.json. report reads one .jsonl run record or a suite directory.`);
   }
   if (!isManifest(manifest)) throw new Error(`${join(dir, 'suite.json')} is not a suite manifest`);
+  refuseConsentSuite(manifest);
   manifest.stores ??= [];
   for (const cell of manifest.cells) cell.labels ??= {};
   const records = new Map<string, RunRecords | undefined>();

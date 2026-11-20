@@ -150,6 +150,8 @@ export interface ScenarioOptions {
   serverHosts?: string[];
   /** Browser viewport in CSS pixels. `--viewport` overrides it. */
   viewport?: Viewport;
+  /** The selector `suite --consent` clicks to open the site's cookie settings in the `withdraw` cell. */
+  withdrawWith?: string;
   /** Severity per built-in check. A check that is not listed is `fail`, except `earlyIdentifiers`, `consentModeSetup`, `earlyIdentityPush`, `idHandover` and `serverContainerRejected`, which are `warn`. */
   builtins?: Partial<Record<BuiltinName, Severity>>;
 }
@@ -199,7 +201,7 @@ const NETWORKS = ['stub', 'server'];
 const CONSENT_ANSWERS = ['accept', 'reject', 'none', 'withdraw'];
 const STEP_KINDS = ['visit', 'click', 'fill', 'select', 'consent', 'wait', 'addToCart', 'evaluate', 'checkpoint', 'handoff', 'payment'];
 const TOP_KEYS = ['start', 'vars', 'identity', 'steps', 'expect', 'options'];
-const OPTION_KEYS = ['network', 'seed', 'consentTimeout', 'graceWindow', 'optionalTimeout', 'allowUnknownDestination', 'firstPartyHosts', 'platformHosts', 'cartRequest', 'unloadGapIgnore', 'dataLayerNames', 'builtins', 'identifierFields', 'serverHosts', 'viewport'];
+const OPTION_KEYS = ['network', 'seed', 'consentTimeout', 'graceWindow', 'optionalTimeout', 'allowUnknownDestination', 'firstPartyHosts', 'platformHosts', 'cartRequest', 'unloadGapIgnore', 'dataLayerNames', 'builtins', 'identifierFields', 'serverHosts', 'viewport', 'withdrawWith'];
 export const MAX_DATALAYER_NAMES = 8;
 export const DATALAYER_NAME_PATTERN = /^[A-Za-z_$][\w$]{0,63}$/;
 export const NEVER_TRAPPED_NAMES: readonly string[] = ['location', 'Shopify', '__proto__', 'constructor', 'prototype'];
@@ -322,6 +324,9 @@ export function parseOptions(raw: unknown, path: Path, fail: (path: Path, messag
       } else if (k === 'viewport') {
         if (isMap(v) && Object.keys(v).length === 2 && isViewportSide(v.width) && isViewportSide(v.height)) options.viewport = { width: v.width, height: v.height };
         else fail(p, `must be { width, height }, integers from ${VIEWPORT_MIN} to ${VIEWPORT_MAX}. The preset "mobile" does not exist`);
+      } else if (k === 'withdrawWith') {
+        if (typeof v === 'string' && v.trim() !== '') options.withdrawWith = v;
+        else fail(p, 'must be a selector such as "#cookie-settings"');
       } else if (k === 'identifierFields') {
         if (!Array.isArray(v) || v.length === 0 || !v.every((x) => typeof x === 'string' && x !== '')) fail(p, 'must be a non-empty list of field names or globs such as user_data.*');
         else if (v.some((x: string) => x.length > MAX_FIELD_NAME)) fail(p, `field names are at most ${MAX_FIELD_NAME} characters`);

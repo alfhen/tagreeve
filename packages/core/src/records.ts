@@ -117,6 +117,8 @@ export interface Run {
   label?: string;
   /** The store name of a `suite --stores` cell. */
   store?: string;
+  /** The consent state of a `suite --consent` cell. */
+  consentCell?: 'accept' | 'reject' | 'none' | 'withdraw';
   /** The viewport that was asked for. Absent means the Playwright default. */
   viewport?: { width: number; height: number };
   /** Set when `TAGREEVE_TEST_LOOPBACK_IS_HOSTED` made the `fill`, `select` and `evaluate` guards treat loopback hosts as hosted. */

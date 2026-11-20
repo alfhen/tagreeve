@@ -1,0 +1,13 @@
+start: /plain/product
+options:
+  seed: 1
+  allowUnknownDestination: true
+  withdrawWith: "#pw-cookie-settings"
+steps:
+  - consent: accept
+  - wait: 3s
+expect:
+  must:
+    - { vendor: ga4, event: page_view }
+  mustNot:
+    - { vendor: ga4, event: purchase }

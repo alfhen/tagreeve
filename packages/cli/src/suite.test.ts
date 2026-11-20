@@ -708,6 +708,116 @@ test('labelRecord writes the label, the store and the variant on the run line an
   expect(await readFile(plain, 'utf8')).toBe(before);
 });
 
+const OPTS = 'options:\n  withdrawWith: "#pw-cookie-settings"\n';
+const consentScenario = (first = 'accept', options = OPTS, rules = '    - vendor: ga4\n') =>
+  `start: /\n${options}steps:\n  - consent: ${first}\n  - visit: /\nexpect:\n  must:\n${rules}  mustNot: []\n`;
+const STATES = ['accept', 'reject', 'none', 'withdraw'] as const;
+
+async function expectNoRun(dir: string, out: string, extra: Partial<SuiteArgs>, text: RegExp): Promise<void> {
+  const fake = recorder();
+  const error = await suiteCommand(args(dir, out, extra), capture().io, fake).then(() => undefined, (e: unknown) => e);
+  expect(error).toBeInstanceOf(UsageError);
+  expect((error as UsageError).message).toMatch(text);
+  expect(fake.specs).toHaveLength(0);
+  await expect(readdir(out)).rejects.toThrow();
+}
+
+test('--consent makes one cell per state, with the scenario rules in its own cell only', async () => {
+  const { dir, out } = await workDir({ 'a.yml': consentScenario() });
+  const fake = recorder();
+  expect(await suiteCommand(args(dir, out, { consent: [...STATES] }), capture().io, fake)).toBe(0);
+  expect(fake.specs.map((s) => s.consentCell)).toEqual([...STATES]);
+  expect(fake.specs.map((s) => s.parsed.expect.must.length)).toEqual([1, 0, 0, 0]);
+  expect(fake.specs.map((s) => s.parsed.steps.map((x) => x.kind).join())).toEqual(['consent,visit', 'consent,visit', 'consent,visit', 'consent,wait,click,consent,visit']);
+  expect(fake.specs.every((s) => s.variant?.fileStem === 'a' && s.variant.name === 'published')).toBe(true);
+  const manifest = await manifestOf(out);
+  expect(manifest.consent).toEqual([...STATES]);
+  expect(manifest.cells.map((c) => c.labels.consent)).toEqual([...STATES]);
+  expect(manifest.cells.map((c) => c.rulesSkipped)).toEqual([undefined, 1, 1, 1]);
+});
+
+test('--consent with a bad scenario or a missing withdrawWith exits 2 before any cell runs', async () => {
+  const good = consentScenario();
+  const cases: [Record<string, string>, RegExp, SuiteArgs['consent']][] = [
+    [{ 'a.yml': good, 'b.yml': VALID }, /^b: /, ['accept']],
+    [{ 'a.yml': good, 'b.yml': consentScenario('withdraw') }, /^b: /, ['accept']],
+    [{ 'a.yml': consentScenario('accept', '') }, /withdrawWith/, ['accept', 'withdraw']],
+  ];
+  for (const [files, text, consent] of cases) {
+    const { dir, out } = await workDir(files);
+    await expectNoRun(dir, out, { consent }, text);
+  }
+});
+
+test('a suite without --consent has no consent fields and keeps its file stems', async () => {
+  const { dir, out } = await workDir({ 'a.yml': VALID });
+  const fake = recorder();
+  expect(await suiteCommand(args(dir, out), capture().io, fake)).toBe(0);
+  expect(fake.specs[0]).not.toHaveProperty('consentCell');
+  expect(fake.specs[0]!.variant).toEqual({ name: 'published', fileStem: 'a' });
+  const manifest = await manifestOf(out);
+  expect(manifest).not.toHaveProperty('consent');
+  expect(manifest.cells.every((c) => c.labels.consent === undefined && !('rulesSkipped' in c))).toBe(true);
+});
+
+test('the table of a consent suite has a column per state and the records name the state', () => {
+  const cell = (consent: string) => ({ scenario: 'a', variant: 'published', labels: { consent }, status: 'pass' as const, exitCode: 0 as const, record: `a.${consent}.published.jsonl` });
+  const manifest: SuiteManifest = {
+    suiteSchemaVersion: 3,
+    id: 'suite_X',
+    startedAt: 0,
+    site: 'https://shop.example.com',
+    stores: [],
+    variants: ['published'],
+    consent: [...STATES],
+    cells: STATES.map(cell),
+    diffs: [],
+    exitCode: 0,
+  };
+  const lines = formatSuiteTable(manifest, 'runs/suite_X').split('\n');
+  expect(lines[0]!.split(/\s+/)).toEqual(['scenario', ...STATES]);
+  expect(lines[1]!.split(/\s+/)).toEqual(['a', 'PASS', 'PASS', 'PASS', 'PASS']);
+  const records = lines.filter((l) => l.startsWith('  a '));
+  expect(new Set(records).size).toBe(4);
+  STATES.forEach((state, i) => expect(records[i]).toContain(` ${state} published:`));
+});
+
+test('a consent suite exits with the worst code of its cells', async () => {
+  for (const [bad, code] of [[1, 1], [2, 2]] as const) {
+    const { dir, out } = await workDir({ 'a.yml': consentScenario() });
+    const fake = recorder((spec) => (spec.consentCell === 'reject' ? ({ code: bad, summary: bad === 1 ? failing(1).summary : undefined } as RunOutcome) : pass));
+    expect(await suiteCommand(args(dir, out, { consent: ['accept', 'reject', 'none'] }), capture().io, fake)).toBe(code);
+  }
+});
+
+test('--consent with --stores makes a cell per store and state and names the record', async () => {
+  const { dir, out } = await workDir({ 'a.yml': consentScenario() });
+  const stores = await storesFile(dir, [
+    { name: 'se', site: 'https://shop.example.se' },
+    { name: 'de', site: 'https://shop.example.de' },
+  ]);
+  const fake = recorder();
+  expect(await suiteCommand(args(dir, out, { site: undefined, stores, consent: ['accept', 'reject'] }), capture().io, fake)).toBe(0);
+  const manifest = await manifestOf(out);
+  expect(manifest.cells.map((c) => [c.labels.store, c.labels.consent])).toEqual([['se', 'accept'], ['se', 'reject'], ['de', 'accept'], ['de', 'reject']]);
+  expect(fake.specs.map((s) => [s.store, s.consentCell, s.variant?.fileStem])).toEqual([['se', 'accept', 'a.se'], ['se', 'reject', 'a.se'], ['de', 'accept', 'a.de'], ['de', 'reject', 'a.de']]);
+  const root = await mkdtemp(join(tmpdir(), 'pw-label-'));
+  const path = join(root, 'x.jsonl');
+  await writeFile(path, `${JSON.stringify({ type: 'run', id: 'run_1', scenario: 'a' })}\n`);
+  const moved = await labelRecord(path, { store: 'se', consentCell: 'reject', variant: { name: 'published', fileStem: 'a.se' }, out: root, site: 'https://shop.example.se/p' });
+  expect(moved).toBe(join(root, 'a.se.reject.published.jsonl'));
+  expect(JSON.parse((await readFile(moved, 'utf8')).split('\n')[0]!)).toMatchObject({ store: 'se', consentCell: 'reject' });
+});
+
+test('labelRecord without a consent state writes no consentCell and keeps the file name', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'pw-label-'));
+  const path = join(root, 'x.jsonl');
+  await writeFile(path, `${JSON.stringify({ type: 'run', id: 'run_1', scenario: 'a' })}\n`);
+  const moved = await labelRecord(path, { variant: { name: 'published', fileStem: 'a' }, out: root, site: 'https://x.example.com' });
+  expect(moved).toBe(join(root, 'a.published.jsonl'));
+  expect(JSON.parse((await readFile(moved, 'utf8')).split('\n')[0]!)).not.toHaveProperty('consentCell');
+});
+
 async function inProject<T>(files: Record<string, string>, body: (root: string) => Promise<T>): Promise<T> {
   const root = await mkdtemp(join(tmpdir(), 'pw-suite-proj-'));
   for (const [name, text] of Object.entries(files)) {

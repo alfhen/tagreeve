@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 import { readRun, ulid } from '@tagreeve/core';
 import type { TrackerEntry } from '@tagreeve/decoders';
-import { diffRuns, mergeOptions, parseScenario, ScenarioError, type Scenario, type ScenarioOptions } from '@tagreeve/expect';
+import { diffRuns, mergeOptions, ownConsentState, parseScenario, ruleCount, ScenarioError, withConsent, type ConsentState, type Scenario, type ScenarioOptions } from '@tagreeve/expect';
 import { GtmOverrideError, hasHandoff, hasPayment, normalizeHost, parseTestGtmOrigin, TEST_GTM_ORIGIN_ENV, type GtmOverrideInput, type TestPayment } from '@tagreeve/recorder';
 import { UsageError, type Network, type SuiteArgs } from './args.ts';
 import { baselineFileName, BaselineError, compareBaseline, readBaseline, type BaselineFile } from './baseline.ts';
@@ -25,6 +25,8 @@ export interface SuiteCell {
   failed?: { rules: number; checks: string[] };
   /** File name inside the suite directory. Absent when the run wrote none. */
   record?: string;
+  /** Set on a `--consent` cell that ran without the scenario's rules: how many it left out. */
+  rulesSkipped?: number;
   /** Set with `--baseline` on a cell that ran and wrote a record. Names and counts only. */
   baseline?: CellBaseline;
 }
@@ -66,6 +68,8 @@ export interface SuiteManifest {
   /** Empty without `--stores`, and in a version 1 manifest. */
   stores: SuiteStore[];
   variants: string[];
+  /** The `--consent` list. Absent without it. Each cell has `labels.consent`. */
+  consent?: ConsentState[];
   cells: SuiteCell[];
   diffs: SuiteDiff[];
   exitCode: 0 | 1 | 2;
@@ -133,22 +137,25 @@ function diffText(d: SuiteDiff | undefined): string {
   return parts.length ? parts.join(', ') : 'no change';
 }
 
-/** The cell's name in lists: scenario, store when there is one, variant. */
+/** The cell's name in lists: scenario, store and consent state when there are any, variant. */
 export function cellName(cell: Pick<SuiteCell, 'scenario' | 'variant' | 'labels'>): string {
-  return [cell.scenario, cell.labels.store, cell.variant].filter(Boolean).join(' ');
+  return [cell.scenario, cell.labels.store, cell.labels.consent, cell.variant].filter(Boolean).join(' ');
 }
 
 export function formatSuiteTable(manifest: SuiteManifest, dir: string): string {
   const [first, ...others] = manifest.variants;
   const scenarios = [...new Set(manifest.cells.map((c) => c.scenario))];
   const stores = manifest.stores.map((s) => s.name);
-  const header = ['scenario', ...(stores.length ? ['store'] : []), ...manifest.variants, ...others.map((v) => `diff (${first} -> ${v})`)];
+  const columns = manifest.consent ?? manifest.variants;
+  const header = ['scenario', ...(stores.length ? ['store'] : []), ...columns, ...(manifest.consent ? [] : others.map((v) => `diff (${first} -> ${v})`))];
   const rows = scenarios.flatMap((scenario) =>
     (stores.length ? stores : [undefined]).map((store) => [
       scenario,
       ...(store === undefined ? [] : [store]),
-      ...manifest.variants.map((v) => cellText(manifest.cells.find((c) => c.scenario === scenario && c.labels.store === store && c.variant === v)!)),
-      ...others.map((v) => diffText(manifest.diffs.find((d) => d.scenario === scenario && d.store === store && d.to === v))),
+      ...columns.map((column) =>
+        cellText(manifest.cells.find((c) => c.scenario === scenario && c.labels.store === store && (manifest.consent ? c.labels.consent === column : c.variant === column))!),
+      ),
+      ...(manifest.consent ? [] : others.map((v) => diffText(manifest.diffs.find((d) => d.scenario === scenario && d.store === store && d.to === v)))),
     ]),
   );
   const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i]!.length)));
@@ -225,6 +232,7 @@ async function readOverrides(args: SuiteArgs, io: Io): Promise<Map<string, GtmOv
 async function diffPairs(cells: SuiteCell[], variants: string[], stores: string[], dir: string): Promise<SuiteDiff[]> {
   const diffs: SuiteDiff[] = [];
   const [first, ...others] = variants;
+  if (!others.length) return diffs;
   const recordOf = (scenario: string, store: string | undefined, variant: string) =>
     cells.find((c) => c.scenario === scenario && c.labels.store === store && c.variant === variant)?.record;
   for (const scenario of [...new Set(cells.map((c) => c.scenario))]) {
@@ -268,6 +276,17 @@ function scenarioFor(s: LoadedScenario, store: Store | undefined, argVars: Recor
     identity.country = store.country;
   }
   return { ...s.parsed, vars: { ...s.parsed.vars, ...declared }, identity };
+}
+
+function checkConsentMatrix(scenarios: LoadedScenario[], states: ConsentState[]): void {
+  for (const s of scenarios) {
+    const own = ownConsentState(s.parsed);
+    if (own === undefined) throw new UsageError(`${s.name}: --consent needs a consent step in every scenario. Its answer is the one the cells replace.`, 'suite');
+    if (own === 'withdraw') throw new UsageError(`${s.name}: the first consent step is withdraw. --consent needs a first consent step of accept, reject or none.`, 'suite');
+    if (states.includes('withdraw') && s.parsed.options.withdrawWith === undefined) {
+      throw new UsageError(`${s.name}: --consent with withdraw needs options.withdrawWith, the selector that opens the site's cookie settings.`, 'suite');
+    }
+  }
 }
 
 async function loadStores(path: string | undefined, io: Io): Promise<Store[] | undefined> {
@@ -320,6 +339,8 @@ export async function suiteCommand(args: SuiteArgs, io: Io, deps: SuiteDeps = { 
   if (!stores) return 2;
   const scenarios = await scan(scenarioDir, trackers, loaded?.config.options ?? {}, io);
   if (!scenarios) return 2;
+
+  if (args.consent) checkConsentMatrix(scenarios, args.consent);
 
   const undeclared = undeclaredVars(scenarios, args.vars);
   if (undeclared.length) {
@@ -422,15 +443,19 @@ export async function suiteCommand(args: SuiteArgs, io: Io, deps: SuiteDeps = { 
   const startedAt = Date.now();
   const variants = args.variants.map((v) => v.name);
   const cells: SuiteCell[] = [];
+  const states: (ConsentState | undefined)[] = args.consent ?? [undefined];
+  const combos = states.flatMap((state) => variants.map((variant) => ({ state, variant })));
 
   const ordered = [...scenarios.filter((s) => !s.handoff), ...scenarios.filter((s) => s.handoff)];
   for (const s of ordered) {
     const seed = args.seed ?? s.parsed.options.seed ?? Math.floor(Math.random() * 2 ** 31);
     for (const { store, site } of targets) {
       const key = paymentKey(s.name, store);
-      const parsed = scenarioFor(s, store, args.vars, io);
-      for (const variant of variants) {
-        const cell = { scenario: s.name, variant, labels: (store ? { store: store.name } : {}) as Record<string, string> };
+      const scenarioOfStore = scenarioFor(s, store, args.vars, io);
+      for (const { state, variant } of combos) {
+        const parsed = state ? withConsent(scenarioOfStore, state) : scenarioOfStore;
+        const skippedRules = state && state !== ownConsentState(scenarioOfStore) ? ruleCount(scenarioOfStore) : 0;
+        const cell = { scenario: s.name, variant, labels: { ...(store && { store: store.name }), ...(state && { consent: state }) } as Record<string, string> };
         if (s.handoff && !args.withHandoff) {
           cells.push({ ...cell, status: 'skipped', exitCode: 0 });
           continue;
@@ -439,7 +464,7 @@ export async function suiteCommand(args: SuiteArgs, io: Io, deps: SuiteDeps = { 
           cells.push({ ...cell, status: 'skipped', exitCode: 0 });
           continue;
         }
-        io.stderr(`Running ${s.name}${store ? ` on ${store.name}` : ''} (${variant})\n`);
+        io.stderr(`Running ${s.name}${store ? ` on ${store.name}` : ''}${state ? ` with consent ${state}` : ''} (${variant})\n`);
         const outcome = await deps.run(
           {
             parsed,
@@ -449,6 +474,7 @@ export async function suiteCommand(args: SuiteArgs, io: Io, deps: SuiteDeps = { 
             out: dir,
             ...(args.label !== undefined && { label: args.label }),
             ...(store && { store: store.name }),
+            ...(state && { consentCell: state }),
             seed,
             headed: false,
             viewport: args.viewport,
@@ -477,13 +503,14 @@ export async function suiteCommand(args: SuiteArgs, io: Io, deps: SuiteDeps = { 
             if (exitCode === 0) exitCode = 1;
           }
         }
-        cells.push({ ...cell, status, exitCode, ...(failed && { failed }), ...(outcome.path && { record: basename(outcome.path) }), ...(compared && { baseline: compared }) });
+        cells.push({ ...cell, status, exitCode, ...(skippedRules > 0 && { rulesSkipped: skippedRules }), ...(failed && { failed }), ...(outcome.path && { record: basename(outcome.path) }), ...(compared && { baseline: compared }) });
       }
     }
   }
   const storeNames = stores.map((st) => st.name);
   const position = (c: SuiteCell) =>
-    (scenarios.findIndex((s) => s.name === c.scenario) * Math.max(storeNames.length, 1) + Math.max(storeNames.indexOf(c.labels.store ?? ''), 0)) * variants.length + variants.indexOf(c.variant);
+    ((scenarios.findIndex((s) => s.name === c.scenario) * Math.max(storeNames.length, 1) + Math.max(storeNames.indexOf(c.labels.store ?? ''), 0)) * states.length + Math.max(states.indexOf(c.labels.consent as ConsentState | undefined), 0)) * variants.length +
+    variants.indexOf(c.variant);
   cells.sort((a, b) => position(a) - position(b));
 
   const listed: DefaultUsed[] = [...(loaded?.defaultUsed ? [loaded.defaultUsed] : []), ...defaults];
@@ -495,6 +522,7 @@ export async function suiteCommand(args: SuiteArgs, io: Io, deps: SuiteDeps = { 
     site: new URL(targets[0]!.site).origin,
     stores: stores.map((st) => ({ name: st.name, site: new URL(st.site).origin })),
     variants,
+    ...(args.consent && { consent: args.consent }),
     cells,
     diffs: await diffPairs(cells, variants, storeNames, dir),
     exitCode: suiteExitCode(cells),
