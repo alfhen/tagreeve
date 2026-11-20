@@ -103,13 +103,19 @@ function expectPageShape(seen: Seen) {
   expect(seen.wrapRuns).toBe(1);
 }
 
+function expectDefaultCommand(event: { args: unknown[] }) {
+  const command = consentCommandOf(event.args);
+  expect(command?.command).toBe('default');
+  expect(command?.signals).toMatchObject({ ad_storage: 'denied' });
+}
+
 function report(mode: string, when: string, event: { args: unknown[] }) {
   const item = event.args[0] as Record<string, unknown>;
   const present = 'gtm.uniqueEventId' in item;
   console.log(`stamp observation: mode=${mode} ${when}: gtm.uniqueEventId in args[0]: ${present ? 'yes' : 'no'}; consentCommandOf(args): ${JSON.stringify(consentCommandOf(event.args))}`);
 }
 
-test('default order: the wrapper stamps after the recorder hook; the record shape is reported', async () => {
+test('default order: the wrapper stamps after the recorder hook; the recorded push reads as the default command', async () => {
   const { seen, early, late } = await load('');
   expectPageShape(seen);
   expect(seen.innerIsNative).toBe(false);
@@ -119,9 +125,11 @@ test('default order: the wrapper stamps after the recorder hook; the record shap
   expectRecordedObject(second);
   report('default', 'after the push', first);
   report('default', 'after the later read', second);
+  expectDefaultCommand(first);
+  expectDefaultCommand(second);
 }, 60_000);
 
-test('order=inner: the wrapper is the array own push before the recorder hooks it; the record shape is reported', async () => {
+test('order=inner: the wrapper is the array own push before the recorder hooks it; the recorded push reads as the default command', async () => {
   const { seen, early, late } = await load('&order=inner');
   expectPageShape(seen);
   expect(seen.innerIsNative).toBe(true);
@@ -131,6 +139,8 @@ test('order=inner: the wrapper is the array own push before the recorder hooks i
   expectRecordedObject(second);
   report('order=inner', 'after the push', first);
   report('order=inner', 'after the later read', second);
+  expectDefaultCommand(first);
+  expectDefaultCommand(second);
 }, 60_000);
 
 test('when=before: the key stamped before the inner push is in the recorded args', async () => {
@@ -140,5 +150,6 @@ test('when=before: the key stamped before the inner push is in the recorded args
   for (const event of [stampedPush(early), stampedPush(late)]) {
     const item = expectRecordedObject(event);
     expect(typeof item['gtm.uniqueEventId']).toBe('number');
+    expectDefaultCommand(event);
   }
 }, 60_000);

@@ -68,6 +68,12 @@ test('an object push with the index keys written out counts as pushed', () => {
   expect(r.message).toContain('found every signal set');
 });
 
+test('an index-key default stamped with gtm.uniqueEventId counts as pushed', () => {
+  const r = consentModeSetup([hit(FULL)], [{ ...push(), args: [{ 0: 'consent', 1: 'default', 2: { ad_storage: 'denied' }, 'gtm.uniqueEventId': 7 }], isConsentCommand: false }]);
+  expect(r.pass).toBe(true);
+  expect(r.message).not.toContain('outside the dataLayer');
+});
+
 test.each([
   ['consent update', ['consent', 'update', {}]],
   ['consent foo', ['consent', 'foo', {}]],

@@ -128,6 +128,16 @@ test('an arguments-like consent update reads as the gtag command it holds', () =
   expect(JSON.stringify(group)).not.toContain('granted');
 });
 
+test('an index-key consent default stamped with gtm.uniqueEventId reads as the same gtag default', () => {
+  const plain = { 0: 'consent', 1: 'default', 2: { ad_storage: 'denied' } };
+  const [group] = first(push({ ...plain, 'gtm.uniqueEventId': 7 }));
+  expect(group).toMatchObject({ event: 'consent default', kind: 'gtag', paths: [{ path: 'ad_storage', types: ['string'] }] });
+  const bare = first(push(plain))[0]!;
+  expect([group!.event, group!.kind, group!.paths]).toEqual([bare.event, bare.kind, bare.paths]);
+  expect(JSON.stringify(group)).not.toContain('gtm.uniqueEventId');
+  expect(JSON.stringify(group)).not.toContain('denied');
+});
+
 test('an arguments-like event, config and unknown command read as gtag', () => {
   const groups = first(
     push({ 0: 'event', 1: 'purchase', 2: { value: 1 } }),
