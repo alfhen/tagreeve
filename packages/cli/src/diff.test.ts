@@ -233,6 +233,12 @@ describe('a path that moved epoch', () => {
     expect(describePushDiff(diffPushes(a, b, { epochOrder: ['undecided', 'granted'] }))).toEqual([line]);
   });
 
+  test('names the recorded event of a joined event', () => {
+    const rename = (x: PushGroup[], event: string) => x.map((y) => ({ ...y, event }));
+    const lines = describePushDiff(diffPushes(rename(a, 'checkout_completed'), rename(b, 'purchase'), { epochOrder: ['undecided', 'granted'] }));
+    expect(lines).toEqual(['moved path coupon (string) in purchase (renamed from checkout_completed) from epoch undecided to granted [frame main]']);
+  });
+
   test('is one warning in a baseline compare and not drift', () => {
     const run = makeBaselineRun();
     const baseline = { ...buildBaseline(run, false), dataLayer: a.map((x) => ({ ...x, paths: [{ path: 'event', types: ['string'] }, ...x.paths] })) };

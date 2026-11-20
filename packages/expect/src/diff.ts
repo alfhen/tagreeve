@@ -160,6 +160,7 @@ export interface PushMove {
 
 export interface PushPathMove {
   event: string;
+  renamedFrom?: string;
   path: string;
   types: string[];
   frame: string;
@@ -431,7 +432,7 @@ export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOpti
     if (!to) continue;
     paired.add(to);
     paired.add(r);
-    result.pathsMoved.push({ event: r.event, path: r.path, types: r.types, frame: r.frame, ...(r.kind === undefined ? {} : { pushKind: r.kind }), from: r.epoch, to: to.epoch });
+    result.pathsMoved.push({ event: r.event, ...(r.renamedFrom === undefined ? {} : { renamedFrom: r.renamedFrom }), path: r.path, types: r.types, frame: r.frame, ...(r.kind === undefined ? {} : { pushKind: r.kind }), from: r.epoch, to: to.epoch });
   }
   result.pathsRemoved = result.pathsRemoved.filter((r) => !paired.has(r));
   result.pathsAdded = result.pathsAdded.filter((n) => !paired.has(n));

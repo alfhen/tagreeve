@@ -1265,6 +1265,14 @@ describe('a path that moved epoch', () => {
     expect(back.pathsRemoved).toEqual([]);
   });
 
+  test('keeps the recorded name of a joined event', () => {
+    const joinedA = a.map((x) => ({ ...x, event: 'checkout_completed' }));
+    const joinedB = b.map((x) => ({ ...x, event: 'purchase' }));
+    const map = parseEventMap(JSON.stringify({ events: { checkout_completed: 'purchase' } }), 'm.json');
+    const d = diffPushes(joinedA, joinedB, { epochOrder: order, eventMap: map });
+    expect(d.pathsMoved).toEqual([{ ...move, event: 'purchase', renamedFrom: 'checkout_completed', from: 'undecided', to: 'granted' }]);
+  });
+
   test('stays a missing and a new path when the types differ', () => {
     const typed = [b[0]!, g('granted', [value, { path: 'coupon', types: ['number'] }])];
     expect(a[0]!.paths.find((p) => p.path === 'coupon')!.types).toEqual(['string']);
