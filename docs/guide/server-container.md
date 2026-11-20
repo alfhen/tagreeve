@@ -100,7 +100,7 @@ Nothing else leaves the machine from the container. The browser's hits are stubb
 
 ## Read the results
 
-The summary has a `Server container` line. It shows whether the image started, how many vendor calls the container made, how many link to a browser hit, and how many requests were forwarded to Google. `forwarded` counts the requests the container itself sends to Google. When the `serverContainerRejected` check warns, the line also shows how many requests were rejected; that count is about browser requests to the server hosts, not the container's own calls. For example:
+The summary has a `Server container` line. It shows whether the image started, how many vendor calls the container made, how many link to a browser hit, and how many requests were forwarded to Google. `forwarded` counts the requests the container itself sends to Google. When the `serverContainerRejected` check warns or fails, the line also shows how many requests were rejected; that count is about browser requests to the server hosts, not the container's own calls. For example:
 
 ```text
 Server container: image ok; 7 vendor calls, 5 linked exactly, 1 probable, 1 unlinked; 3 requests forwarded to Google
