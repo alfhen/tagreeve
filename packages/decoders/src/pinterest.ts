@@ -1,4 +1,5 @@
 import type { Hit, Request } from '@tagreeve/core';
+import { PAGE_FIELDS } from './page-fields.ts';
 import { defaultHitId, type Decoder, type NewHitId } from './decoder.ts';
 import { jsonEntries, queryEntries, withFields, type FieldEntry } from './fields.ts';
 
@@ -111,7 +112,7 @@ export const pinterest: Decoder = {
           raw: {},
         },
         ids,
-        page: text(ad.loc) ?? null,
+        page: text(ad[PAGE_FIELDS.pinterest.page[0].slice('ad.'.length)]) ?? null,
         transport: req.resourceType === 'ping' ? 'beacon' : req.resourceType,
         params,
       }, entries, complete),

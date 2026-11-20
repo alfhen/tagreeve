@@ -1,4 +1,5 @@
 import { isLibraryLoadPath, type Hit, type Request } from '@tagreeve/core';
+import { PAGE_FIELDS } from './page-fields.ts';
 import { isSandboxPageUrl } from './sandbox.ts';
 import { defaultHitId, type NewHitId } from './decoder.ts';
 import { bodyComplete, bodyEntries, queryEntries, withFields } from './fields.ts';
@@ -6,7 +7,6 @@ import { trackerFor, trackerList, type TrackerEntry } from './tracker-list.ts';
 
 const LOADS = new Set(['script', 'stylesheet', 'font', 'document']);
 const EVENT_PARAMS = ['event', 'ev', 'event_name', 'en', 'evt', 'ea'];
-const PAGE_PARAMS = ['dl', 'page_location', 'page_url', 'url', 'u', 'loc', 'href'];
 
 /**
  * The listed entry for a request that stub mode answers locally and that decodes to a tracker hit. An entry with
@@ -56,7 +56,7 @@ export function decodeTracker(req: Request, list: readonly TrackerEntry[] = trac
       event: firstParam(params, EVENT_PARAMS),
       consent: { ads: 'unknown', analytics: 'unknown', adUserData: 'unknown', adPersonalization: 'unknown', raw: {} },
       ids: {},
-      page: firstParam(params, PAGE_PARAMS) ?? (isSandboxPageUrl(req.frameUrl) ? null : req.frameUrl),
+      page: firstParam(params, PAGE_FIELDS.tracker.page) ?? (isSandboxPageUrl(req.frameUrl) ? null : req.frameUrl),
       transport: 'tracker-list',
       params: {},
     }, [...queryEntries(params), ...body.entries], body.parsed && bodyComplete(req)),

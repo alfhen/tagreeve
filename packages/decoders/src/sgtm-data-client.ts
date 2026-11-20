@@ -1,5 +1,6 @@
 import type { Hit, Request } from '@tagreeve/core';
 import { decodeBase64Text } from './base64.ts';
+import { PAGE_FIELDS } from './page-fields.ts';
 import { defaultHitId, type Decoder, type NewHitId } from './decoder.ts';
 import { bodyComplete, bodyEntries, jsonEntries, queryEntries, withFields } from './fields.ts';
 import { decodeGa4Consent } from './ga4.ts';
@@ -113,7 +114,7 @@ export const sgtmDataClient: Decoder = {
         event: p.get('event') ?? p.get('en') ?? str(dtdc.event_name) ?? str(body.event_name) ?? null,
         consent: decodeGa4Consent(p),
         ids,
-        page: str(dtdc.page_location) ?? str(body.page_location) ?? null,
+        page: str(dtdc[PAGE_FIELDS.sgtm.page[0]]) ?? str(body[PAGE_FIELDS.sgtm.page[0]]) ?? null,
         transport: req.resourceType === 'ping' ? 'beacon' : req.resourceType,
         params,
       }, entries, complete),

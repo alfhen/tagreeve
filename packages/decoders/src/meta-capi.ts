@@ -1,4 +1,5 @@
 import type { HashedId, Hit, Request } from '@tagreeve/core';
+import { PAGE_FIELDS } from './page-fields.ts';
 import { defaultHitId, type Decoder, type NewHitId } from './decoder.ts';
 import { bodyComplete, jsonEntries, withFields } from './fields.ts';
 
@@ -97,7 +98,7 @@ function decodeItem(item: Json, req: Request, pixel: string, newHitId: NewHitId,
     event: str(item.event_name) ?? null,
     consent: { ads: 'unknown', analytics: 'unknown', adUserData: 'unknown', adPersonalization: 'unknown', raw: {} },
     ids,
-    page: str(item.event_source_url) ?? null,
+    page: str(item[PAGE_FIELDS['meta-capi'].page[0]]) ?? null,
     transport: req.resourceType === 'ping' ? 'beacon' : req.resourceType,
     params,
   }, jsonEntries(item), complete);
