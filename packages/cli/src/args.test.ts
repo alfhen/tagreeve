@@ -79,6 +79,10 @@ test('server-container build', () => {
 
 const suiteBase = ['suite', 'dir', '--site', 'https://shop.example.com'];
 
+test('suite accepts a variant named like a consent state', () => {
+  expect(parseCli([...suiteBase, '--variant', 'none=f.json'])).toMatchObject({ variants: [{ name: 'none', file: 'f.json' }] });
+});
+
 test('suite defaults to the published variant', () => {
   expect(parseCli(suiteBase)).toMatchObject({ command: 'suite', dir: 'dir', variants: [{ name: 'published' }], out: undefined, withHandoff: false, json: false });
 });
@@ -122,7 +126,6 @@ test('suite parses variants, name=file and the options of run', () => {
 test.each([
   [['--variant', 'Bad Name=f.json'], 'must match'],
   [['--variant', 'published=f.json'], 'reserved'],
-  [['--variant', 'reject=f.json'], 'consent state'],
   [['--variant', 'workspace'], 'needs an override file'],
   [['--variant', 'workspace='], 'needs an override file'],
   [['--variant', 'published', '--variant', 'published'], 'given twice'],

@@ -296,6 +296,13 @@ test('defaultBaselineName puts the consent state after the store', () => {
   expect(() => defaultBaselineName(named({ consentCell: '../x' as 'reject' }))).toThrow('Give the baseline path');
 });
 
+test('defaultBaselineName refuses a name part that a consent cell file could share', () => {
+  expect(defaultBaselineName(named({ consentCell: 'reject', variant: 'published' }))).toBe('checkout.reject.json');
+  expect(() => defaultBaselineName(named({ store: 'reject', variant: 'published' }))).toThrow('Give the baseline path');
+  expect(() => defaultBaselineName(named({ variant: 'none' }))).toThrow('Give the baseline path');
+  expect(() => defaultBaselineName(named({ scenario: 'checkout.reject.yml' }))).toThrow('Give the baseline path');
+});
+
 test('baseline save of a consent cell record writes tagreeve/baselines/<scenario>.<state>.json', async () => {
   const root = await mkdtemp(join(tmpdir(), 'pw-baseline-'));
   const record = join(root, 'run.jsonl');

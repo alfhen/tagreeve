@@ -159,8 +159,12 @@ export function defaultBaselineName(run: RunRecords['run']): string {
   }
   const unsafe = (part: string) => /[/\\\0]/.test(part) || part.includes('..') || part.startsWith('.');
   const name = scenarioName(run.scenario);
+  const clashes = (part: string | undefined) => part !== undefined && isConsentState(part);
   const bad =
     !name || unsafe(name) ? 'scenario'
+    : clashes(name.split('.').pop()) ? 'scenario'
+    : clashes(run.store) ? 'store'
+    : clashes(run.variant) ? 'variant'
     : unsafe(run.store ?? '') || (run.store !== undefined && !STORE_NAME.test(run.store)) ? 'store'
     : unsafe(run.variant ?? '') || (run.variant !== undefined && !VARIANT_NAME.test(run.variant)) ? 'variant'
     : run.consentCell !== undefined && !isConsentState(run.consentCell) ? 'consent state'

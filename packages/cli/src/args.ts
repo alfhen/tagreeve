@@ -310,7 +310,6 @@ function parseVariants(entries: string[]): VariantArg[] {
     const name = eq < 0 ? entry : entry.slice(0, eq);
     const file = eq < 0 ? undefined : entry.slice(eq + 1);
     if (!VARIANT_NAME.test(name)) throw new UsageError(`--variant name must match ${VARIANT_NAME.source}, got "${name}"`);
-    if (isConsentState(name)) throw new UsageError(`--variant "${name}" is a consent state. Its baseline file would share a name with a --consent cell. Pick another name.`);
     if (name === PUBLISHED_VARIANT && file !== undefined) throw new UsageError(`--variant "${PUBLISHED_VARIANT}" is reserved for no override and takes no file`);
     if (name !== PUBLISHED_VARIANT && !file) throw new UsageError(`--variant ${name} needs an override file: ${name}=<file>`);
     if (variants.some((v) => v.name === name)) throw new UsageError(`--variant "${name}" is given twice`);
