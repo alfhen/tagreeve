@@ -287,6 +287,34 @@ test('baseline save with a crafted scenario name exits 2 and writes nothing outs
   }
 });
 
+test('defaultBaselineName puts the consent state after the store', () => {
+  expect(defaultBaselineName(named({ consentCell: 'reject' }))).toBe('checkout.reject.json');
+  expect(defaultBaselineName(named({ consentCell: 'accept' }))).toBe('checkout.accept.json');
+  expect(defaultBaselineName(named({ store: 'se', consentCell: 'reject', variant: 'workspace' }))).toBe('checkout.se.reject.workspace.json');
+  expect(defaultBaselineName(named({ store: 'se', variant: 'workspace' }))).toBe('checkout.se.workspace.json');
+  expect(defaultBaselineName(named({}))).toBe('checkout.json');
+  expect(() => defaultBaselineName(named({ consentCell: '../x' as 'reject' }))).toThrow('Give the baseline path');
+});
+
+test('baseline save of a consent cell record writes tagreeve/baselines/<scenario>.<state>.json', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'pw-baseline-'));
+  const record = join(root, 'run.jsonl');
+  const records = makeRun(['page_view']);
+  records.run.scenario = 'checkout';
+  records.run.consentCell = 'reject';
+  await writeFile(record, [records.run, ...records.consentEpochs, ...records.hits].map((r) => JSON.stringify(r)).join('\n') + '\n');
+  const before = process.cwd();
+  process.chdir(root);
+  try {
+    const code = await baselineCommand({ command: 'baseline', input: record, byPage: false }, { stdout: () => undefined, stderr: () => undefined });
+    expect(code).toBe(0);
+    expect(JSON.parse(await readFile(join(root, 'tagreeve/baselines/checkout.reject.json'), 'utf8'))).toMatchObject({ scenario: 'checkout' });
+    expect(await readdir(join(root, 'tagreeve/baselines'))).toEqual(['checkout.reject.json']);
+  } finally {
+    process.chdir(before);
+  }
+});
+
 test('a suite cell record of schema version 3 has no store, so it needs an explicit path', () => {
   expect(() => defaultBaselineName(named({ recordSchemaVersion: 3, variant: 'published' }))).toThrow('Give the baseline path');
   expect(defaultBaselineName(named({ recordSchemaVersion: 3 }))).toBe('checkout.json');

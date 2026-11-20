@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util';
 import { LABEL_PATTERN } from './out-dir.ts';
-import { parseViewportText, VIEWPORT_HINT, type Viewport } from '@tagreeve/expect';
+import { CONSENT_STATES, isConsentState, parseViewportText, VIEWPORT_HINT, type ConsentState, type Viewport } from '@tagreeve/expect';
 
 export class UsageError extends Error {
   command: string | undefined;
@@ -86,6 +86,8 @@ export interface SuiteArgs {
   stores?: string;
   config?: string;
   variants: VariantArg[];
+  /** From `--consent`: one cell per scenario and state, in this order. Absent without it. */
+  consent?: ConsentState[];
   network: Network | undefined;
   out: string | undefined;
   label?: string;
@@ -138,6 +140,7 @@ Options for suite:
   --site <url>               The site to test. Without --site and --stores, site in tagreeve/config.yml is used, or else tagreeve/stores.json
   --stores <file>            A stores.json file: run every scenario against each store (instead of --site). Default: tagreeve/stores.json
   --variant <name[=file]>    A GTM build to test (repeatable). "published" is the live container; name=file serves an override file. Default: published
+  --consent <list>           Run every scenario once for each consent state in the comma-separated list of accept, reject, none, withdraw. Not with --baseline or a second --variant
   --with-handoff             Also run scenarios with handoff steps, last, headed
   --with-test-payment        Also run scenarios with a payment step. Needs --allow-test-payment
   --allow-test-payment <host> The host that may run test payments. It must equal the --site host and be in the test-payment-hosts.json allowlist
@@ -290,6 +293,16 @@ export function helpText(topic: HelpTopic | undefined): string {
 export const NET_LOG_NEEDS_LIVE =
   '--net-log needs --network live. In stub mode it would let the requests a frame sends while it unloads leave the machine.';
 
+function parseConsent(text: string): ConsentState[] {
+  const states: ConsentState[] = [];
+  for (const entry of text.split(',')) {
+    if (!isConsentState(entry)) throw new UsageError(`--consent takes a comma-separated list of ${CONSENT_STATES.join(', ')}, got "${entry}"`, 'suite');
+    if (states.includes(entry)) throw new UsageError(`--consent lists "${entry}" twice`, 'suite');
+    states.push(entry);
+  }
+  return states;
+}
+
 function parseVariants(entries: string[]): VariantArg[] {
   const variants: VariantArg[] = [];
   for (const entry of entries.length ? entries : [PUBLISHED_VARIANT]) {
@@ -322,6 +335,7 @@ const OPTIONS = {
   'server-container': { type: 'boolean' },
   'server-container-config': { type: 'string' },
   baseline: { type: 'string' },
+  consent: { type: 'string' },
   variant: { type: 'string', multiple: true },
   'with-handoff': { type: 'boolean' },
   'with-test-payment': { type: 'boolean' },
@@ -480,13 +494,20 @@ function parseCommand(argv: string[]): Command {
     for (const flag of ['gtm-override', 'headed', 'net-log'] as const) {
       if (values[flag] !== undefined) throw new UsageError(`--${flag} is not an option of suite`);
     }
+    const variants = parseVariants(values.variant ?? []);
+    const consent = values.consent === undefined ? undefined : parseConsent(values.consent);
+    if (consent) {
+      if (baseline.value !== undefined || baseline.bare) throw new UsageError('--consent cannot be used with --baseline. A baseline file belongs to one scenario, store and variant.', 'suite');
+      if (variants.length > 1) throw new UsageError('--consent cannot be used with more than one --variant.', 'suite');
+    }
     return {
       command: 'suite',
       ...(rest[0] !== undefined && { dir: rest[0] }),
       ...(values.site !== undefined && { site: values.site }),
       ...(values.stores !== undefined && { stores: values.stores }),
       ...(values.config !== undefined && { config: values.config }),
-      variants: parseVariants(values.variant ?? []),
+      variants,
+      ...(consent && { consent }),
       network,
       out: values.out,
       ...(values.label !== undefined && { label: values.label }),
@@ -505,7 +526,7 @@ function parseCommand(argv: string[]): Command {
       json: values.json ?? false,
     };
   }
-  for (const flag of ['variant', 'with-handoff', 'with-test-payment', 'stores'] as const) {
+  for (const flag of ['variant', 'with-handoff', 'with-test-payment', 'stores', 'consent'] as const) {
     if (values[flag] !== undefined) throw new UsageError(`--${flag} is not an option of run`);
   }
   return {
