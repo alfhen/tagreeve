@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
@@ -193,4 +193,18 @@ test.each(['gclid', 'ttclid'])('canaries refuse a start URL that holds %s, name 
   expect(code).toBe(2);
   expect(out).toContain(name);
   for (const leak of ['pw-1', start, `http://127.0.0.1:9${start}`, `?${name}=`, 'unknown option', 'Run failed']) expect(out).not.toContain(leak);
+});
+
+test('a failed start visit of a canary run prints and records no canary value', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
+  const scenario = join(dir, 's.yml');
+  await writeFile(scenario, 'start: /plain/product\noptions: { canaries: true, seed: 7 }\nsteps:\n  - wait: 1s\nexpect:\n  must: []\n  mustNot: []\n');
+  const err: string[] = [];
+  const code = await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: {}, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err.push(t) });
+  expect(code).toBe(2);
+  expect(err.join('')).not.toContain('TEST-');
+  const file = (await readdir(dir)).find((f) => f.endsWith('.jsonl'))!;
+  const lines = (await readFile(join(dir, file), 'utf8')).split('\n').filter(Boolean);
+  expect((JSON.parse(lines[0]!) as { canaries?: unknown[] }).canaries).toHaveLength(6);
+  expect(lines.filter((l) => l.startsWith('{"type":"step"')).join('')).not.toContain('TEST-');
 });

@@ -255,6 +255,16 @@ function withCanaries(start: string, canaries: Canary[]): string {
   return `${base}${base.includes('?') ? (/[?&]$/.test(base) ? '' : '&') : '?'}${added}${tail}`;
 }
 
+function nameCanaries(text: string, canaries: Canary[]): string {
+  return canaries.reduce((out, c) => out.split(c.value).join(`(url param ${c.name})`).split(encodeURIComponent(c.value)).join(`(url param ${c.name})`), text);
+}
+
+async function scrubStepErrors(path: string, canaries: Canary[]): Promise<void> {
+  const lines = (await readFile(path, 'utf8')).split('\n');
+  const kept = lines.map((line, i) => (i > 0 && line.startsWith('{"type":"step"') ? nameCanaries(line, canaries) : line));
+  await writeFile(path, kept.join('\n'));
+}
+
 export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> {
   const { gtmOverride, variant } = spec;
   let parsed = spec.parsed;
@@ -266,6 +276,7 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
     io = { stdout: (t) => rawIo.stdout(scrubber.text(t)), stderr: (t) => rawIo.stderr(scrubber.text(t)) };
   }
   const failed = (error: string): RunOutcome => {
+    if (canaries) error = nameCanaries(error, canaries);
     io.stderr(error);
     return { code: 2, error: scrubber ? scrubber.text(error) : error };
   };
@@ -317,6 +328,7 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
     const written = (error instanceof StepError || error instanceof GtmOverrideFailure || error instanceof ServerContainerFailure) && error.run ? error.run.path : undefined;
     if (written) {
       const kept = await labelRecord(written, { ...spec, canaries });
+      if (canaries) await scrubStepErrors(kept, canaries);
       text += `Record: ${kept}\n`;
       return { ...failed(text), path: kept };
     }
