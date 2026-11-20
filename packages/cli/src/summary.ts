@@ -54,6 +54,8 @@ export interface Summary {
   /** Optional fill entries that were skipped because the field was not on the page. */
   skippedFields?: { step: string; selector: string }[];
   results: { expectation: string; pass: boolean; severity: Severity; message: string | undefined; note?: ResultNote; evidence: string[] }[];
+  /** Set when the run planted canaries: their names, then `email` and `phone`. Never a value. */
+  canaries?: string[];
   /** Set when a payment step typed a provider's documented test card. Names only. */
   testPayment?: { provider: string; host: string; testMode: 'declared' | 'marker' };
   /** Set when a stand-in container of the test seam answered in place of a real server container. */
@@ -138,6 +140,7 @@ export function buildSummary(records: RunRecords, results: Result[], path: strin
     ...(tags && { tags }),
     epochs: records.consentEpochs.map((e) => ({ label: e.label, state: stateName(e.state), startT: e.startT, endT: e.endT })),
     flags: records.flags.map((f) => ({ kind: f.kind, detail: redactFlagDetail(f.detail, f.kind) })),
+    ...(records.run.canaries && { canaries: [...records.run.canaries.map((c) => c.name), 'email', 'phone'] }),
     ...(testPayment && { testPayment }),
     ...(records.run.testServerContainer && { testServerContainer: true as const }),
     ...(serverContainer && { serverContainer }),
@@ -322,6 +325,7 @@ export function formatSummary(summary: Summary): string {
     const { provider, host, testMode } = summary.testPayment;
     lines.push(`TEST PAYMENT: ${provider} on ${host} (test mode ${testMode === 'declared' ? 'declared' : 'on page'})`);
   }
+  if (summary.canaries) lines.push(`Canaries: ${summary.canaries.filter((n) => n !== 'email' && n !== 'phone').join(', ')} on the start URL; identity email and phone`);
   lines.push(...serverContainerLines(summary));
   lines.push('Hits');
   const vendors = Object.entries(summary.hits);
