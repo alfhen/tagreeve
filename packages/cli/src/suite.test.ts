@@ -1143,3 +1143,97 @@ test('a saved drifting baseline changes nothing without --baseline', async () =>
     expect(await suiteCommand(bare({ site: 'https://shop.example.com', baselineDefault: true, out: join(root, 'out2') }), capture().io, rec)).toBe(1);
   });
 });
+
+test('formatSuiteTable prints one line for each vendor of the consent matrix, after the table', () => {
+  const cell = (consent: string) => ({ scenario: 'a', variant: 'published', labels: { consent }, status: 'pass' as const, exitCode: 0 as const });
+  const states = (accept: number, reject: number, none: number, withdraw: number) => ({
+    accept: { hits: accept, events: [], fields: [], ids: [] },
+    reject: { hits: reject, events: [], fields: [], ids: [] },
+    none: { hits: none, events: [], fields: [], ids: [] },
+    withdraw: { hits: withdraw, events: [], fields: [], ids: [] },
+  });
+  const manifest: SuiteManifest = {
+    suiteSchemaVersion: 3,
+    id: 'suite_X',
+    startedAt: 0,
+    site: 'https://shop.example.com',
+    stores: [],
+    variants: ['published'],
+    consent: [...STATES],
+    cells: STATES.map(cell),
+    consentMatrix: [{ scenario: 'a', vendors: [{ vendor: 'ga4', states: states(12, 3, 0, 2), notInAccept: { reject: { events: [], fields: ['x', 'y'] } } }], vendorsNotInAccept: {} }],
+    diffs: [],
+    exitCode: 0,
+  };
+  const lines = formatSuiteTable(manifest, 'runs/suite_X').split('\n');
+  const at = lines.indexOf('ga4: accept 12 hits; reject 3 hits, 2 fields not in accept; none 0; withdraw 2 hits');
+  expect(lines[0]).toMatch(/^scenario/);
+  expect(at).toBeGreaterThan(0);
+});
+
+async function consentRun(extra: Partial<SuiteArgs>) {
+  const { dir, out } = await workDir({ 'a.yml': consentScenario() });
+  const rec = recorder(async (spec) => ({ code: 0, summary: pass.summary, path: await cellRecord(await mkdtemp(join(tmpdir(), 'pw-cell-')), spec.scenarioName, ['page_view']) }));
+  const c = capture();
+  expect(await suiteCommand(args(dir, out, extra), c.io, rec)).toBe(0);
+  return { c, text: await readFile(join(out, (await readdir(out))[0]!, 'suite.json'), 'utf8') };
+}
+
+test('a suite without --consent writes no consentMatrix and prints no vendor line', async () => {
+  const { c, text } = await consentRun({});
+  expect(JSON.parse(text)).not.toHaveProperty('consentMatrix');
+  expect(c.out()).not.toMatch(/^\S+: accept \d/m);
+});
+
+test('a suite with --consent writes consentMatrix and prints a ga4 vendor line', async () => {
+  const { c, text } = await consentRun({ consent: ['accept', 'reject'] });
+  const manifest = JSON.parse(text) as SuiteManifest;
+  expect(manifest.consentMatrix).toHaveLength(1);
+  expect(c.out()).toMatch(/^ga4: accept \d/m);
+});
+
+test('a consent suite with two stores has one consentMatrix entry for each store, counting its own hits', async () => {
+  const { dir, out } = await workDir({ 'a.yml': consentScenario() });
+  const stores = await storesFile(dir, [{ name: 'se', site: 'https://shop.example.se' }, { name: 'de', site: 'https://shop.example.de' }]);
+  const rec = recorder(async (spec) => ({
+    code: 0,
+    summary: pass.summary,
+    path: await cellRecord(await mkdtemp(join(tmpdir(), 'pw-cell-')), spec.scenarioName, spec.store === 'de' ? ['page_view', 'add_to_cart'] : ['page_view']),
+  }));
+  expect(await suiteCommand(args(dir, out, { site: undefined, stores, consent: ['accept', 'reject'] }), capture().io, rec)).toBe(0);
+  const matrix = (await manifestOf(out)).consentMatrix!;
+  expect(matrix.map((e) => [e.scenario, e.store])).toEqual([['a', 'se'], ['a', 'de']]);
+  const ga4 = (store: string) => matrix.find((e) => e.store === store)!.vendors.find((v) => v.vendor === 'ga4')!;
+  expect([ga4('se').states.accept!.hits, ga4('se').states.reject!.hits]).toEqual([1, 1]);
+  expect([ga4('de').states.accept!.hits, ga4('de').states.reject!.hits]).toEqual([2, 2]);
+  expect(ga4('de').states.accept!.events).toContain('add_to_cart');
+});
+
+test('report refuses a malformed consentMatrix as a bad manifest, and a good one as a consent suite', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'pw-suite-matrix-'));
+  const base = {
+    suiteSchemaVersion: 3,
+    id: 'suite_X',
+    startedAt: 0,
+    site: 'https://shop.example.com',
+    stores: [],
+    variants: ['published'],
+    consent: ['accept', 'reject'],
+    cells: ['accept', 'reject'].map((consent) => ({ scenario: 'a', variant: 'published', labels: { consent }, status: 'pass', exitCode: 0 })),
+    diffs: [],
+    exitCode: 0,
+  };
+  const html = join(folder, 'a.html');
+  const report = async (consentMatrix: unknown) => {
+    await writeFile(join(folder, 'suite.json'), JSON.stringify({ ...base, consentMatrix }));
+    const c = capture();
+    return { code: await main(['report', folder, '--html', html], c.io), err: c.err() };
+  };
+  const bad = await report('not a list');
+  expect(bad.code).toBe(2);
+  expect(bad.err).toContain('is not a suite manifest');
+  const good = await report([{ scenario: 'a', vendors: [], vendorsNotInAccept: {} }]);
+  expect(good.code).toBe(2);
+  expect(good.err).toContain('consent suites are shown from 0.8.0-rc.1');
+  await expect(readFile(html)).rejects.toThrow();
+});
