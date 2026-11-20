@@ -726,3 +726,21 @@ test('possibleRealDataPush flags collapse into one counted line', () => {
   expect(text.split('\n').filter((l) => l.includes('possibleRealDataPush'))).toEqual(['  possibleRealDataPush: x3']);
   expect(text).not.toContain('fake.person');
 });
+
+function canaryRecords(withCanaries: boolean): RunRecords {
+  const canaries = ['gclid', 'gbraid', 'wbraid', 'fbclid', 'msclkid', 'ttclid'].map((name) => ({ source: 'urlParam', name, value: `TEST-${name.toUpperCase()}-7-RUN-0001` }));
+  return { run: { id: newId('run'), ...(withCanaries && { canaries }) }, hits: [], requests: [], consentEpochs: [], flags: [], steps: [] } as unknown as RunRecords;
+}
+
+test('a canary run shows the Canaries line and names in --json, and never a value', () => {
+  const summary = buildSummary(canaryRecords(true), [], 'run.jsonl');
+  expect(formatSummary(summary)).toContain('Canaries: gclid, gbraid, wbraid, fbclid, msclkid, ttclid on the start URL; identity email and phone');
+  expect(summary.canaries).toEqual(['gclid', 'gbraid', 'wbraid', 'fbclid', 'msclkid', 'ttclid', 'email', 'phone']);
+  expect(JSON.stringify(summary)).not.toContain('TEST-');
+});
+
+test('a run without canaries has no Canaries line and no canaries key', () => {
+  const summary = buildSummary(canaryRecords(false), [], 'run.jsonl');
+  expect(formatSummary(summary)).not.toContain('Canaries:');
+  expect(summary).not.toHaveProperty('canaries');
+});

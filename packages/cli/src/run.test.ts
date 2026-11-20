@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
@@ -177,4 +177,20 @@ test('a bad digest override of the base image exits 2', async () => {
     expect(r.spec).toBeUndefined();
     expect(r.err).toContain('TAGREEVE_SERVER_CONTAINER_BASE');
   }
+});
+
+test.each(['gclid', 'ttclid'])('canaries refuse a start URL that holds %s, name it and echo no value', async (name) => {
+  const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
+  const scenario = join(dir, 's.yaml');
+  const start = `/plain/product?${name}=pw-1`;
+  await writeFile(scenario, `start: ${start}\noptions: { canaries: true }\nsteps:\n  - visit: /\nexpect:\n  must: []\n  mustNot: []\n`);
+  const text = await readFile(scenario, 'utf8');
+  expect(text).toContain('pw-1');
+  expect(text.split('\n')[0]).toBe(`start: ${start}`);
+  const err: string[] = [];
+  const code = await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: {}, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err.push(t) });
+  const out = err.join('');
+  expect(code).toBe(2);
+  expect(out).toContain(name);
+  for (const leak of ['pw-1', start, `http://127.0.0.1:9${start}`, `?${name}=`, 'unknown option', 'Run failed']) expect(out).not.toContain(leak);
 });
