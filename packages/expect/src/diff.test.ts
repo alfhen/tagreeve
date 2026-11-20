@@ -1244,3 +1244,92 @@ describe('gcd letters in diffShapes', () => {
     expect(d.gcdLetters).toEqual([]);
   });
 });
+
+describe('a path that moved epoch', () => {
+  const order = ['undecided', 'granted'];
+  const value = { path: 'value', types: ['number'] };
+  const coupon = { path: 'coupon', types: ['string'] };
+  const g = (epoch: string, paths: Array<{ path: string; types: string[] }>, over: Partial<PushGroup> = {}): PushGroup => ({ epoch, event: 'view_item', kind: 'object', frame: 'main', paths, ...over });
+  const a = [g('undecided', [value, coupon]), g('granted', [value])];
+  const b = [g('undecided', [value]), g('granted', [value, coupon])];
+  const move = { event: 'view_item', path: 'coupon', types: ['string'], frame: 'main', pushKind: 'object' };
+
+  test('is one pathsMoved entry in both directions', () => {
+    const d = diffPushes(a, b, { epochOrder: order });
+    expect(d.pathsMoved).toEqual([{ ...move, from: 'undecided', to: 'granted' }]);
+    expect(d.pathsAdded).toEqual([]);
+    expect(d.pathsRemoved).toEqual([]);
+    const back = diffPushes(b, a, { epochOrder: order });
+    expect(back.pathsMoved).toEqual([{ ...move, from: 'granted', to: 'undecided' }]);
+    expect(back.pathsAdded).toEqual([]);
+    expect(back.pathsRemoved).toEqual([]);
+  });
+
+  test('stays a missing and a new path when the types differ', () => {
+    const typed = [b[0]!, g('granted', [value, { path: 'coupon', types: ['number'] }])];
+    expect(a[0]!.paths.find((p) => p.path === 'coupon')!.types).toEqual(['string']);
+    expect(typed[1]!.paths.find((p) => p.path === 'coupon')!.types).toEqual(['number']);
+    const d = diffPushes(a, typed, { epochOrder: order });
+    expect(d.pathsMoved).toEqual([]);
+    expect(d.pathsRemoved).toEqual([{ epoch: 'undecided', event: 'view_item', kind: 'object', frame: 'main', path: 'coupon', types: ['string'] }]);
+    expect(d.pathsAdded).toEqual([{ epoch: 'granted', event: 'view_item', kind: 'object', frame: 'main', path: 'coupon', types: ['number'] }]);
+  });
+
+  test('stays a missing and a new path when the epochs are not neighbours', () => {
+    const three = ['undecided', 'denied', 'granted'];
+    expect(three.indexOf('undecided')).toBeLessThan(three.indexOf('denied'));
+    expect(three.indexOf('denied')).toBeLessThan(three.indexOf('granted'));
+    const d = diffPushes(a, b, { epochOrder: three });
+    expect(d.pathsMoved).toEqual([]);
+    expect(d.pathsRemoved.map((p) => p.epoch)).toEqual(['undecided']);
+    expect(d.pathsAdded.map((p) => p.epoch)).toEqual(['granted']);
+  });
+
+  test.each([
+    ['event', { event: 'add_to_cart' }, (x: PushGroup[]) => [x[1]!.event, x[0]!.event], ['add_to_cart', 'view_item']],
+    ['push kind', { kind: 'gtag' as const }, (x: PushGroup[]) => [x[1]!.kind, x[0]!.kind], ['gtag', 'object']],
+    ['frame', { frame: 'embedded' as const }, (x: PushGroup[]) => [x[1]!.frame, x[0]!.frame], ['embedded', 'main']],
+  ])('is not paired when only the %s differs', (_name, over, pick, expected) => {
+    const ra = [a[0]!, { ...a[1]!, ...over }];
+    const rb = [b[0]!, { ...b[1]!, ...over }];
+    expect(pick(ra)).toEqual(expected);
+    expect(pick(rb)).toEqual(expected);
+    const d = diffPushes(ra, rb, { epochOrder: order });
+    expect(d.pathsMoved).toEqual([]);
+    expect(d.pathsRemoved.map((p) => [p.path, p.epoch])).toEqual([['coupon', 'undecided']]);
+    expect(d.pathsAdded.map((p) => [p.path, p.epoch])).toEqual([['coupon', 'granted']]);
+  });
+
+  test('is not paired when only the key path differs', () => {
+    const voucher = [b[0]!, g('granted', [value, { path: 'voucher', types: ['string'] }])];
+    expect(voucher[1]!.paths.map((p) => p.path)).not.toContain('coupon');
+    const d = diffPushes(a, voucher, { epochOrder: order });
+    expect(d.pathsMoved).toEqual([]);
+    expect(d.pathsRemoved.map((p) => p.path)).toEqual(['coupon']);
+    expect(d.pathsAdded.map((p) => p.path)).toEqual(['voucher']);
+  });
+
+  test('alone is not a change, and a real path change next to it is', () => {
+    expect(diffPushes(a, b, { epochOrder: order }).changed).toBe(false);
+    const extra = [b[0]!, g('granted', [value, coupon, { path: 'extra', types: ['boolean'] }])];
+    const d = diffPushes(a, extra, { epochOrder: order });
+    expect(d.pathsAdded.map((p) => p.path)).toEqual(['extra']);
+    expect(d.changed).toBe(true);
+  });
+
+  test('diffRuns adds only dataLayer.pathsMoved to the JSON', () => {
+    const run = (withCoupon: 'undecided' | 'granted'): RunRecords => {
+      const r = makeRun();
+      r.consentEpochs.push(epoch(r.run.id, 'granted', 100));
+      addPush(r, { event: 'view_item', value: 1, ...(withCoupon === 'undecided' ? { coupon: 'x' } : {}) }, { t: 10 });
+      addPush(r, { event: 'view_item', value: 1, ...(withCoupon === 'granted' ? { coupon: 'x' } : {}) }, { t: 110 });
+      return r;
+    };
+    const result = diffRuns(run('undecided'), run('granted'));
+    expect(Object.keys(result).sort()).toEqual(['added', 'changed', 'countMismatches', 'dataLayer', 'flags', 'removed', 'warnings']);
+    const d = result.dataLayer!;
+    expect(Object.keys(d).sort()).toEqual(['changed', 'eventsAdded', 'eventsRemoved', 'kindChanged', 'moved', 'pathsAdded', 'pathsMoved', 'pathsRemoved', 'typeChanges']);
+    expect(Object.keys(d.pathsMoved[0]!).sort()).toEqual(['event', 'frame', 'from', 'path', 'pushKind', 'to', 'types']);
+    for (const empty of [d.eventsAdded, d.eventsRemoved, d.typeChanges, d.moved, d.kindChanged, d.pathsAdded, d.pathsRemoved]) expect(empty).toEqual([]);
+  });
+});
