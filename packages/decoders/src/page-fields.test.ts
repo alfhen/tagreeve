@@ -15,7 +15,7 @@ function req(over: Partial<Request>): Request {
     method: 'GET',
     url: 'https://example.com/',
     resourceType: 'image',
-    frameUrl: 'https://frame.example.com/pw-frame',
+    frameUrl: FRAME_URL,
     initiator: null,
     headers: {},
     postData: null,
@@ -24,6 +24,7 @@ function req(over: Partial<Request>): Request {
   };
 }
 
+const FRAME_URL = 'https://frame.example.com/pw-frame';
 const query = (fields: Record<string, string>) => new URLSearchParams(fields).toString();
 
 interface Sample {
@@ -33,12 +34,14 @@ interface Sample {
   key: (name: string) => string;
   fixed?: Record<string, string>;
   others: Record<string, string>;
+  unnamedPage: string | null;
   build: (fields: Record<string, string>) => Request;
 }
 
 const samples: Sample[] = [
   {
     name: 'ga4',
+    unnamedPage: null,
     vendor: 'ga4',
     names: PAGE_FIELDS.ga4.page,
     key: (n) => n,
@@ -48,6 +51,7 @@ const samples: Sample[] = [
   },
   {
     name: 'google-ads',
+    unnamedPage: null,
     vendor: 'google-ads',
     names: PAGE_FIELDS['google-ads'].page,
     key: (n) => n,
@@ -56,6 +60,7 @@ const samples: Sample[] = [
   },
   {
     name: 'meta',
+    unnamedPage: null,
     vendor: 'meta',
     names: PAGE_FIELDS.meta.page,
     key: (n) => n,
@@ -64,6 +69,7 @@ const samples: Sample[] = [
   },
   {
     name: 'meta-capi',
+    unnamedPage: null,
     vendor: 'meta-capi',
     names: PAGE_FIELDS['meta-capi'].page,
     key: (n) => n,
@@ -79,6 +85,7 @@ const samples: Sample[] = [
   },
   {
     name: 'pinterest',
+    unnamedPage: null,
     vendor: 'pinterest',
     names: PAGE_FIELDS.pinterest.page,
     key: (n) => n.slice('ad.'.length),
@@ -88,6 +95,7 @@ const samples: Sample[] = [
   },
   {
     name: 'sgtm data client',
+    unnamedPage: null,
     vendor: 'sgtm',
     names: PAGE_FIELDS.sgtm.page,
     key: (n) => n,
@@ -102,6 +110,7 @@ const samples: Sample[] = [
   },
   {
     name: 'tracker',
+    unnamedPage: FRAME_URL,
     vendor: 'reddit',
     names: PAGE_FIELDS.tracker.page,
     key: (n) => n,
@@ -145,6 +154,12 @@ for (const sample of samples) {
       const fields = { ...sample.fixed, ...sample.others, ...named, [other]: MARKER };
       assertInRequest(sample.build(fields));
       expect(pageOf(sample, fields)).toBe(BASE_PAGE);
+    });
+
+    test(`${sample.name}: a marker under ${other} with no named page field is not the page`, () => {
+      const fields = { ...sample.fixed, ...sample.others, [other]: MARKER };
+      assertInRequest(sample.build(fields));
+      expect(pageOf(sample, fields)).toBe(sample.unnamedPage);
     });
   }
 }
