@@ -1303,6 +1303,7 @@ describe('a path that moved epoch', () => {
   test('is not paired when only the key path differs', () => {
     const voucher = [b[0]!, g('granted', [value, { path: 'voucher', types: ['string'] }])];
     expect(voucher[1]!.paths.map((p) => p.path)).not.toContain('coupon');
+    expect(voucher[1]!.paths.map((p) => p.path)).toContain('voucher');
     const d = diffPushes(a, voucher, { epochOrder: order });
     expect(d.pathsMoved).toEqual([]);
     expect(d.pathsRemoved.map((p) => p.path)).toEqual(['coupon']);
