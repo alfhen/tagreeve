@@ -1,9 +1,11 @@
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { newId, type RunRecords } from '@tagreeve/core';
 import { diffPushes, type DiffResult, type PushGroup } from '@tagreeve/expect';
 import { describe, expect, test } from 'vitest';
 import { parseCli, UsageError } from './args.ts';
+import { buildBaseline, compareBaseline } from './baseline.ts';
 import { describePushDiff, flagChangeLabel, formatDiff } from './diff.ts';
 import { main } from './main.ts';
 
@@ -156,6 +158,7 @@ describe('dataLayer lines', () => {
     eventsAdded: [{ epoch: 'undecided', event: 'add_to_cart', frame: 'main' }],
     eventsRemoved: [{ epoch: 'undecided', event: 'add_to_cart', frame: 'embedded' }],
     pathsAdded: [],
+    pathsMoved: [],
     pathsRemoved: [{ epoch: 'undecided', event: 'purchase', frame: 'main', path: 'ecommerce.value', types: ['number'] }],
     typeChanges: [{ epoch: 'undecided', event: 'purchase', frame: 'main', path: 'value', a: ['number'], b: ['string'] }],
     moved: [{ event: 'view_item', kind: 'frame' as const, epoch: 'undecided', from: 'embedded', to: 'main' }],
@@ -195,6 +198,7 @@ describe('dataLayer lines', () => {
       eventsAdded: [],
       eventsRemoved: [],
       pathsRemoved: [],
+      pathsMoved: [],
       typeChanges: [],
       moved: [],
       pathsAdded: [{ epoch: 'undecided', event: 'purchase', frame: 'main', renamedFrom: 'checkout_completed', path: 'coupon', types: ['string'] }],
@@ -203,7 +207,7 @@ describe('dataLayer lines', () => {
   });
 
   test('a joined move reads renamed from in the move line', () => {
-    const none = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], typeChanges: [], kindChanged: [], changed: false };
+    const none = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], pathsMoved: [], typeChanges: [], kindChanged: [], changed: false };
     const moved = [
       { event: 'purchase', renamedFrom: 'checkout_completed', kind: 'epoch' as const, pushKind: 'object' as const, frame: 'main', from: 'undecided', to: 'granted' },
       { event: 'purchase', renamedFrom: 'checkout_completed', kind: 'frame' as const, epoch: 'granted', from: 'main', to: 'embedded' },
@@ -214,7 +218,48 @@ describe('dataLayer lines', () => {
   });
 
   test('an unchanged dataLayer section still says no differences', () => {
-    const none = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], typeChanges: [], moved: [], kindChanged: [], changed: false };
+    const none = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], pathsMoved: [], typeChanges: [], moved: [], kindChanged: [], changed: false };
     expect(formatDiff({ ...empty, dataLayer: none }, 'a', 'b')).toContain('No differences.');
   });
 });
+
+describe('a path that moved epoch', () => {
+  const g = (epoch: string, paths: string[]): PushGroup => ({ epoch, event: 'view_item', kind: 'object', frame: 'main', paths: paths.map((path) => ({ path, types: [path === 'value' ? 'number' : 'string'] })) });
+  const a = [g('undecided', ['value', 'coupon']), g('granted', ['value'])];
+  const b = [g('undecided', ['value']), g('granted', ['value', 'coupon'])];
+  const line = 'moved path coupon (string) in view_item from epoch undecided to granted [frame main]';
+
+  test('is one line in the diff text', () => {
+    expect(describePushDiff(diffPushes(a, b, { epochOrder: ['undecided', 'granted'] }))).toEqual([line]);
+  });
+
+  test('names the recorded event of a joined event', () => {
+    const rename = (x: PushGroup[], event: string) => x.map((y) => ({ ...y, event }));
+    const lines = describePushDiff(diffPushes(rename(a, 'checkout_completed'), rename(b, 'purchase'), { epochOrder: ['undecided', 'granted'] }));
+    expect(lines).toEqual(['moved path coupon (string) in purchase (renamed from checkout_completed) from epoch undecided to granted [frame main]']);
+  });
+
+  test('is one warning in a baseline compare and not drift', () => {
+    const run = makeBaselineRun();
+    const baseline = { ...buildBaseline(run, false), dataLayer: a.map((x) => ({ ...x, paths: [{ path: 'event', types: ['string'] }, ...x.paths] })) };
+    const result = compareBaseline(baseline, run);
+    expect(result.warnings).toContain(`dataLayer ${line}`);
+    expect(result.warnings.filter((w) => w.startsWith('dataLayer missing path') || w.startsWith('dataLayer new path'))).toEqual([]);
+    expect(result.drift).toBe(false);
+  });
+});
+
+function makeBaselineRun(): RunRecords {
+  const runId = newId('run');
+  const state = { analytics: 'denied', ads: 'denied', adUserData: 'denied', adPersonalization: 'denied' };
+  const push = (t: number, item: Record<string, unknown>) => ({ type: 'dataLayerEvent', id: newId('dataLayerEvent'), runId, stepId: null, t, event: 'view_item', gtmUniqueEventId: null, args: [item], isConsentCommand: false, frame: { main: true, n: 0 } });
+  const epoch = (startT: number, label: string) => ({ type: 'consentEpoch', id: newId('consentEpoch'), runId, startT, endT: null, source: 'test', label, state });
+  return {
+    run: {
+      type: 'run', id: runId, recordSchemaVersion: 1, scenario: 's.yml', site: 'http://localhost:3000', startedAt: 0, pingwrightVersion: '0.8.0',
+      browser: { name: 'chromium', version: '1' }, networkMode: 'stub', gtmOverride: null, containerVersions: {}, identity: null,
+    },
+    steps: [], requests: [], responses: [], hits: [], dataLayerEvents: [push(10, { event: 'view_item', value: 1 }), push(110, { event: 'view_item', value: 1, coupon: 'x' })],
+    tagReports: [], consentEpochs: [epoch(0, 'undecided'), epoch(100, 'granted')], checkpoints: [], results: [], flags: [], collectorReports: [], invalidReports: [],
+  } as unknown as RunRecords;
+}

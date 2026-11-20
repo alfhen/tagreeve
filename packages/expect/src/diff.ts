@@ -158,6 +158,18 @@ export interface PushMove {
   epoch?: string;
 }
 
+export interface PushPathMove {
+  event: string;
+  renamedFrom?: string;
+  path: string;
+  types: string[];
+  frame: string;
+  /** Absent when the push kinds were merged. */
+  pushKind?: PushKind;
+  from: string;
+  to: string;
+}
+
 export interface PushKindChange {
   epoch: string;
   event: string;
@@ -189,6 +201,8 @@ export interface PushDiff {
   eventsRemoved: PushRef[];
   pathsAdded: PushPathChange[];
   pathsRemoved: PushPathChange[];
+  /** A key path that is missing in one epoch and new in the neighbour epoch, with the same event, push kind, frame and types. It is in neither `pathsAdded` nor `pathsRemoved`. */
+  pathsMoved: PushPathMove[];
   typeChanges: PushTypeChange[];
   moved: PushMove[];
   /** An event that has one group on each side, and a different push kind on each. The two groups are compared. */
@@ -351,7 +365,7 @@ function withoutEventName(n: PushNode, other: PushNode): PushNode {
 
 /** Compares push shapes. Nothing here is drift: the caller reports the changes as warnings. A cross-epoch join made by `pairNames` is kept as a move to its epoch. Same-name moves with no join use a greedy match in node order: a known limit. */
 export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOptions = {}): PushDiff {
-  const result: PushDiff = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], typeChanges: [], moved: [], kindChanged: [], changed: false };
+  const result: PushDiff = { eventsAdded: [], eventsRemoved: [], pathsAdded: [], pathsRemoved: [], pathsMoved: [], typeChanges: [], moved: [], kindChanged: [], changed: false };
   const mergeKinds = kindsMerged(a, b);
   const order = options.epochOrder ?? [];
   const na = pushNodes(pairNames(a, b, options.eventMap, { epochOrder: order, acrossFrames: options.acrossFrames, mergeKinds }), options.acrossFrames ?? false, mergeKinds);
@@ -410,6 +424,18 @@ export function diffPushes(a: PushGroup[], b: PushGroup[], options: PushDiffOpti
     moveEpoch(g, match);
   }
   for (const f of fresh) if (!taken.has(f)) result.eventsAdded.push(nodeRef(f));
+  const paired = new Set<PushPathChange>();
+  for (const r of result.pathsRemoved) {
+    const to = result.pathsAdded.find(
+      (n) => !paired.has(n) && n.event === r.event && n.kind === r.kind && n.frame === r.frame && n.path === r.path && n.types.join() === r.types.join() && neighbourEpochs(order, r.epoch, n.epoch),
+    );
+    if (!to) continue;
+    paired.add(to);
+    paired.add(r);
+    result.pathsMoved.push({ event: r.event, ...(r.renamedFrom === undefined ? {} : { renamedFrom: r.renamedFrom }), path: r.path, types: r.types, frame: r.frame, ...(r.kind === undefined ? {} : { pushKind: r.kind }), from: r.epoch, to: to.epoch });
+  }
+  result.pathsRemoved = result.pathsRemoved.filter((r) => !paired.has(r));
+  result.pathsAdded = result.pathsAdded.filter((n) => !paired.has(n));
   result.changed = result.eventsAdded.length + result.eventsRemoved.length + result.pathsAdded.length + result.pathsRemoved.length + result.typeChanges.length + result.kindChanged.length > 0;
   return result;
 }
