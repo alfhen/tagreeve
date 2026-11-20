@@ -1,7 +1,7 @@
 import type { Scenario, Step } from './scenario.ts';
 
-export const CONSENT_STATES = ['accept', 'reject', 'none', 'withdraw'] as const;
-export type ConsentState = (typeof CONSENT_STATES)[number];
+export type ConsentState = Extract<Step, { kind: 'consent' }>['value'];
+export const CONSENT_STATES: readonly ConsentState[] = ['accept', 'reject', 'none', 'withdraw'];
 
 export function isConsentState(value: string): value is ConsentState {
   return (CONSENT_STATES as readonly string[]).includes(value);

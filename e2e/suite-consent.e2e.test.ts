@@ -85,6 +85,8 @@ test('each cell plays its own consent state', () => {
   expect(labels('accept')).toContain('granted');
   expect(labels('reject')).toContain('denied');
   expect(labels('reject')).not.toContain('granted');
+  expect(labels('none')).toContain('undecided');
+  expect(labels('none')).not.toContain('denied');
   expect(labels('none')).not.toContain('granted');
   expect(labels('withdraw')).toContain('withdrawn');
 });

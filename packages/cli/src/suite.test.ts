@@ -713,11 +713,11 @@ const consentScenario = (first = 'accept', options = OPTS, rules = '    - vendor
   `start: /\n${options}steps:\n  - consent: ${first}\n  - visit: /\nexpect:\n  must:\n${rules}  mustNot: []\n`;
 const STATES = ['accept', 'reject', 'none', 'withdraw'] as const;
 
-async function expectNoRun(dir: string, out: string, extra: Partial<SuiteArgs>, text: string): Promise<void> {
+async function expectNoRun(dir: string, out: string, extra: Partial<SuiteArgs>, text: RegExp): Promise<void> {
   const fake = recorder();
   const error = await suiteCommand(args(dir, out, extra), capture().io, fake).then(() => undefined, (e: unknown) => e);
   expect(error).toBeInstanceOf(UsageError);
-  expect((error as UsageError).message).toContain(text);
+  expect((error as UsageError).message).toMatch(text);
   expect(fake.specs).toHaveLength(0);
   await expect(readdir(out)).rejects.toThrow();
 }
@@ -738,10 +738,10 @@ test('--consent makes one cell per state, with the scenario rules in its own cel
 
 test('--consent with a bad scenario or a missing withdrawWith exits 2 before any cell runs', async () => {
   const good = consentScenario();
-  const cases: [Record<string, string>, string, SuiteArgs['consent']][] = [
-    [{ 'a.yml': good, 'b.yml': VALID }, 'b', ['accept']],
-    [{ 'a.yml': good, 'b.yml': consentScenario('withdraw') }, 'b', ['accept']],
-    [{ 'a.yml': consentScenario('accept', '') }, 'withdrawWith', ['accept', 'withdraw']],
+  const cases: [Record<string, string>, RegExp, SuiteArgs['consent']][] = [
+    [{ 'a.yml': good, 'b.yml': VALID }, /^b: /, ['accept']],
+    [{ 'a.yml': good, 'b.yml': consentScenario('withdraw') }, /^b: /, ['accept']],
+    [{ 'a.yml': consentScenario('accept', '') }, /withdrawWith/, ['accept', 'withdraw']],
   ];
   for (const [files, text, consent] of cases) {
     const { dir, out } = await workDir(files);
