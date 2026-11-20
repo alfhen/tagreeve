@@ -1,8 +1,8 @@
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
-import { readRun, ulid } from '@tagreeve/core';
+import { readRun, ulid, type RunRecords } from '@tagreeve/core';
 import type { TrackerEntry } from '@tagreeve/decoders';
-import { diffRuns, mergeOptions, ownConsentState, parseScenario, ruleCount, ScenarioError, withConsent, type ConsentState, type Scenario, type ScenarioOptions } from '@tagreeve/expect';
+import { diffRuns, mergeOptions, ownConsentState, parseScenario, CONSENT_STATES, ruleCount, ScenarioError, stateTable, withConsent, type StateTable, type ConsentState, type Scenario, type ScenarioOptions } from '@tagreeve/expect';
 import { GtmOverrideError, hasHandoff, hasPayment, normalizeHost, parseTestGtmOrigin, TEST_GTM_ORIGIN_ENV, type GtmOverrideInput, type TestPayment } from '@tagreeve/recorder';
 import { UsageError, type Network, type SuiteArgs } from './args.ts';
 import { baselineFileName, BaselineError, compareBaseline, readBaseline, type BaselineFile } from './baseline.ts';
@@ -58,6 +58,13 @@ export interface SuiteDiff {
   flagsChanged: number;
 }
 
+/** What each vendor got in each state, for one scenario and store of a `--consent` suite. Names and counts only. */
+export interface ConsentMatrixEntry extends StateTable {
+  scenario: string;
+  /** Set with `--stores`. */
+  store?: string;
+}
+
 export interface SuiteManifest {
   suiteSchemaVersion: 1 | 2 | 3;
   id: string;
@@ -71,6 +78,8 @@ export interface SuiteManifest {
   /** The `--consent` list. Absent without it. Each cell has `labels.consent`. */
   consent?: ConsentState[];
   cells: SuiteCell[];
+  /** Set with `--consent`: one entry for each scenario and store that wrote a record. */
+  consentMatrix?: ConsentMatrixEntry[];
   diffs: SuiteDiff[];
   exitCode: 0 | 1 | 2;
   /** Files used because their flag was not given. Absent when none. */
@@ -142,6 +151,44 @@ export function cellName(cell: Pick<SuiteCell, 'scenario' | 'variant' | 'labels'
   return [cell.scenario, cell.labels.store, cell.labels.consent, cell.variant].filter(Boolean).join(' ');
 }
 
+const hitsText = (n: number) => (n === 0 ? '0' : `${n} hit${n === 1 ? '' : 's'}`);
+
+function vendorLines(matrix: ConsentMatrixEntry[]): string[] {
+  const lines: string[] = [];
+  for (const entry of matrix) {
+    if (matrix.length > 1) lines.push('', `${entry.scenario}${entry.store === undefined ? '' : ` on ${entry.store}`}`);
+    else lines.push('');
+    for (const v of entry.vendors) {
+      const parts = CONSENT_STATES.filter((state) => v.states[state]).map((state) => {
+        const extra = state === 'accept' ? 0 : (v.notInAccept[state]?.fields.length ?? 0);
+        const text = `${state} ${hitsText(v.states[state]!.hits)}`;
+        return extra > 0 ? `${text}, ${extra} field${extra === 1 ? '' : 's'} not in accept` : text;
+      });
+      lines.push(`${v.vendor}: ${parts.join('; ')}`);
+    }
+  }
+  return lines;
+}
+
+async function consentMatrixOf(cells: SuiteCell[], paths: Map<SuiteCell, string>): Promise<ConsentMatrixEntry[]> {
+  const entries: ConsentMatrixEntry[] = [];
+  const keys = new Map<string, { scenario: string; store?: string }>();
+  for (const c of cells) {
+    if (paths.has(c)) keys.set(JSON.stringify([c.scenario, c.labels.store]), { scenario: c.scenario, ...(c.labels.store !== undefined && { store: c.labels.store }) });
+  }
+  for (const { scenario, store } of keys.values()) {
+    const records: Partial<Record<ConsentState, RunRecords[]>> = {};
+    for (const c of cells) {
+      const path = paths.get(c);
+      if (path === undefined || c.scenario !== scenario || c.labels.store !== store) continue;
+      const state = c.labels.consent as ConsentState;
+      (records[state] ??= []).push(await readRun(path));
+    }
+    entries.push({ scenario, ...(store !== undefined && { store }), ...stateTable(records) });
+  }
+  return entries;
+}
+
 export function formatSuiteTable(manifest: SuiteManifest, dir: string): string {
   const [first, ...others] = manifest.variants;
   const scenarios = [...new Set(manifest.cells.map((c) => c.scenario))];
@@ -161,6 +208,7 @@ export function formatSuiteTable(manifest: SuiteManifest, dir: string): string {
   const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i]!.length)));
   const line = (cols: string[]) => cols.map((c, i) => (i === cols.length - 1 ? c : c.padEnd(widths[i]! + 3))).join('').trimEnd();
   const out = [line(header), ...rows.map(line)];
+  out.push(...vendorLines(manifest.consentMatrix ?? []));
   const defaultsLine = formatDefaultsLine(manifest.defaults);
   if (defaultsLine) out.push('', defaultsLine);
   const records = manifest.cells.filter((c) => c.record);
@@ -443,6 +491,7 @@ export async function suiteCommand(args: SuiteArgs, io: Io, deps: SuiteDeps = { 
   const startedAt = Date.now();
   const variants = args.variants.map((v) => v.name);
   const cells: SuiteCell[] = [];
+  const recordPaths = new Map<SuiteCell, string>();
   const states: (ConsentState | undefined)[] = args.consent ?? [undefined];
   const combos = states.flatMap((state) => variants.map((variant) => ({ state, variant })));
 
@@ -503,7 +552,9 @@ export async function suiteCommand(args: SuiteArgs, io: Io, deps: SuiteDeps = { 
             if (exitCode === 0) exitCode = 1;
           }
         }
-        cells.push({ ...cell, status, exitCode, ...(skippedRules > 0 && { rulesSkipped: skippedRules }), ...(failed && { failed }), ...(outcome.path && { record: basename(outcome.path) }), ...(compared && { baseline: compared }) });
+        const done: SuiteCell = { ...cell, status, exitCode, ...(skippedRules > 0 && { rulesSkipped: skippedRules }), ...(failed && { failed }), ...(outcome.path && { record: basename(outcome.path) }), ...(compared && { baseline: compared }) };
+        if (outcome.path) recordPaths.set(done, outcome.path);
+        cells.push(done);
       }
     }
   }
@@ -524,6 +575,7 @@ export async function suiteCommand(args: SuiteArgs, io: Io, deps: SuiteDeps = { 
     variants,
     ...(args.consent && { consent: args.consent }),
     cells,
+    ...(args.consent && { consentMatrix: await consentMatrixOf(cells, recordPaths) }),
     diffs: await diffPairs(cells, variants, storeNames, dir),
     exitCode: suiteExitCode(cells),
     ...(listed.length > 0 && { defaults: listed }),

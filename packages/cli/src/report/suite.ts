@@ -168,6 +168,11 @@ function isBaselineField(value: unknown): boolean {
   return typeof b === 'object' && b !== null && typeof b.file === 'string' && typeof b.drift === 'boolean' && [b.added, b.removed, b.countChanges].every((n) => typeof n === 'number');
 }
 
+function isMatrixEntry(value: unknown): boolean {
+  const e = value as Record<string, unknown> | null;
+  return typeof e === 'object' && e !== null && typeof e.scenario === 'string' && (e.store === undefined || typeof e.store === 'string') && Array.isArray(e.vendors);
+}
+
 function isManifest(value: unknown): value is SuiteManifest {
   if (typeof value !== 'object' || value === null) return false;
   const m = value as Record<string, unknown>;
@@ -182,6 +187,7 @@ function isManifest(value: unknown): value is SuiteManifest {
     (m.suiteSchemaVersion === 1 || isStoreList(m.stores)) &&
     Array.isArray(m.variants) &&
     m.variants.every((v) => typeof v === 'string') &&
+    (m.consentMatrix === undefined || (Array.isArray(m.consentMatrix) && m.consentMatrix.every(isMatrixEntry))) &&
     Array.isArray(m.cells) &&
     m.cells.every((c: unknown) => {
       const cell = c as Record<string, unknown> | null;
