@@ -1,4 +1,5 @@
 import type { Hit, Request } from '@tagreeve/core';
+import { PAGE_FIELDS } from './page-fields.ts';
 import { defaultHitId, type Decoder, type NewHitId } from './decoder.ts';
 import { bodyComplete, multipartPartName, multipartParts, queryEntries, withFields } from './fields.ts';
 
@@ -76,7 +77,7 @@ export const meta: Decoder = {
           raw: {},
         },
         ids,
-        page: p.get('dl'),
+        page: p.get(PAGE_FIELDS.meta.page[0]),
         transport: req.resourceType === 'ping' ? 'beacon' : req.resourceType,
         params,
       }, queryEntries(p), bodyComplete(req)),

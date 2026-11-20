@@ -1,4 +1,5 @@
 import type { ConsentValue, Hit, HitConsent, Request } from '@tagreeve/core';
+import { PAGE_FIELDS } from './page-fields.ts';
 import { defaultHitId, type Decoder, type NewHitId } from './decoder.ts';
 import { bodyComplete, queryEntries, withFields } from './fields.ts';
 import { unwrapStapeLoader } from './stape-custom-loader.ts';
@@ -164,7 +165,7 @@ export const ga4: Decoder = {
         event: p.get('en'),
         consent: decodeGa4Consent(p),
         ids,
-        page: p.get('dl'),
+        page: p.get(PAGE_FIELDS.ga4.page[0]),
         transport: transport(req.resourceType),
         params: { ...eventParams(p), ...(tid ? { tid } : {}) },
       }, queryEntries(p), complete);
