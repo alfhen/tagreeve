@@ -148,9 +148,9 @@ function describeMove(m: ShapeMove): string {
 
 export const scenarioName = (name: string) => name.replace(/\.ya?ml$/, '');
 
-/** `<scenario>[.<store>][.<state>][.<variant>].json`. The variant is left out for `published`, so `run` and a published-only suite share a name. A consent state is never left out, so no plain run reads a cell's file. */
-export function baselineFileName(scenario: string, store?: string, variant?: string, consentCell?: string): string {
-  return [scenarioName(scenario), store, consentCell, variant === PUBLISHED_VARIANT ? undefined : variant].filter(Boolean).join('.') + '.json';
+/** `<scenario>[.<store>][.<variant>].json`. The variant is left out for `published`, so `run` and a published-only suite share a name. */
+export function baselineFileName(scenario: string, store?: string, variant?: string): string {
+  return [scenarioName(scenario), store, variant === PUBLISHED_VARIANT ? undefined : variant].filter(Boolean).join('.') + '.json';
 }
 
 export function defaultBaselineName(run: RunRecords['run']): string {
@@ -159,18 +159,15 @@ export function defaultBaselineName(run: RunRecords['run']): string {
   }
   const unsafe = (part: string) => /[/\\\0]/.test(part) || part.includes('..') || part.startsWith('.');
   const name = scenarioName(run.scenario);
-  const clashes = (part: string | undefined) => part !== undefined && isConsentState(part);
   const bad =
     !name || unsafe(name) ? 'scenario'
-    : clashes(name.split('.').pop()) ? 'scenario'
-    : clashes(run.store) ? 'store'
-    : clashes(run.variant) ? 'variant'
     : unsafe(run.store ?? '') || (run.store !== undefined && !STORE_NAME.test(run.store)) ? 'store'
     : unsafe(run.variant ?? '') || (run.variant !== undefined && !VARIANT_NAME.test(run.variant)) ? 'variant'
     : run.consentCell !== undefined && !isConsentState(run.consentCell) ? 'consent state'
     : undefined;
   if (bad) throw new BaselineError(`The ${bad} in this record cannot name a baseline file. Give the baseline path.`, 'usage');
-  return baselineFileName(run.scenario, run.store, run.variant, run.consentCell);
+  const plain = baselineFileName(run.scenario, run.store, run.variant);
+  return run.consentCell === undefined ? plain : join('consent', run.consentCell, plain);
 }
 
 export function insideBaselines(path: string): boolean {

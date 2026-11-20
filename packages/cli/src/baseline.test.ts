@@ -287,23 +287,32 @@ test('baseline save with a crafted scenario name exits 2 and writes nothing outs
   }
 });
 
-test('defaultBaselineName puts the consent state after the store', () => {
-  expect(defaultBaselineName(named({ consentCell: 'reject' }))).toBe('checkout.reject.json');
-  expect(defaultBaselineName(named({ consentCell: 'accept' }))).toBe('checkout.accept.json');
-  expect(defaultBaselineName(named({ store: 'se', consentCell: 'reject', variant: 'workspace' }))).toBe('checkout.se.reject.workspace.json');
+test('defaultBaselineName puts a consent cell under consent/<state>/ with the plain name', () => {
+  expect(defaultBaselineName(named({ consentCell: 'reject' }))).toBe('consent/reject/checkout.json');
+  expect(defaultBaselineName(named({ consentCell: 'accept' }))).toBe('consent/accept/checkout.json');
+  expect(defaultBaselineName(named({ store: 'se', consentCell: 'reject', variant: 'workspace' }))).toBe('consent/reject/checkout.se.workspace.json');
+  expect(defaultBaselineName(named({ scenario: 'a.yml', consentCell: 'reject', variant: 'ws' }))).toBe('consent/reject/a.ws.json');
+  expect(defaultBaselineName(named({ consentCell: 'reject', variant: 'published' }))).toBe('consent/reject/checkout.json');
   expect(defaultBaselineName(named({ store: 'se', variant: 'workspace' }))).toBe('checkout.se.workspace.json');
   expect(defaultBaselineName(named({}))).toBe('checkout.json');
   expect(() => defaultBaselineName(named({ consentCell: '../x' as 'reject' }))).toThrow('Give the baseline path');
 });
 
-test('defaultBaselineName refuses a name part that a consent cell file could share', () => {
-  expect(defaultBaselineName(named({ consentCell: 'reject', variant: 'published' }))).toBe('checkout.reject.json');
-  expect(() => defaultBaselineName(named({ store: 'reject', variant: 'published' }))).toThrow('Give the baseline path');
-  expect(() => defaultBaselineName(named({ variant: 'none' }))).toThrow('Give the baseline path');
-  expect(() => defaultBaselineName(named({ scenario: 'checkout.reject.yml' }))).toThrow('Give the baseline path');
+test('plain names are the same as on main, including reject and accept', () => {
+  expect(defaultBaselineName(named({ scenario: 'reject.yml' }))).toBe('reject.json');
+  expect(defaultBaselineName(named({ scenario: 'accept.yml' }))).toBe('accept.json');
+  expect(defaultBaselineName(named({ scenario: 'a.reject.ws.yml' }))).toBe('a.reject.ws.json');
+  expect(defaultBaselineName(named({ store: 'reject', variant: 'none' }))).toBe('checkout.reject.none.json');
+  expect(defaultBaselineName(named({ scenario: 'reject.yml', consentCell: 'reject' }))).toBe('consent/reject/reject.json');
 });
 
-test('baseline save of a consent cell record writes tagreeve/baselines/<scenario>.<state>.json', async () => {
+test('a cell path stays inside tagreeve/baselines', () => {
+  for (const consentCell of ['reject', 'accept'] as const) {
+    expect(insideBaselines(join('tagreeve/baselines', defaultBaselineName(named({ consentCell, store: 'se', variant: 'ws' }))))).toBe(true);
+  }
+});
+
+test('baseline save of a consent cell record writes tagreeve/baselines/consent/<state>/<name>.json', async () => {
   const root = await mkdtemp(join(tmpdir(), 'pw-baseline-'));
   const record = join(root, 'run.jsonl');
   const records = makeRun(['page_view']);
@@ -315,8 +324,8 @@ test('baseline save of a consent cell record writes tagreeve/baselines/<scenario
   try {
     const code = await baselineCommand({ command: 'baseline', input: record, byPage: false }, { stdout: () => undefined, stderr: () => undefined });
     expect(code).toBe(0);
-    expect(JSON.parse(await readFile(join(root, 'tagreeve/baselines/checkout.reject.json'), 'utf8'))).toMatchObject({ scenario: 'checkout' });
-    expect(await readdir(join(root, 'tagreeve/baselines'))).toEqual(['checkout.reject.json']);
+    expect(JSON.parse(await readFile(join(root, 'tagreeve/baselines/consent/reject/checkout.json'), 'utf8'))).toMatchObject({ scenario: 'checkout' });
+    expect(await readdir(join(root, 'tagreeve/baselines'))).toEqual(['consent']);
   } finally {
     process.chdir(before);
   }
