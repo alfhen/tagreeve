@@ -1173,7 +1173,12 @@ test('formatSuiteTable prints one line for each vendor of the consent matrix, af
 
 async function consentRun(extra: Partial<SuiteArgs>) {
   const { dir, out } = await workDir({ 'a.yml': consentScenario() });
-  const rec = recorder(async (spec) => ({ code: 0, summary: pass.summary, path: await cellRecord(await mkdtemp(join(tmpdir(), 'pw-cell-')), spec.scenarioName, ['page_view']) }));
+  const rec = recorder(async (spec) => {
+    const path = await cellRecord(await mkdtemp(join(tmpdir(), 'pw-cell-')), spec.scenarioName, ['page_view']);
+    const { readRun } = await import('@tagreeve/core');
+    expect((await readRun(path)).hits.some((h) => h.vendor === 'ga4')).toBe(true);
+    return { code: 0, summary: pass.summary, path };
+  });
   const c = capture();
   expect(await suiteCommand(args(dir, out, extra), c.io, rec)).toBe(0);
   return { c, text: await readFile(join(out, (await readdir(out))[0]!, 'suite.json'), 'utf8') };

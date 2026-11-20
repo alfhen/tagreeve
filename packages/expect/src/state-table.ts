@@ -17,7 +17,7 @@ export interface NotInAccept {
 export interface VendorStates {
   vendor: string;
   states: Partial<Record<ConsentState, StateCell>>;
-  /** Per state other than accept: the events and fields of this vendor that its accept cell lacks. All of them when accept has none of the vendor. */
+  /** Per state other than accept: the events and fields of this vendor that its accept cell lacks. All of them when accept has none of the vendor. Absent when no accept record exists. */
   notInAccept: Partial<Record<ConsentState, NotInAccept>>;
 }
 
@@ -87,7 +87,7 @@ export function stateTable(records: RecordsByState): StateTable {
       if ((records[state] ?? []).length === 0) continue;
       const tally = row[state];
       states[state] = { hits: tally?.hits ?? 0, events: [...(tally?.events ?? [])].sort(byName), fields: [...(tally?.fields ?? [])].sort(byName), ids: [...(tally?.ids ?? [])].sort(byName) };
-      if (state === 'accept' || !tally) continue;
+      if (state === 'accept' || !tally || (records.accept ?? []).length === 0) continue;
       const accept = row.accept;
       notInAccept[state] = {
         events: [...tally.events].filter((e) => !accept?.events.has(e)).sort(byName),

@@ -78,6 +78,7 @@ describe('the epoch filter', () => {
   test('a granted-epoch hit is left out of count, events, fields and ID names', () => {
     const { reject, late } = rejectWithLateHit(2500);
     expect(late.t).toBeGreaterThanOrEqual(2000);
+    expect(reject.hits.filter((h) => h !== late).some((h) => h.event === 'late' || h.fields?.includes('x_late') || h.ids.x_id)).toBe(false);
     const cell = stateTable({ reject: [reject] }).vendors[0]!.states.reject!;
     expect(cell.hits).toBe(1);
     expect(cell.events).toEqual(['page_view']);
@@ -124,9 +125,24 @@ describe('counts', () => {
   test('vendors count apart, and names come from fields and ids', () => {
     const run = makeRun();
     hit(run, { vendor: 'ga4', ids: { client_id: true } });
-    hit(run, { vendor: 'google-ads' });
+    hit(run, { vendor: 'google-ads', ids: { client_id: true } });
     const t = stateTable({ accept: [run] });
     expect(t.vendors.map((v) => [v.vendor, v.states.accept!.hits])).toEqual([['ga4', 1], ['google-ads', 1]]);
     expect(t.vendors[0]!.states.accept).toMatchObject({ fields: ['cid', 'en'], ids: ['client_id'] });
+  });
+
+  test('names only: a field value in params is not in the output', () => {
+    const run = makeRun();
+    hit(run, { params: { cid: 'secret-value-123' } });
+    expect(JSON.stringify(stateTable({ accept: [run] }))).not.toContain('secret-value-123');
+  });
+
+  test('without accept records no not-in-accept lists are built', () => {
+    const reject = makeRun();
+    hit(reject, { fields: ['cid', 'x_reject'] });
+    const t = stateTable({ reject: [reject] });
+    expect(t.vendors[0]!.states.reject!.hits).toBe(1);
+    expect(t.vendors[0]!.notInAccept).toEqual({});
+    expect(t.vendorsNotInAccept).toEqual({});
   });
 });
