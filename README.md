@@ -94,15 +94,15 @@ tagreeve run scenarios/undecided-visitor.yml --site https://staging.example.com
 ## Install
 
 ```bash
-npm i -g tagreeve@next
+npm i -g tagreeve
 tagreeve install-browser
 ```
 
-Node 22.18 or later. `npm i -g tagreeve@next` installs the newest release candidate. Other ways to install, from a git tag or a tarball, are in [docs/cli.md](docs/cli.md).
+Node 22.18 or later. `npm i -g tagreeve` installs the newest final release, and `npm i -g tagreeve@next` the newest release candidate. Other ways to install, from a git tag or a tarball, are in [docs/cli.md](docs/cli.md).
 
 ## Quick start
 
-1. `npm i -g tagreeve@next`
+1. `npm i -g tagreeve`
 2. `tagreeve install-browser`. In a project folder, `tagreeve init` makes `tagreeve/scenarios/` and `tagreeve/baselines/`, writes a starter `tagreeve/config.yml` and keeps `tagreeve/runs/` out of git.
 3. Write `scenario.yml`:
 

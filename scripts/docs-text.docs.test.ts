@@ -4,21 +4,20 @@ import { expect, test } from 'vitest';
 
 const read = (path: string): string => readFileSync(fileURLToPath(new URL(`../${path}`, import.meta.url)), 'utf8');
 
-const installProblem = (text: string): string | undefined =>
-  /npm i -g tagreeve(?![@\w-])/.test(text)
-    ? 'gives the bare npm i -g tagreeve as the install command'
-    : !/npm i -g tagreeve@next(?![\w-])/.test(text)
-      ? 'does not give npm i -g tagreeve@next as the install command'
-      : /tagreeve[^.\n]*installs `0\.3\.0`/.test(text)
-        ? 'says tagreeve installs 0.3.0'
-        : undefined;
+const installProblem = (text: string): string | undefined => {
+  if (!/npm i -g tagreeve(?![@\w-])/.test(text)) return 'does not give npm i -g tagreeve as the install command';
+  const sentences = text.split(/(?<=[.!?])\s+|\n\s*\n/);
+  const nextAt = sentences.filter((s) => /npm i -g tagreeve@next(?![\w-])/.test(s));
+  if (nextAt.some((s) => !/release candidate/.test(s))) return 'gives npm i -g tagreeve@next with no release candidate wording next to it';
+  return /tagreeve[^.\n]*installs `0\.3\.0`/.test(text) ? 'says tagreeve installs 0.3.0' : undefined;
+};
 
 const installSection = (cli: string): string => cli.slice(cli.indexOf('## Install'), cli.indexOf('\n## ', cli.indexOf('## Install') + 1));
 
 const enterAlwaysProblem = (text: string): string | undefined =>
   /Enter in the terminal always works/.test(text) ? 'says Enter always works' : undefined;
 
-test('install text gives npm i -g tagreeve@next and no tagreeve 0.3.0', () => {
+test('install text gives npm i -g tagreeve and no tagreeve 0.3.0', () => {
   const readme = read('README.md');
   expect(installProblem(readme.slice(readme.indexOf('## Install')))).toBeUndefined();
   expect(installProblem(read('docs/guide/first-run.md'))).toBeUndefined();
@@ -26,12 +25,22 @@ test('install text gives npm i -g tagreeve@next and no tagreeve 0.3.0', () => {
   expect(installProblem(read('site/src/lib/prompt.ts'))).toBeUndefined();
 });
 
-test('the install check fails on the bare command, a missing install line or a tagreeve 0.3.0 claim', () => {
-  expect(installProblem('Run `npm i -g tagreeve`.')).toBeDefined();
+test('the install check refuses @next as the main command, a missing install line or a tagreeve 0.3.0 claim', () => {
+  expect(installProblem('Run `npm i -g tagreeve@next`.')).toBeDefined();
   expect(installProblem('`npm i -g tagreeve` and `npm i -g tagreeve@next`.')).toBeDefined();
+  expect(
+    installProblem('`npm i -g tagreeve` installs the newest final release, and `npm i -g tagreeve@next` the newest beta.'),
+  ).toBeDefined();
+  const spread = 'Run `npm i -g tagreeve`.\n\n`npm i -g tagreeve@next` installs the newest build.\n\nA build can be a release candidate.';
+  for (const part of ['`npm i -g tagreeve`', '`npm i -g tagreeve@next`', 'release candidate']) expect(spread).toContain(part);
+  expect(installProblem(spread)).toBeDefined();
   expect(installProblem('Install tagreeve.')).toBeDefined();
-  expect(installProblem('`npm i -g tagreeve@next` installs `0.3.0`.')).toBeDefined();
-  expect(installProblem('Run `npm i -g tagreeve@next`.')).toBeUndefined();
+  expect(installProblem('`npm i -g tagreeve` installs `0.3.0`.')).toBeDefined();
+  expect(installProblem('Run `npm i -g tagreeve`.')).toBeUndefined();
+  expect(
+    installProblem('`npm i -g tagreeve` installs the newest final release, and `npm i -g tagreeve@next` the newest release candidate.'),
+  ).toBeUndefined();
+  expect(installProblem(spread.replace('newest build', 'newest release candidate'))).toBeUndefined();
 });
 
 test('the docs do not say Enter always works', () => {
