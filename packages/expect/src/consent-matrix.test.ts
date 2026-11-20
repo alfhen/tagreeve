@@ -64,6 +64,20 @@ steps:
 `);
     expect(withConsent(s, 'withdraw').steps.map((x) => x.label)).toEqual(['consent-1', 'wait-2', 'click-3', 'consent-4', 'visit-5', 'end']);
   });
+
+  test('an inserted step does not take a label another step keeps', () => {
+    const s = parseScenario(`start: /
+options:
+  withdrawWith: "#x"
+steps:
+  - consent: accept
+    label: wait-2
+  - visit: /b
+`);
+    const labels = withConsent(s, 'withdraw').steps.map((x) => x.label);
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(labels[0]).toBe('wait-2');
+  });
 });
 
 describe('helpers', () => {

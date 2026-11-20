@@ -122,6 +122,7 @@ test('suite parses variants, name=file and the options of run', () => {
 test.each([
   [['--variant', 'Bad Name=f.json'], 'must match'],
   [['--variant', 'published=f.json'], 'reserved'],
+  [['--variant', 'reject=f.json'], 'consent state'],
   [['--variant', 'workspace'], 'needs an override file'],
   [['--variant', 'workspace='], 'needs an override file'],
   [['--variant', 'published', '--variant', 'published'], 'given twice'],

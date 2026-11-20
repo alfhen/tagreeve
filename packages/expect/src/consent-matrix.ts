@@ -34,12 +34,20 @@ export function withConsent(scenario: Scenario, state: ConsentState): Scenario {
         ]
       : [{ kind: 'consent', value: state, label: first.label, line: first.line }];
   const shift = inserted.length - 1;
-  const steps = [...scenario.steps.slice(0, at), ...inserted, ...scenario.steps.slice(at + 1)].map((step, i) => {
+  const moved = [...scenario.steps.slice(0, at), ...inserted, ...scenario.steps.slice(at + 1)].map((step, i) => {
     const was = i < at ? i : i - shift;
     const inserting = i >= at && i < at + inserted.length;
     // Default labels are kind-index, so a step that moved takes the label its new index gives it.
-    if (step.label === '' || (!inserting && step.label === `${step.kind}-${was + 1}`)) return { ...step, label: `${step.kind}-${i + 1}` };
-    return step;
+    const renamed = step.label === '' || (!inserting && step.label === `${step.kind}-${was + 1}`);
+    return { step, renamed };
+  });
+  const taken = new Set(moved.filter((m) => !m.renamed).map((m) => m.step.label));
+  const steps = moved.map(({ step, renamed }, i) => {
+    if (!renamed) return step;
+    let label = `${step.kind}-${i + 1}`;
+    for (let n = 2; taken.has(label); n++) label = `${step.kind}-${i + 1}-${n}`;
+    taken.add(label);
+    return { ...step, label };
   });
   return { ...scenario, steps, expect };
 }
