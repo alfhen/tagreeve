@@ -1,10 +1,28 @@
 import { chmod, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { RunArgs } from './args.ts';
 import { parseScenario } from '@tagreeve/expect';
 import { prepareServerContainer, resolveNetwork, runCommand } from './run.ts';
+
+const failStart = vi.hoisted(() => ({ on: false }));
+
+vi.mock('@tagreeve/recorder', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tagreeve/recorder')>();
+  return {
+    ...actual,
+    recordScenario: async (opts: Parameters<typeof actual.recordScenario>[0]) => {
+      if (!failStart.on) return actual.recordScenario(opts);
+      const path = join(opts.outDir!, 'failed-start.jsonl');
+      const step = JSON.stringify({ type: 'step', index: 0, label: 'start', error: `navigation to ${opts.parsed.start} failed` });
+      await writeFile(path, `{"type":"run"}\n${step}\n`);
+      const error = new actual.StepError('start', `navigation to ${opts.parsed.start} failed`);
+      error.run = { path } as never;
+      throw error;
+    },
+  };
+});
 
 test('--var for an inherited name exits 2 as undeclared', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
@@ -200,7 +218,13 @@ test('a failed start visit of a canary run prints and records no canary value', 
   const scenario = join(dir, 's.yml');
   await writeFile(scenario, 'start: /plain/product\noptions: { canaries: true, seed: 7 }\nsteps:\n  - wait: 1s\nexpect:\n  must: []\n  mustNot: []\n');
   const err: string[] = [];
-  const code = await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: {}, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err.push(t) });
+  failStart.on = true;
+  let code: number;
+  try {
+    code = await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: {}, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err.push(t) });
+  } finally {
+    failStart.on = false;
+  }
   expect(code).toBe(2);
   expect(err.join('')).not.toContain('TEST-');
   const file = (await readdir(dir)).find((f) => f.endsWith('.jsonl'))!;
