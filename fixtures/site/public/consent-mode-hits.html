@@ -6,7 +6,7 @@
 </head>
 <body>
 <h1>Consent Mode hits</h1>
-<p>Sends one GA4 <code>page_view</code> hit for the fake tag at once, with the <code>gcs</code> and <code>gcd</code> given in the query. The page has no banner. With <code>push=default</code> it first pushes a <code>consent default</code> to the dataLayer. With <code>push=relay</code> a sandboxed child frame posts a <code>consent default</code> as a plain object with the keys 0, 1 and 2, and this page pushes it to the dataLayer.</p>
+<p>Sends one GA4 <code>page_view</code> hit for the fake tag at once, with the <code>gcs</code> and <code>gcd</code> given in the query. The page has no banner. With <code>push=default</code> it first pushes a <code>consent default</code> to the dataLayer. With <code>push=relay</code> a sandboxed child frame posts a <code>consent default</code> as a plain object with the keys 0, 1 and 2, and this page pushes it to the dataLayer. With <code>push=stamped</code> the page pushes a <code>consent default</code> as a plain object with the keys 0, 1 and 2 through a <code>push</code> wrapper that sets <code>gtm.uniqueEventId</code> on it: after the inner push by default, before it with <code>when=before</code>, and with <code>order=inner</code> the wrapper is the array's own <code>push</code> before the recorder first hooks it.</p>
 <script>
 var q = new URLSearchParams(location.search);
 if (q.get('push') === 'default') {
@@ -24,6 +24,26 @@ if (q.get('push') === 'relay') {
   child.style.cssText = 'width:0;height:0;border:0';
   child.srcdoc = '<script>parent.postMessage({ relay: "consent", payload: { 0: "consent", 1: "default", 2: { ad_storage: "denied", analytics_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" } } }, "*");<\/script>';
   document.body.appendChild(child);
+}
+if (q.get('push') === 'stamped') {
+  var signals = { ad_storage: 'denied', analytics_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' };
+  var before = q.get('when') === 'before';
+  var inner = q.get('order') === 'inner';
+  var uniqueId = 200;
+  window.pwWrapRuns = 0;
+  var layer = inner ? [] : (window.dataLayer = window.dataLayer || []);
+  var saved = layer.push;
+  window.pwInnerIsNative = saved === Array.prototype.push;
+  layer.push = function (item) {
+    window.pwWrapRuns += 1;
+    window.pwInnerIsNative = saved === Array.prototype.push;
+    if (before) item['gtm.uniqueEventId'] = ++uniqueId;
+    var result = saved.apply(this, arguments);
+    if (!before) item['gtm.uniqueEventId'] = ++uniqueId;
+    return result;
+  };
+  if (inner) window.dataLayer = layer;
+  window.dataLayer.push({ 0: 'consent', 1: 'default', 2: signals });
 }
 var url = 'https://www.google-analytics.com/g/collect?v=2&tid=G-PWTEST0001&cid=7777777777.8888888888&en=page_view';
 if (q.get('gcs')) url += '&gcs=' + encodeURIComponent(q.get('gcs'));
