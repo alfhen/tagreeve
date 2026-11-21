@@ -207,7 +207,12 @@ test('canaries refuse a start URL whose variable resolves to a canary name, and 
   expect(err.join('')).toContain('already holds the gclid parameter');
   await writeFile(scenario, 'start: /plain/product?GCLID=pw-1\noptions: { canaries: true }\nsteps:\n  - visit: /\nexpect:\n  must: []\n  mustNot: []\n');
   const err2: string[] = [];
-  await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: {}, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err2.push(t) });
+  failStart.on = true;
+  try {
+    await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: {}, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err2.push(t) });
+  } finally {
+    failStart.on = false;
+  }
   expect(err2.join('')).not.toContain('already holds');
 });
 
