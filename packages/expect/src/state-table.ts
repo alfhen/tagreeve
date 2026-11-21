@@ -29,6 +29,9 @@ export interface StateTable {
 
 export type RecordsByState = Partial<Record<ConsentState, readonly RunRecords[]>>;
 
+/** An event name is an identifier. GA4 `en` is page-controlled text, so anything else (an email, a long string) stays out of a stored matrix. */
+const EVENT_NAME = /^[\w.:-]+(?: [\w.:-]+)*$/;
+
 const byName = (x: string, y: string) => (x < y ? -1 : x > y ? 1 : 0);
 
 function idNames(ids: HitIds): string[] {
@@ -71,7 +74,7 @@ export function stateTable(records: RecordsByState): StateTable {
         const row = tallies.get(hit.vendor) ?? tallies.set(hit.vendor, {}).get(hit.vendor)!;
         const tally = (row[state] ??= { hits: 0, events: new Set(), fields: new Set(), ids: new Set() });
         tally.hits++;
-        if (hit.event) tally.events.add(hit.event);
+        if (hit.event && hit.event.length <= 64 && EVENT_NAME.test(hit.event)) tally.events.add(hit.event);
         for (const f of hit.fields ?? []) tally.fields.add(f);
         for (const id of idNames(hit.ids)) tally.ids.add(id);
       }

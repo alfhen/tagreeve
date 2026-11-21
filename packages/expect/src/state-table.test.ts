@@ -96,6 +96,18 @@ describe('the epoch filter', () => {
   });
 });
 
+describe('event names', () => {
+  test('value-like event text is counted as a hit but not stored', () => {
+    const run = makeRun();
+    hit(run, { event: 'page_view' });
+    hit(run, { event: 'jane.doe@example.test' });
+    hit(run, { event: 'x'.repeat(65) });
+    const cell = stateTable({ accept: [run] }).vendors[0]!.states.accept!;
+    expect(cell.hits).toBe(3);
+    expect(cell.events).toEqual(['page_view']);
+  });
+});
+
 describe('counts', () => {
   test('accept counts every hit, withdraw only the withdrawn epoch, none leaves out a granted epoch', () => {
     const accept = makeRun(['undecided', 'granted']);
