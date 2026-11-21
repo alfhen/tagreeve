@@ -1,5 +1,5 @@
 import { newId, type Request } from '@tagreeve/core';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { decodeRequest, PAGE_FIELDS } from './index.ts';
 
 const MARKER = 'https://shop.example.com/pw-page-marker';
@@ -169,4 +169,39 @@ test('google-ads: url wins over dl', () => {
   if (!sample) throw new Error('no google-ads sample');
   const fields = { ...sample.others, url: 'https://shop.example.com/a', dl: 'https://shop.example.com/b' };
   expect(pageOf(sample, fields)).toBe('https://shop.example.com/a');
+});
+
+test('each decoder reads the names PAGE_FIELDS holds, not literals of its own', async () => {
+  const synthetic = Object.fromEntries(
+    samples.map((s) => [
+      s.name,
+      s.names.map((_, i) => (s.name === 'pinterest' ? `ad.zzpage${i}` : `zzpage${i}`)),
+    ]),
+  );
+  const map: Record<string, string> = {
+    ga4: 'ga4',
+    'google-ads': 'google-ads',
+    meta: 'meta',
+    'meta-capi': 'meta-capi',
+    pinterest: 'pinterest',
+    'sgtm data client': 'sgtm',
+    tracker: 'tracker',
+  };
+  const fields: Record<string, { page: string[]; referrer: string[] }> = {};
+  for (const [name, page] of Object.entries(synthetic)) fields[map[name] ?? name] = { page, referrer: [] };
+  vi.resetModules();
+  vi.doMock('./page-fields.ts', () => ({ PAGE_FIELDS: fields }));
+  try {
+    const { decodeRequest: decode } = await import('./index.ts');
+    for (const sample of samples) {
+      const names = synthetic[sample.name] ?? [];
+      const name = names[0] ?? '';
+      const request = sample.build({ ...sample.fixed, ...sample.others, [sample.key(name)]: MARKER });
+      const [hit] = decode(request).filter((h) => h.vendor === sample.vendor);
+      expect(hit?.page, sample.name).toBe(MARKER);
+    }
+  } finally {
+    vi.doUnmock('./page-fields.ts');
+    vi.resetModules();
+  }
 });
