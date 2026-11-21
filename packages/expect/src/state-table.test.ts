@@ -106,6 +106,18 @@ describe('event names', () => {
     expect(cell.hits).toBe(3);
     expect(cell.events).toEqual(['page_view']);
   });
+
+  test('phone, client ID, UUID and hash event names are counted but not stored', () => {
+    const values = ['4512345678', '1234567890.1234567890', '550e8400-e29b-41d4-a716-446655440000', 'd41d8cd98f00b204e9800998ecf8427e'];
+    const run = makeRun();
+    hit(run, { event: 'page_view' });
+    for (const event of values) hit(run, { event });
+    expect(run.hits.map((h) => h.event)).toEqual(['page_view', ...values]);
+    const table = stateTable({ accept: [run] });
+    expect(table.vendors[0]!.states.accept!.hits).toBe(5);
+    const json = JSON.stringify(table);
+    for (const v of values) expect(json).not.toContain(v);
+  });
 });
 
 describe('counts', () => {

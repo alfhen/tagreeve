@@ -1,3 +1,4 @@
+import { guardFieldName, isValueSegment } from '@tagreeve/decoders';
 import type { Hit, HitIds, RunRecords } from '@tagreeve/core';
 import { CONSENT_STATES, type ConsentState } from './consent-matrix.ts';
 import { DEFAULT_GRACE_MS, epochForHit, judgeIndex, judgedAt } from './evaluate.ts';
@@ -74,7 +75,7 @@ export function stateTable(records: RecordsByState): StateTable {
         const row = tallies.get(hit.vendor) ?? tallies.set(hit.vendor, {}).get(hit.vendor)!;
         const tally = (row[state] ??= { hits: 0, events: new Set(), fields: new Set(), ids: new Set() });
         tally.hits++;
-        if (hit.event && hit.event.length <= 64 && EVENT_NAME.test(hit.event)) tally.events.add(hit.event);
+        if (hit.event && hit.event.length <= 64 && EVENT_NAME.test(hit.event) && !isValueSegment(hit.event) && guardFieldName(hit.event) === hit.event) tally.events.add(hit.event);
         for (const f of hit.fields ?? []) tally.fields.add(f);
         for (const id of idNames(hit.ids)) tally.ids.add(id);
       }
