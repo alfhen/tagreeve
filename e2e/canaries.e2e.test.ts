@@ -51,6 +51,18 @@ test('a start URL with a similar name keeps it and gets the canaries too', async
   expect(r.records!.run.canaries).toBeDefined();
 }, 150_000);
 
+test('a start var that holds a query string keeps it and gets the canaries as parameters', async () => {
+  const dir = await tempDir('canaries-var-');
+  const file = join(dir, 's.yml');
+  await writeFile(file, (await readFile(scenario('canaries'), 'utf8')).replace('start: /plain/product', 'start: "{page}"\nvars: { page: /plain/product?variant=1 }'));
+  const r = await runCli(['run', file, '--site', site.url, '--out', outDir, '--json']);
+  expect(r.code).not.toBe(2);
+  const params = new URL(startRequest(r.records!).url).searchParams;
+  expect(params.get('variant')).toBe('1');
+  expect(params.get('gclid')).toBe('TEST-GCLID-7-RUN-0001');
+  for (const name of NAMES) expect(params.has(name)).toBe(true);
+}, 150_000);
+
 test('the text summary has the Canaries line and --json has the names', async () => {
   const text = await runText('canaries');
   expect(text.code).not.toBe(2);

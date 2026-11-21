@@ -282,11 +282,12 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
   };
 
   if (parsed.options.canaries) {
-    const held = queryNames(parsed.start.replace(/\{(\w+)\}/g, (m, name: string) => parsed.vars[name] ?? m));
+    const resolved = parsed.start.replace(/\{(\w+)\}/g, (m, name: string) => parsed.vars[name] ?? m);
+    const held = queryNames(resolved);
     const taken = CANARY_NAMES.find((name) => held.includes(name));
     if (taken) return failed(`options.canaries: the start URL already holds the ${taken} parameter. Remove it from start, or turn canaries off.\n`);
     canaries = canaryValues(seed, spec.consentCell);
-    parsed = { ...parsed, start: withCanaries(parsed.start, canaries) };
+    parsed = { ...parsed, start: withCanaries(resolved, canaries) };
   }
 
   let records: RunRecords;
