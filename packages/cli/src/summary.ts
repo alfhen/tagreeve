@@ -72,11 +72,12 @@ const SANDBOX_PATH_EXAMPLES = 1;
 const PURPOSE_ORDER = ['telemetry', 'checkout', 'payments', 'cdn'] as const;
 const GROUPED_KINDS = new Set(['unknownDestination', 'firstPartySubdomain']);
 
-export function countHits(hits: RunRecords['hits']): Summary['hits'] {
+export function countHits(hits: RunRecords['hits'], canaries: RunRecords['run']['canaries'] = []): Summary['hits'] {
   const out: Summary['hits'] = {};
   for (const hit of hits) {
     const events = (out[hit.vendor] ??= {});
-    const name = hit.event ?? '(no event)';
+    let name = hit.event ?? '(no event)';
+    for (const c of canaries) name = name.split(c.value).join(`(url param ${c.name})`);
     events[name] = (events[name] ?? 0) + 1;
   }
   return out;
@@ -135,7 +136,7 @@ export function buildSummary(records: RunRecords, results: Result[], path: strin
     path,
     pass: results.every((r) => r.pass),
     ok: results.every(passesGate),
-    hits: countHits(records.hits),
+    hits: countHits(records.hits, records.run.canaries),
     ...(dataLayer.pushes > 0 && { dataLayer }),
     ...(tags && { tags }),
     epochs: records.consentEpochs.map((e) => ({ label: e.label, state: stateName(e.state), startT: e.startT, endT: e.endT })),

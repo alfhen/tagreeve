@@ -240,9 +240,9 @@ function queryNames(start: string): string[] {
   return query.split('&').map((pair) => {
     const raw = pair.split('=')[0]!;
     try {
-      return decodeURIComponent(raw.replace(/\+/g, ' ')).toLowerCase();
+      return decodeURIComponent(raw.replace(/\+/g, ' '));
     } catch {
-      return raw.toLowerCase();
+      return raw;
     }
   });
 }
@@ -282,7 +282,7 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
   };
 
   if (parsed.options.canaries) {
-    const held = queryNames(parsed.start);
+    const held = queryNames(parsed.start.replace(/\{(\w+)\}/g, (m, name: string) => parsed.vars[name] ?? m));
     const taken = CANARY_NAMES.find((name) => held.includes(name));
     if (taken) return failed(`options.canaries: the start URL already holds the ${taken} parameter. Remove it from start, or turn canaries off.\n`);
     canaries = canaryValues(seed, spec.consentCell);

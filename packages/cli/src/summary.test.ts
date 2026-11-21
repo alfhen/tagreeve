@@ -24,6 +24,11 @@ test('counts hits per vendor and event', () => {
   });
 });
 
+test('counts name a canary value used as an event name', () => {
+  const canaries = [{ source: 'urlParam' as const, name: 'gclid', value: 'TEST-GCLID-7-RUN-0001' }];
+  expect(countHits([hit('ga4', 'TEST-GCLID-7-RUN-0001'), hit('ga4', 'page_view')], canaries)).toEqual({ ga4: { '(url param gclid)': 1, page_view: 1 } });
+});
+
 test('exit code is 1 when any result fails', () => {
   expect(exitCodeFor([result(true), result(true)])).toBe(0);
   expect(exitCodeFor([result(true), result(false)])).toBe(1);

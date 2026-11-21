@@ -197,6 +197,20 @@ test('a bad digest override of the base image exits 2', async () => {
   }
 });
 
+test('canaries refuse a start URL whose variable resolves to a canary name, and allow a case variant', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
+  const scenario = join(dir, 's.yaml');
+  await writeFile(scenario, 'start: /plain/product?{key}=pw-1\nvars: { key: gclid }\noptions: { canaries: true }\nsteps:\n  - visit: /\nexpect:\n  must: []\n  mustNot: []\n');
+  const err: string[] = [];
+  const code = await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: {}, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err.push(t) });
+  expect(code).toBe(2);
+  expect(err.join('')).toContain('already holds the gclid parameter');
+  await writeFile(scenario, 'start: /plain/product?GCLID=pw-1\noptions: { canaries: true }\nsteps:\n  - visit: /\nexpect:\n  must: []\n  mustNot: []\n');
+  const err2: string[] = [];
+  await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: {}, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err2.push(t) });
+  expect(err2.join('')).not.toContain('already holds');
+});
+
 test.each(['gclid', 'ttclid'])('canaries refuse a start URL that holds %s, name it and echo no value', async (name) => {
   const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
   const scenario = join(dir, 's.yaml');
