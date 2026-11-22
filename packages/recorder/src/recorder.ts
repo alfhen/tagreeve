@@ -17,6 +17,7 @@ import {
   type DataLayerEvent,
   type DataLayerFrame,
   type Flag,
+  type Canary,
   type Hit,
   type Id,
   type Identity,
@@ -53,6 +54,7 @@ import { DATALAYER_BINDING, DATALAYER_TALLY, dataLayerEventFromPayload, dataLaye
 import { buildTallyFlags, PayloadCounts, postedAhead, validateTally, type FrameTally } from './datalayer-tally.ts';
 import { buildDataLayerNotHookedFlag, buildDataLayerReassignedFlags, isGoogleHostLoaderUrl, loaderLayerName } from './datalayer-names.ts';
 import { parseTagReport, TAG_REPORT_BINDING } from './tag-report.ts';
+import { buildCanaryFlags } from './canary-routes.ts';
 import { buildFlags, buildUnloadGapFlags, type FrameRef } from './flags.ts';
 import { mergeNetLog, NavigationWindows, parseNetLog, watchNetLogDir, type NetLogRequest } from './netlog.ts';
 import { redactHeaders } from './redact.ts';
@@ -141,6 +143,8 @@ export interface RecorderOptions {
    * makes to vendors are recorded and answered here, never sent on. Needs `networkMode: 'server'`.
    */
   serverContainer?: ServerContainerOptions;
+  /** The canaries planted on the start URL. Given, the close looks for them in requests to other hosts (`identifierRoute`, `canarySearch`). */
+  canaries?: Canary[];
 }
 
 export interface StepActivity {
@@ -1144,6 +1148,9 @@ export class Recorder {
       handedToChromium: this.handedToChromium,
       redirectHeaderWithoutRedirect: this.redirectHeaderWithoutRedirect,
     });
+    if (this.options.canaries?.length) {
+      flags.push(...buildCanaryFlags({ runId: this.runId, siteUrl: this.options.site, firstPartyHosts: this.options.firstPartyHosts, serverHosts: this.options.serverHosts, requests, hits, canaries: this.options.canaries, identity: this.run.identity }));
+    }
     if (!this.netLogPath) {
       const embedded = this.dataLayerEvents.filter((e) => !e.frame?.main);
       flags.push(...buildUnloadGapFlags({ runId: this.runId, networkMode: this.options.networkMode, events: embedded, hits, navigations: this.navigations, runEnd: closeStartedAt, eventFrames: this.eventFrames, requestFrames: new Map(requests.map((r) => [r.id, { id: this.requestFrameIds.get(r.id) ?? null, url: r.frameUrl }])), ignore: this.options.unloadGapIgnore }));
