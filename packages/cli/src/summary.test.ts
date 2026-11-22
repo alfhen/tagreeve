@@ -744,6 +744,19 @@ test('a canary run shows the Canaries line and names in --json, and never a valu
   expect(JSON.stringify(summary)).not.toContain('TEST-');
 });
 
+test('buildSummary names canary forms in hit events and dataLayer labels, never the value', () => {
+  const records = canaryRecords(true);
+  const value = 'TEST-GCLID-7-RUN-0001';
+  const encoded = Buffer.from(value).toString('base64');
+  records.hits = [{ vendor: 'ga4', event: value }, { vendor: 'ga4', event: encoded }] as unknown as RunRecords['hits'];
+  records.dataLayerEvents = [{ id: 'dle_1', stepId: null, event: value, args: [{ event: value }], isConsentCommand: false, frame: { main: true, n: 0 } }] as unknown as RunRecords['dataLayerEvents'];
+  const summary = buildSummary(records, [], 'run.jsonl');
+  const text = formatSummary(summary) + JSON.stringify(summary);
+  expect(text).not.toContain(value);
+  expect(text).not.toContain(encoded);
+  expect(summary.hits.ga4).toEqual({ '(url param gclid)': 2 });
+});
+
 test('a run without canaries has no Canaries line and no canaries key', () => {
   const summary = buildSummary(canaryRecords(false), [], 'run.jsonl');
   expect(formatSummary(summary)).not.toContain('Canaries:');

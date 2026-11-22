@@ -1,5 +1,5 @@
 import { guardFieldName, maskValuePath, OTHER_NAME, platformHostFor } from '@tagreeve/decoders';
-import type { FlagKind, HitLinkMiss, Result, ResultNote, RunRecords, ServerContainerErrorClass, Severity } from '@tagreeve/core';
+import { canaryPool, type FlagKind, type HitLinkMiss, type Result, type ResultNote, type RunRecords, type ServerContainerErrorClass, type Severity } from '@tagreeve/core';
 import { expectedTagsOf, isServerHit, judgeIndex, labelKind, listWithMore, NO_EVENT, pushShapes, rejectedCounts, summarizeTags, tagLabel, viaHitOf, type PushShape, type PushShapes, type TagsContainerSummary } from '@tagreeve/expect';
 import { formatDefaultsLine, type DefaultUsed } from './defaults.ts';
 import { NOTE_TEXT } from './report/model.ts';
@@ -72,12 +72,20 @@ const SANDBOX_PATH_EXAMPLES = 1;
 const PURPOSE_ORDER = ['telemetry', 'checkout', 'payments', 'cdn'] as const;
 const GROUPED_KINDS = new Set(['unknownDestination', 'firstPartySubdomain']);
 
+/** Replaces every form of a canary value, not only the raw one, so an event name never carries a canary. */
+export function maskCanaries(text: string, canaries: RunRecords['run']['canaries'] = []): string {
+  if (canaries.length === 0) return text;
+  const forms = [...canaryPool(canaries, null).forms].sort((a, b) => b[0].length - a[0].length);
+  let out = text;
+  for (const [form, name] of forms) out = out.split(form).join(`(url param ${name})`);
+  return out;
+}
+
 export function countHits(hits: RunRecords['hits'], canaries: RunRecords['run']['canaries'] = []): Summary['hits'] {
   const out: Summary['hits'] = {};
   for (const hit of hits) {
     const events = (out[hit.vendor] ??= {});
-    let name = hit.event ?? '(no event)';
-    for (const c of canaries) name = name.split(c.value).join(`(url param ${c.name})`);
+    const name = maskCanaries(hit.event ?? '(no event)', canaries);
     events[name] = (events[name] ?? 0) + 1;
   }
   return out;
@@ -129,6 +137,7 @@ export function buildSummary(records: RunRecords, results: Result[], path: strin
   const testPayment = testPaymentOf(records);
   const serverContainer = serverContainerOf(records);
   const dataLayer = pushShapes({ steps: records.steps, dataLayerEvents: records.dataLayerEvents ?? [] });
+  for (const step of dataLayer.steps) for (const shape of step.events) shape.event = maskCanaries(shape.event, records.run.canaries);
   const tags = summarizeTags(records.tagReports ?? [], expectedTagsOf(records.run));
   return {
     runId: records.run.id,
