@@ -33,7 +33,7 @@ import { warnIfNotIgnored } from './git-ignore.ts';
 import { resolveRunFolder } from './out-dir.ts';
 import { NET_LOG_NEEDS_LIVE, UsageError, type Network, type RunArgs, type SuiteArgs } from './args.ts';
 import { ALLOW_TEST_PAYMENT_NEEDS_SITE, loadProjectConfig, ProjectConfigLoadError, siteMissingMessage, type LoadedConfig } from './project-config.ts';
-import { applyBaseline, buildSummary, exitCodeFor, formatSummary, type Summary } from './summary.ts';
+import { applyBaseline, buildSummary, exitCodeFor, formatSummary, maskCanaries, type Summary } from './summary.ts';
 import { acceptsDeclaration, checkTestPaymentGates, testPaymentHostsPath } from './test-payment-hosts.ts';
 import { readVersion } from './version.ts';
 
@@ -257,13 +257,7 @@ function withCanaries(start: string, canaries: Canary[], probe = start): string 
   return `${base}${probeBase.includes('?') ? (/[?&]$/.test(probeBase) ? '' : '&') : '?'}${added}${tail}`;
 }
 
-function nameCanaries(text: string, canaries: Canary[]): string {
-  const label = (c: Canary) => `(url param ${c.name})`;
-  return canaries.reduce(
-    (out, c) => [c.value, encodeURIComponent(c.value), Buffer.from(c.value).toString('base64'), Buffer.from(c.value).toString('base64url')].reduce((s, form) => s.split(form).join(label(c)), out),
-    text,
-  );
-}
+const nameCanaries = maskCanaries;
 
 async function scrubStepErrors(path: string, canaries: Canary[]): Promise<void> {
   const lines = (await readFile(path, 'utf8')).split('\n');
@@ -274,8 +268,8 @@ async function scrubStepErrors(path: string, canaries: Canary[]): Promise<void> 
 export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> {
   const { gtmOverride, variant } = spec;
   let parsed = spec.parsed;
-  const seed = spec.seed ?? parsed.options.seed ?? Math.floor(Math.random() * 2 ** 31);
   let canaries: Canary[] | undefined;
+  let seed = spec.seed;
   let io = rawIo;
   const scrubber = gtmOverride ? new Scrubber(gtmOverride.gtmAuth) : undefined;
   if (scrubber) {
@@ -292,6 +286,7 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
     const held = queryNames(resolved);
     const taken = CANARY_NAMES.find((name) => held.includes(name));
     if (taken) return failed(`options.canaries: the start URL already holds the ${taken} parameter. Remove it from start, or turn canaries off.\n`);
+    seed ??= parsed.options.seed ?? Math.floor(Math.random() * 2 ** 31);
     canaries = canaryValues(seed, spec.consentCell);
     // A var value that holds a {name} placeholder would be filled again by the visit step, so plant on the unresolved start then.
     const refilled = [...resolved.matchAll(/\{(\w+)\}/g)].some((m) => Object.hasOwn(parsed.vars, m[1]!));
