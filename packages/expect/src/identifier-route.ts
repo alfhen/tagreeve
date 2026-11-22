@@ -13,7 +13,6 @@ export interface IdentifierRouteResult {
 
 const MAX_LINES = 5;
 const NOT_SEARCHED = 'headers, including Referer and Cookie, not searched';
-const FORMS = 'exact, URL-encoded, base64, base64url, SHA-256 hex, base64 and base64url, GCL. and fb.1. prefixes';
 
 /** Consent that holds no grant, or that denies `analytics_storage` or `ad_user_data`, forbids a planted value. */
 function stateForbids(state: ConsentState): boolean {
@@ -77,8 +76,9 @@ function searchedText(search: Flag): string {
   ];
   const parts = reasons.filter(([n]) => n > 0).map(([n, what]) => `${n} ${what}`);
   const skipped = `skipped ${search.recordIds.length}${parts.length > 0 ? ` (${parts.join(', ')})` : ''}`;
-  if (requests === undefined) return `${search.detail} ${NOT_SEARCHED}; ${skipped}.`;
-  return `searched forms (${FORMS}) in the URL, body and decoded fields of ${requests} request${requests === '1' ? '' : 's'}; ${NOT_SEARCHED}; ${skipped}.`;
+  const forms = /\bas (plain text.+?)\. Searched:/.exec(search.detail)?.[1];
+  if (requests === undefined || forms === undefined) return `${search.detail} ${NOT_SEARCHED}; ${skipped}.`;
+  return `searched forms (${forms}) in the URL, body and decoded fields of ${requests} request${requests === '1' ? '' : 's'}; ${NOT_SEARCHED}; ${skipped}.`;
 }
 
 /**
