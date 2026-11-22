@@ -247,12 +247,14 @@ function queryNames(start: string): string[] {
   });
 }
 
-function withCanaries(start: string, canaries: Canary[]): string {
+function withCanaries(start: string, canaries: Canary[], probe = start): string {
   const hash = start.indexOf('#');
   const base = hash < 0 ? start : start.slice(0, hash);
   const tail = hash < 0 ? '' : start.slice(hash);
+  const probeHash = probe.indexOf('#');
+  const probeBase = probeHash < 0 ? probe : probe.slice(0, probeHash);
   const added = canaries.map((c) => `${c.name}=${encodeURIComponent(c.value)}`).join('&');
-  return `${base}${base.includes('?') ? (/[?&]$/.test(base) ? '' : '&') : '?'}${added}${tail}`;
+  return `${base}${probeBase.includes('?') ? (/[?&]$/.test(probeBase) ? '' : '&') : '?'}${added}${tail}`;
 }
 
 function nameCanaries(text: string, canaries: Canary[]): string {
@@ -291,7 +293,9 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
     const taken = CANARY_NAMES.find((name) => held.includes(name));
     if (taken) return failed(`options.canaries: the start URL already holds the ${taken} parameter. Remove it from start, or turn canaries off.\n`);
     canaries = canaryValues(seed, spec.consentCell);
-    parsed = { ...parsed, start: withCanaries(resolved, canaries) };
+    // A var value that holds a {name} placeholder would be filled again by the visit step, so plant on the unresolved start then.
+    const refilled = [...resolved.matchAll(/\{(\w+)\}/g)].some((m) => Object.hasOwn(parsed.vars, m[1]!));
+    parsed = { ...parsed, start: refilled ? withCanaries(parsed.start, canaries, resolved) : withCanaries(resolved, canaries) };
   }
 
   let records: RunRecords;
@@ -310,7 +314,6 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
       dataLayerNames: parsed.options.dataLayerNames,
       graceWindowMs: parsed.options.graceWindow ?? DEFAULT_GRACE_MS,
       seed,
-      startResolved: parsed.options.canaries,
       headed: spec.headed,
       viewport: spec.viewport ?? parsed.options.viewport,
       netLog: spec.netLog,

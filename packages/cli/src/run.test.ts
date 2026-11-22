@@ -6,13 +6,14 @@ import type { RunArgs } from './args.ts';
 import { parseScenario } from '@tagreeve/expect';
 import { prepareServerContainer, resolveNetwork, runCommand } from './run.ts';
 
-const failStart = vi.hoisted(() => ({ on: false, message: undefined as string | undefined }));
+const failStart = vi.hoisted(() => ({ on: false, message: undefined as string | undefined, seen: undefined as unknown as { start: string; vars: Record<string, string> } | undefined }));
 
 vi.mock('@tagreeve/recorder', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@tagreeve/recorder')>();
   return {
     ...actual,
     recordScenario: async (opts: Parameters<typeof actual.recordScenario>[0]) => {
+      failStart.seen = { start: opts.parsed.start, vars: opts.parsed.vars };
       if (!failStart.on) return actual.recordScenario(opts);
       const path = join(opts.outDir!, 'failed-start.jsonl');
       const step = JSON.stringify({ type: 'step', index: 0, label: 'start', error: `navigation to ${opts.parsed.start} failed` });
@@ -270,4 +271,20 @@ test('a failed canary run names the base64 forms of a canary value too', async (
   const out = err.join('');
   for (const form of forms) expect(out).not.toContain(form);
   expect(out).toContain('(url param gclid)');
+});
+
+test('a canary run whose var value holds a placeholder keeps the start unresolved, so the visit step fills it once', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
+  const scenario = join(dir, 's.yml');
+  await writeFile(scenario, 'start: /p/{key}\nvars:\n  key: x\n  next: y\noptions: { canaries: true, seed: 7 }\nsteps:\n  - wait: 1s\nexpect:\n  must: []\n  mustNot: []\n');
+  failStart.on = true;
+  failStart.seen = undefined;
+  try {
+    await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: { key: '{next}' }, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: () => undefined });
+  } finally {
+    failStart.on = false;
+  }
+  const seen = failStart.seen as { start: string; vars: Record<string, string> } | undefined;
+  expect(seen?.start.startsWith('/p/{key}?gclid=')).toBe(true);
+  expect(seen?.vars.key).toBe('{next}');
 });
