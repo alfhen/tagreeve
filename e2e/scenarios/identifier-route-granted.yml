@@ -1,0 +1,14 @@
+start: /click-id-relay
+options:
+  seed: 7
+  canaries: true
+  allowUnknownDestination: true
+steps:
+  - consent: accept
+  - wait: 1s
+  - checkpoint: relay
+  - visit: /click-id-relay-send?send=granted
+  - wait: 2s
+expect:
+  must: []
+  mustNot: []

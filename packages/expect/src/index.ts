@@ -13,3 +13,4 @@ export * from './tags.ts';
 export { parseEventMap, type EventMap } from './event-map.ts';
 export * from './push-rules.ts';
 export * from './server-container-rejected.ts';
+export * from './identifier-route.ts';

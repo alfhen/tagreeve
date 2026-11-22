@@ -87,16 +87,18 @@ test('send=granted sends no conversion while consent is rejected', async () => {
   expect(routes(result.records!).filter((f) => f.route!.sink.vendor === 'google-ads')).toEqual([]);
 }, 150_000);
 
-test('a run without canaries has neither flag, and the canary flags change no result', async () => {
+test('a run without canaries has neither flag and no identifierRoute result, and the other results match', async () => {
   const { text, result } = await runCopy('route-off-', (t) => t.replace('  canaries: true\n', ''));
   expect(text).not.toContain('canaries');
   const kinds = new Set(reject.records!.flags.map((f) => f.kind));
   expect(kinds.has('identifierRoute')).toBe(true);
   expect(kinds.has('canarySearch')).toBe(true);
   expect(result.records!.flags.filter((f) => f.kind === 'identifierRoute' || f.kind === 'canarySearch')).toEqual([]);
-  for (const r of [reject, result]) expect(r.records!.results.some((x) => /identifierRoute|canarySearch/.test(x.expectation))).toBe(false);
-  expect(result.code).toBe(reject.code);
-  expect(result.failed).toEqual(reject.failed);
+  expect(result.records!.results.some((x) => /identifierRoute|canarySearch/.test(x.expectation))).toBe(false);
+  // J13 judges the canary flags, so the run with canaries has one more result and fails on it.
+  expect(reject.failed).toContain('builtin: identifierRoute');
+  expect(result.code).toBe(0);
+  expect(result.failed).toEqual(reject.failed.filter((name) => name !== 'builtin: identifierRoute'));
 }, 150_000);
 
 test('no flag and no output holds a form of a canary value or the identity', async () => {

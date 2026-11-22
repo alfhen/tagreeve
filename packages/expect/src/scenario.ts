@@ -154,11 +154,11 @@ export interface ScenarioOptions {
   withdrawWith?: string;
   /** Put six fake click IDs on the start URL. A start URL that already holds one is refused. */
   canaries?: boolean;
-  /** Severity per built-in check. A check that is not listed is `fail`, except `earlyIdentifiers`, `consentModeSetup`, `earlyIdentityPush`, `idHandover` and `serverContainerRejected`, which are `warn`. */
+  /** Severity per built-in check. A check that is not listed is `fail`, except `earlyIdentifiers`, `consentModeSetup`, `earlyIdentityPush`, `idHandover` and `serverContainerRejected`, which are `warn`. `identifierRoute` is `fail`, and `warn` turns every finding of it into a warning. */
   builtins?: Partial<Record<BuiltinName, Severity>>;
 }
 
-export const BUILTIN_NAMES = ['unknownDestination', 'sandboxPageUrl', 'possibleRealData', 'deniedIdentifiers', 'earlyIdentifiers', 'consentModeSetup', 'earlyIdentityPush', 'idHandover', 'serverContainerRejected'] as const;
+export const BUILTIN_NAMES = ['unknownDestination', 'sandboxPageUrl', 'possibleRealData', 'deniedIdentifiers', 'earlyIdentifiers', 'consentModeSetup', 'earlyIdentityPush', 'idHandover', 'serverContainerRejected', 'identifierRoute'] as const;
 export type BuiltinName = (typeof BUILTIN_NAMES)[number];
 export const SEVERITIES = ['fail', 'warn'] as const;
 

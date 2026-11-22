@@ -50,6 +50,8 @@ Tracking also needs the same visitor ID in every part of the site. Google Analyt
 
 With `--server-container`, the local container can answer most browser requests with an error while the run still looks fine. Tagreeve warns when more than half of the requests to the container, and at least 2, were rejected. The warning gives counts and status codes only. See [serverContainerRejected](../cli.md#servercontainerrejected).
 
+With `canaries: true`, Tagreeve puts fake click IDs on the start URL and the run's fake email and phone, and searches the requests to other hosts for them in several encodings. It fails the run when a planted value reaches a host while the visitor's consent forbids it. A pass says only that nothing was found in the searched forms and parts: headers, including Referer and Cookie, are not searched, and the message counts the requests it skipped.
+
 ## Stub mode
 
 By default, a run is in stub mode. In stub mode, Tagreeve records each known tracking request and then answers it itself. Your test visits do not add fake traffic to real reports.

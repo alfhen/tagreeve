@@ -31,6 +31,7 @@ import {
 } from '@tagreeve/core';
 import { GA4_BODY_ONLY_IGNORE, type MultipartBody, bodyEntries, guardFieldName, multipartPartName, splitMultipart, META_BODY_ONLY_IGNORE, META_CAPI_BODY_ONLY_IGNORE, META_CAPI_PARAM_NAMES, metaCapiBaseParam, SGTM_BODY_ONLY_IGNORE, isSandboxPageUrl, maskValuePath, matchesIgnoreList, identifierClass, identifierSignal, type IdentifierClass } from '@tagreeve/decoders';
 import { consentModeSetup, GOOGLE_VENDORS } from './consent-mode-setup.ts';
+import { identifierRoute } from './identifier-route.ts';
 import { earlyIdentityPush } from './early-identity-push.ts';
 import { idHandover } from './id-handover.ts';
 import { serverContainerRejected } from './server-container-rejected.ts';
@@ -1215,6 +1216,9 @@ function builtInChecks(
         : `Expected no data that is not from the run identity, found ${problems.length}: ${shown}${more}.`,
     );
   }
+
+  const route = identifierRoute(records, ctx.grace, scenario.options.builtins?.identifierRoute);
+  if (route) addResult('builtin: identifierRoute', route.pass, route.evidence, route.message, route.severity, route.note);
 
   if (containerRan) {
     const rejected = serverContainerRejected([...ctx.requests.values()], ctx.responses, scenario.options.serverHosts ?? []);
