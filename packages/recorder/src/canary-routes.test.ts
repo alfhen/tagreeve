@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, test } from 'vitest';
-import { canaryPool, canaryValues, createIdentity, MAX_POST_DATA, newId, readRun, type Flag, type Hit, type Request } from '@tagreeve/core';
+import { canaryPool, canaryValues, createIdentity, MAX_POST_DATA, newId, readRun, type Checkpoint, type CheckpointCookie, type Flag, type Hit, type Request } from '@tagreeve/core';
 import { PAGE_FIELDS } from '@tagreeve/decoders';
 import { buildCanaryFlags, type CanaryRouteInput } from './canary-routes.ts';
 
@@ -21,6 +21,10 @@ function hit(request: Request, vendor: string, params: Record<string, string>, p
 
 function flagsFor(requests: Request[], hits: Hit[] = [], over: Partial<CanaryRouteInput> = {}): Flag[] {
   return buildCanaryFlags({ runId, siteUrl: 'http://localhost:3000', requests, hits, canaries, identity: null, ...over });
+}
+
+function checkpoint(label: string, t: number, cookie: Partial<CheckpointCookie> = {}): Checkpoint {
+  return { type: 'checkpoint', id: newId('checkpoint'), runId, stepId: null, label, t, consentState: null, cookies: [{ name: '_pw_click', domain: 'localhost', expires: null, firstParty: true, canary: 'gclid', ...cookie }] };
 }
 
 const routes = (flags: Flag[]) => flags.filter((f) => f.kind === 'identifierRoute');
@@ -199,13 +203,86 @@ describe('the canarySearch flag', () => {
   });
 });
 
+describe('the cookie hop', () => {
+  const sink = () => req(`${VENDOR}?x=${encodeURIComponent(b64(gclid))}`, { t: 5 });
+  const run = (r: Request, checkpoints: Checkpoint[]) => routes(flagsFor([r], [hit(r, 'google-ads', {})], { checkpoints }));
+
+  test('a checkpoint before the sink that saw the canary in a first-party cookie gives a cookie route with one hop', () => {
+    const r = sink();
+    const ckp = checkpoint('relay', 1);
+    const flags = run(r, [ckp]);
+    expect(flags).toHaveLength(1);
+    const { route, detail } = flags[0]!;
+    expect(route!.kind).toBe('cookie');
+    expect(route!.hops).toEqual([{ kind: 'cookie', name: '_pw_click', checkpointId: ckp.id }]);
+    expect(detail).toBe('url param gclid -> cookie _pw_click (checkpoint relay) -> request to www.googleadservices.com, param x, base64');
+    expect(JSON.stringify(flags)).not.toContain(gclid);
+  });
+
+  test('a checkpoint after the sink gives no hop', () => {
+    const r = sink();
+    const late = checkpoint('late', 10);
+    expect(late.t).toBeGreaterThan(r.t);
+    const { route } = run(r, [late])[0]!;
+    expect(route!.kind).toBe('unknown');
+    expect(route!.hops).toEqual([]);
+  });
+
+  test('the first sighting is the hop', () => {
+    const r = sink();
+    const first = checkpoint('first', 1);
+    const second = checkpoint('second', 3);
+    expect(run(r, [second, first])[0]!.route!.hops[0]!.checkpointId).toBe(first.id);
+  });
+
+  test('a third-party cookie gives no hop', () => {
+    const ckp = checkpoint('relay', 1, { firstParty: false });
+    expect(ckp.cookies[0]).toMatchObject({ canary: 'gclid', firstParty: false });
+    const { route } = run(sink(), [ckp])[0]!;
+    expect(route!.kind).toBe('unknown');
+    expect(route!.hops).toEqual([]);
+  });
+
+  test('a cookie of another canary gives no hop', () => {
+    const r = sink();
+    const ckp = checkpoint('relay', 1, { canary: 'fbclid' });
+    expect(ckp.cookies[0]!.canary).toBe('fbclid');
+    expect(r.url).toContain(encodeURIComponent(b64(gclid)));
+    const { route } = run(r, [ckp])[0]!;
+    expect(route!.kind).toBe('unknown');
+    expect(route!.hops).toEqual([]);
+  });
+
+  test('a checkpoint with no time gives no hop', () => {
+    const ckp = checkpoint('old', 1);
+    delete ckp.t;
+    expect(run(sink(), [ckp])[0]!.route!.hops).toEqual([]);
+  });
+
+  test('a cookie name that looks like a value is stored and printed as (other)', () => {
+    const ckp = checkpoint('relay', 1, { name: 'jane@shop.example.net' });
+    expect(ckp.cookies[0]!.name).toBe('jane@shop.example.net');
+    const flags = run(sink(), [ckp]);
+    expect(flags[0]!.route!.hops[0]!.name).toBe('(other)');
+    expect(flags[0]!.detail).toContain('cookie (other) (checkpoint');
+    expect(JSON.stringify(flags)).not.toContain('jane@shop.example.net');
+  });
+
+  test('a direct route keeps its kind and gets no hop', () => {
+    const r = req(`${VENDOR}?gclid=${gclid}`, { t: 5 });
+    const { route } = run(r, [checkpoint('relay', 1)])[0]!;
+    expect(route!.kind).toBe('direct');
+    expect(route!.hops).toEqual([]);
+  });
+});
+
 describe('a recorded run', () => {
   test('the demo record has no route, one search flag, and its IDs are requests of the record', async () => {
     const path = new URL('../../../site/demo/reject.jsonl', import.meta.url);
     expect(readFileSync(path, 'utf8')).not.toContain('TEST-');
     const records = await readRun(path.pathname);
     expect(records.run.identity).toBeNull();
-    const flags = buildCanaryFlags({ runId: records.run.id, siteUrl: records.run.site, requests: records.requests, hits: records.hits, canaries, identity: null, pool: canaryPool(canaryValues(7), null) });
+    const flags = buildCanaryFlags({ runId: records.run.id, siteUrl: records.run.site, requests: records.requests, hits: records.hits, checkpoints: records.checkpoints, canaries, identity: null, pool: canaryPool(canaryValues(7), null) });
     expect(routes(flags)).toEqual([]);
     expect(search(flags)).toHaveLength(1);
     const ids = new Set(records.requests.map((r) => r.id));

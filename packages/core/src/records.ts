@@ -338,6 +338,8 @@ export interface CheckpointCookie {
   domain: string;
   expires: number | null;
   firstParty: boolean;
+  /** Set when the cookie value held a canary: the canary's name. The value is never stored. */
+  canary?: string;
 }
 
 export interface Checkpoint {
@@ -416,15 +418,22 @@ export interface RouteSink {
   transform: string;
 }
 
-/** `pageUrl`: only in a page or referrer field. `direct`: under its own name, or an identity value. `unknown`: anywhere else. */
-export type RouteKind = 'direct' | 'pageUrl' | 'unknown';
+/** `pageUrl`: only in a page or referrer field. `direct`: under its own name, or an identity value. `cookie`: a checkpoint saw it in a first-party cookie before the sink. `unknown`: anywhere else. */
+export type RouteKind = 'direct' | 'pageUrl' | 'cookie' | 'unknown';
+
+/** A step between source and sink. `name` is masked like every name in a route. */
+export interface CookieHop {
+  kind: 'cookie';
+  name: string;
+  checkpointId: Id<'ckp'>;
+}
 
 export interface FlagRoute {
   kind: RouteKind;
   source: RouteSource;
   sink: RouteSink;
-  /** The steps between source and sink. Empty until cookie and redirect hops are traced. */
-  hops: unknown[];
+  /** The steps between source and sink. Empty until a hop is traced. */
+  hops: CookieHop[];
 }
 
 export interface Flag {
