@@ -65,7 +65,7 @@ function dataRequest(req: Request, viaLoader: boolean): URL | undefined {
   if (Object.keys(parseDtdc(p.get('dtdc'))).length > 0) return url;
   if (p.has('v') && (p.has('event') || p.has('en'))) return url;
   const body = req.method === 'POST' ? parseObject(req.postData) : {};
-  if (str(body.event_name) && str(body.page_location)) return url;
+  if (str(body.event_name) && str(body[PAGE_FIELDS.sgtm.page[0]])) return url;
   return isCutDataBody(req) ? url : undefined;
 }
 
@@ -75,7 +75,7 @@ function dataRequest(req: Request, viaLoader: boolean): URL | undefined {
  */
 function isCutDataBody(req: Request): boolean {
   if (req.method !== 'POST' || req.postData === null || bodyComplete(req) || !req.postData.startsWith('{')) return false;
-  return /"event_name"\s*:/.test(req.postData) && /"page_location"\s*:/.test(req.postData);
+  return /"event_name"\s*:/.test(req.postData) && new RegExp(`"${PAGE_FIELDS.sgtm.page[0]}"\\s*:`).test(req.postData);
 }
 
 export const sgtmDataClient: Decoder = {

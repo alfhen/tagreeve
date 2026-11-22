@@ -1,4 +1,4 @@
-import { newId, type Request } from '@tagreeve/core';
+import { MAX_POST_DATA, newId, type Request } from '@tagreeve/core';
 import { expect, test, vi } from 'vitest';
 import { decodeRequest, PAGE_FIELDS } from './index.ts';
 
@@ -163,6 +163,22 @@ for (const sample of samples) {
     });
   }
 }
+
+test('sgtm data client: a bare POST /data matches on the field PAGE_FIELDS holds', async () => {
+  vi.resetModules();
+  vi.doMock('./page-fields.ts', () => ({ PAGE_FIELDS: { sgtm: { page: ['zzpage0'], referrer: [] } } }));
+  try {
+    const { sgtmDataClient } = await import('./sgtm-data-client.ts');
+    const post = (postData: string) =>
+      req({ method: 'POST', url: 'https://sgtm.example.com/data', resourceType: 'fetch', postData });
+    expect(sgtmDataClient.match(post(JSON.stringify({ event_name: 'purchase', zzpage0: MARKER })))).toBe(true);
+    expect(sgtmDataClient.match(post(`{"event_name":"purchase","zzpage0":"${'x'.repeat(MAX_POST_DATA)}`))).toBe(true);
+    expect(sgtmDataClient.match(post(JSON.stringify({ event_name: 'purchase', page_location: MARKER })))).toBe(false);
+  } finally {
+    vi.doUnmock('./page-fields.ts');
+    vi.resetModules();
+  }
+});
 
 test('google-ads: url wins over dl', () => {
   const sample = samples.find((s) => s.name === 'google-ads');
