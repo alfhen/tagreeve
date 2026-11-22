@@ -54,7 +54,7 @@ function decodeOrSame(text: string): string {
   }
 }
 
-function isFirstParty(host: string, siteHost: string, firstPartyHosts: readonly string[]): boolean {
+export function isFirstParty(host: string, siteHost: string, firstPartyHosts: readonly string[]): boolean {
   if (host === siteHost || hostMatches(host, firstPartyHosts)) return true;
   const domain = getDomain(siteHost, { allowPrivateDomains: true });
   return domain !== null && getDomain(host, { allowPrivateDomains: true }) === domain;
@@ -213,7 +213,7 @@ export function buildCanaryFlags(input: CanaryRouteInput): Flag[] {
       const { kind, chosen } = routeKind(occurrences.filter((o) => o.name === name), pageFields, pages, !canaryNames.has(name));
       const source: FlagRoute['source'] = canaryNames.has(name) ? { source: 'urlParam', name } : { source: 'identity', name };
       const seen = kind === 'unknown' && source.source === 'urlParam' ? firstSighting(checkpoints, name, req.t) : undefined;
-      const hops: CookieHop[] = seen ? [{ kind: 'cookie', name: guardFieldName(seen.cookie.name), checkpointId: seen.checkpoint.id }] : [];
+      const hops: CookieHop[] = seen ? [{ kind: 'cookie', name: pool.match(seen.cookie.name) === undefined ? guardFieldName(seen.cookie.name) : OTHER_NAME, checkpointId: seen.checkpoint.id }] : [];
       const route: FlagRoute = { kind: seen ? 'cookie' : kind, source, sink: { requestId: req.id, host: url.hostname, vendor, field: chosen.field, transform: chosen.transform }, hops };
       const from = source.source === 'urlParam' ? `url param ${name}` : `identity ${name}`;
       const via = seen ? ` -> cookie ${hops[0]!.name} (checkpoint ${seen.checkpoint.label})` : '';

@@ -3,7 +3,7 @@ import { gzipSync } from 'node:zlib';
 import { describe, expect, test } from 'vitest';
 import { canaryPool, canaryValues, createIdentity, MAX_POST_DATA, newId, readRun, type Checkpoint, type CheckpointCookie, type Flag, type Hit, type Request } from '@tagreeve/core';
 import { PAGE_FIELDS } from '@tagreeve/decoders';
-import { buildCanaryFlags, type CanaryRouteInput } from './canary-routes.ts';
+import { buildCanaryFlags, isFirstParty, type CanaryRouteInput } from './canary-routes.ts';
 
 const runId = newId('run');
 const canaries = canaryValues(7);
@@ -266,6 +266,19 @@ describe('the cookie hop', () => {
     expect(flags[0]!.route!.hops[0]).toMatchObject({ name: '(other)' });
     expect(flags[0]!.detail).toContain('cookie (other) (checkpoint');
     expect(JSON.stringify(flags)).not.toContain('jane@shop.example.net');
+  });
+
+  test('a cookie name equal to a canary value is printed as (other)', () => {
+    const ckp = checkpoint('relay', 1, { name: gclid });
+    const flags = run(sink(), [ckp]);
+    expect(flags[0]!.route!.hops[0]).toMatchObject({ name: '(other)' });
+    expect(JSON.stringify(flags)).not.toContain(gclid);
+  });
+
+  test('cookie scope is the request scope: sibling subdomain and firstPartyHosts, not other domains', () => {
+    expect(isFirstParty('app.shop.example.net', 'www.shop.example.net', [])).toBe(true);
+    expect(isFirstParty('cdn.example.org', 'www.shop.example.net', ['*.example.org'])).toBe(true);
+    expect(isFirstParty('tracker.example.com', 'www.shop.example.net', [])).toBe(false);
   });
 
   test('a direct route keeps its kind and gets no hop', () => {

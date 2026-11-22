@@ -55,7 +55,7 @@ import { DATALAYER_BINDING, DATALAYER_TALLY, dataLayerEventFromPayload, dataLaye
 import { buildTallyFlags, PayloadCounts, postedAhead, validateTally, type FrameTally } from './datalayer-tally.ts';
 import { buildDataLayerNotHookedFlag, buildDataLayerReassignedFlags, isGoogleHostLoaderUrl, loaderLayerName } from './datalayer-names.ts';
 import { parseTagReport, TAG_REPORT_BINDING } from './tag-report.ts';
-import { buildCanaryFlags } from './canary-routes.ts';
+import { buildCanaryFlags, isFirstParty } from './canary-routes.ts';
 import { buildFlags, buildUnloadGapFlags, type FrameRef } from './flags.ts';
 import { mergeNetLog, NavigationWindows, parseNetLog, watchNetLogDir, type NetLogRequest } from './netlog.ts';
 import { redactHeaders } from './redact.ts';
@@ -1008,7 +1008,7 @@ export class Recorder {
         name: c.name,
         domain: c.domain,
         expires: c.expires > 0 ? c.expires * 1000 : null,
-        firstParty: host === domain || host.endsWith(`.${domain}`),
+        firstParty: isFirstParty(domain, host, this.options.firstPartyHosts ?? []),
         ...(canary === undefined ? {} : { canary }),
       };
     });
