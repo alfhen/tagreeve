@@ -288,3 +288,13 @@ test('a canary run whose var value holds a placeholder keeps the start unresolve
   expect(seen?.start.startsWith('/p/{key}?gclid=')).toBe(true);
   expect(seen?.vars.key).toBe('{next}');
 });
+
+test('a canary run refuses a var value that holds a placeholder and a #', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
+  const scenario = join(dir, 's.yml');
+  await writeFile(scenario, 'start: /p/{key}\nvars:\n  key: x\n  next: y\noptions: { canaries: true, seed: 7 }\nsteps:\n  - wait: 1s\nexpect:\n  must: []\n  mustNot: []\n');
+  const err: string[] = [];
+  const code = await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: { key: '{next}#frag' }, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err.push(t) });
+  expect(code).toBe(2);
+  expect(err.join('')).toContain('fragment');
+});

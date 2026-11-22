@@ -755,6 +755,7 @@ test('buildSummary names canary forms in hit events and dataLayer labels, never 
   expect(text).not.toContain(value);
   expect(text).not.toContain(encoded);
   expect(summary.hits.ga4).toEqual({ '(url param gclid)': 2 });
+  expect(JSON.stringify(summary.dataLayer)).toContain('(url param gclid)');
 });
 
 test('a run without canaries has no Canaries line and no canaries key', () => {
