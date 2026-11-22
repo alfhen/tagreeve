@@ -1,0 +1,11 @@
+start: /plain/product
+options:
+  seed: 7
+  canaries: true
+  allowUnknownDestination: true
+steps:
+  - consent: accept
+  - wait: 2s
+expect:
+  must: []
+  mustNot: []

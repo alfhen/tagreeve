@@ -1,5 +1,5 @@
 import { guardFieldName, maskValuePath, OTHER_NAME, platformHostFor } from '@tagreeve/decoders';
-import type { FlagKind, HitLinkMiss, Result, ResultNote, RunRecords, ServerContainerErrorClass, Severity } from '@tagreeve/core';
+import { canaryPool, type FlagKind, type HitLinkMiss, type Result, type ResultNote, type RunRecords, type ServerContainerErrorClass, type Severity } from '@tagreeve/core';
 import { expectedTagsOf, isServerHit, judgeIndex, labelKind, listWithMore, NO_EVENT, pushShapes, rejectedCounts, summarizeTags, tagLabel, viaHitOf, type PushShape, type PushShapes, type TagsContainerSummary } from '@tagreeve/expect';
 import { formatDefaultsLine, type DefaultUsed } from './defaults.ts';
 import { NOTE_TEXT } from './report/model.ts';
@@ -54,6 +54,8 @@ export interface Summary {
   /** Optional fill entries that were skipped because the field was not on the page. */
   skippedFields?: { step: string; selector: string }[];
   results: { expectation: string; pass: boolean; severity: Severity; message: string | undefined; note?: ResultNote; evidence: string[] }[];
+  /** Set when the run planted canaries: their names, then `email` and `phone`. Never a value. */
+  canaries?: string[];
   /** Set when a payment step typed a provider's documented test card. Names only. */
   testPayment?: { provider: string; host: string; testMode: 'declared' | 'marker' };
   /** Set when a stand-in container of the test seam answered in place of a real server container. */
@@ -70,11 +72,20 @@ const SANDBOX_PATH_EXAMPLES = 1;
 const PURPOSE_ORDER = ['telemetry', 'checkout', 'payments', 'cdn'] as const;
 const GROUPED_KINDS = new Set(['unknownDestination', 'firstPartySubdomain']);
 
-export function countHits(hits: RunRecords['hits']): Summary['hits'] {
+/** Replaces every form of a canary value, not only the raw one, so an event name never carries a canary. */
+export function maskCanaries(text: string, canaries: RunRecords['run']['canaries'] = []): string {
+  if (canaries.length === 0) return text;
+  const forms = [...canaryPool(canaries, null).forms].sort((a, b) => b[0].length - a[0].length);
+  let out = text;
+  for (const [form, name] of forms) out = out.split(form).join(`(url param ${name})`);
+  return out;
+}
+
+export function countHits(hits: RunRecords['hits'], canaries: RunRecords['run']['canaries'] = []): Summary['hits'] {
   const out: Summary['hits'] = {};
   for (const hit of hits) {
     const events = (out[hit.vendor] ??= {});
-    const name = hit.event ?? '(no event)';
+    const name = maskCanaries(hit.event ?? '(no event)', canaries);
     events[name] = (events[name] ?? 0) + 1;
   }
   return out;
@@ -126,6 +137,7 @@ export function buildSummary(records: RunRecords, results: Result[], path: strin
   const testPayment = testPaymentOf(records);
   const serverContainer = serverContainerOf(records);
   const dataLayer = pushShapes({ steps: records.steps, dataLayerEvents: records.dataLayerEvents ?? [] });
+  for (const step of dataLayer.steps) for (const shape of step.events) shape.event = maskCanaries(shape.event, records.run.canaries);
   const tags = summarizeTags(records.tagReports ?? [], expectedTagsOf(records.run));
   return {
     runId: records.run.id,
@@ -133,11 +145,12 @@ export function buildSummary(records: RunRecords, results: Result[], path: strin
     path,
     pass: results.every((r) => r.pass),
     ok: results.every(passesGate),
-    hits: countHits(records.hits),
+    hits: countHits(records.hits, records.run.canaries),
     ...(dataLayer.pushes > 0 && { dataLayer }),
     ...(tags && { tags }),
     epochs: records.consentEpochs.map((e) => ({ label: e.label, state: stateName(e.state), startT: e.startT, endT: e.endT })),
     flags: records.flags.map((f) => ({ kind: f.kind, detail: redactFlagDetail(f.detail, f.kind) })),
+    ...(records.run.canaries && { canaries: [...records.run.canaries.map((c) => c.name), 'email', 'phone'] }),
     ...(testPayment && { testPayment }),
     ...(records.run.testServerContainer && { testServerContainer: true as const }),
     ...(serverContainer && { serverContainer }),
@@ -322,6 +335,7 @@ export function formatSummary(summary: Summary): string {
     const { provider, host, testMode } = summary.testPayment;
     lines.push(`TEST PAYMENT: ${provider} on ${host} (test mode ${testMode === 'declared' ? 'declared' : 'on page'})`);
   }
+  if (summary.canaries) lines.push(`Canaries: ${summary.canaries.filter((n) => n !== 'email' && n !== 'phone').join(', ')} on the start URL; identity email and phone`);
   lines.push(...serverContainerLines(summary));
   lines.push('Hits');
   const vendors = Object.entries(summary.hits);

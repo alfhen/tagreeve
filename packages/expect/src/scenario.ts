@@ -152,6 +152,8 @@ export interface ScenarioOptions {
   viewport?: Viewport;
   /** The selector `suite --consent` clicks to open the site's cookie settings in the `withdraw` cell. */
   withdrawWith?: string;
+  /** Put six fake click IDs on the start URL. A start URL that already holds one is refused. */
+  canaries?: boolean;
   /** Severity per built-in check. A check that is not listed is `fail`, except `earlyIdentifiers`, `consentModeSetup`, `earlyIdentityPush`, `idHandover` and `serverContainerRejected`, which are `warn`. */
   builtins?: Partial<Record<BuiltinName, Severity>>;
 }
@@ -201,7 +203,7 @@ const NETWORKS = ['stub', 'server'];
 const CONSENT_ANSWERS = ['accept', 'reject', 'none', 'withdraw'];
 const STEP_KINDS = ['visit', 'click', 'fill', 'select', 'consent', 'wait', 'addToCart', 'evaluate', 'checkpoint', 'handoff', 'payment'];
 const TOP_KEYS = ['start', 'vars', 'identity', 'steps', 'expect', 'options'];
-const OPTION_KEYS = ['network', 'seed', 'consentTimeout', 'graceWindow', 'optionalTimeout', 'allowUnknownDestination', 'firstPartyHosts', 'platformHosts', 'cartRequest', 'unloadGapIgnore', 'dataLayerNames', 'builtins', 'identifierFields', 'serverHosts', 'viewport', 'withdrawWith'];
+const OPTION_KEYS = ['network', 'seed', 'consentTimeout', 'graceWindow', 'optionalTimeout', 'allowUnknownDestination', 'firstPartyHosts', 'platformHosts', 'cartRequest', 'unloadGapIgnore', 'dataLayerNames', 'builtins', 'identifierFields', 'serverHosts', 'viewport', 'withdrawWith', 'canaries'];
 export const MAX_DATALAYER_NAMES = 8;
 export const DATALAYER_NAME_PATTERN = /^[A-Za-z_$][\w$]{0,63}$/;
 export const NEVER_TRAPPED_NAMES: readonly string[] = ['location', 'Shopify', '__proto__', 'constructor', 'prototype'];
@@ -327,6 +329,9 @@ export function parseOptions(raw: unknown, path: Path, fail: (path: Path, messag
       } else if (k === 'withdrawWith') {
         if (typeof v === 'string' && v.trim() !== '') options.withdrawWith = v;
         else fail(p, 'must be a selector such as "#cookie-settings"');
+      } else if (k === 'canaries') {
+        if (typeof v === 'boolean') options.canaries = v;
+        else fail(p, 'must be true or false');
       } else if (k === 'identifierFields') {
         if (!Array.isArray(v) || v.length === 0 || !v.every((x) => typeof x === 'string' && x !== '')) fail(p, 'must be a non-empty list of field names or globs such as user_data.*');
         else if (v.some((x: string) => x.length > MAX_FIELD_NAME)) fail(p, `field names are at most ${MAX_FIELD_NAME} characters`);

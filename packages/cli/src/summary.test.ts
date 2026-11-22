@@ -24,6 +24,11 @@ test('counts hits per vendor and event', () => {
   });
 });
 
+test('counts name a canary value used as an event name', () => {
+  const canaries = [{ source: 'urlParam' as const, name: 'gclid', value: 'TEST-GCLID-7-RUN-0001' }];
+  expect(countHits([hit('ga4', 'TEST-GCLID-7-RUN-0001'), hit('ga4', 'page_view')], canaries)).toEqual({ ga4: { '(url param gclid)': 1, page_view: 1 } });
+});
+
 test('exit code is 1 when any result fails', () => {
   expect(exitCodeFor([result(true), result(true)])).toBe(0);
   expect(exitCodeFor([result(true), result(false)])).toBe(1);
@@ -725,4 +730,36 @@ test('possibleRealDataPush flags collapse into one counted line', () => {
   const text = formatSummary({ ...base, flags });
   expect(text.split('\n').filter((l) => l.includes('possibleRealDataPush'))).toEqual(['  possibleRealDataPush: x3']);
   expect(text).not.toContain('fake.person');
+});
+
+function canaryRecords(withCanaries: boolean): RunRecords {
+  const canaries = ['gclid', 'gbraid', 'wbraid', 'fbclid', 'msclkid', 'ttclid'].map((name) => ({ source: 'urlParam', name, value: `TEST-${name.toUpperCase()}-7-RUN-0001` }));
+  return { run: { id: newId('run'), ...(withCanaries && { canaries }) }, hits: [], requests: [], consentEpochs: [], flags: [], steps: [] } as unknown as RunRecords;
+}
+
+test('a canary run shows the Canaries line and names in --json, and never a value', () => {
+  const summary = buildSummary(canaryRecords(true), [], 'run.jsonl');
+  expect(formatSummary(summary)).toContain('Canaries: gclid, gbraid, wbraid, fbclid, msclkid, ttclid on the start URL; identity email and phone');
+  expect(summary.canaries).toEqual(['gclid', 'gbraid', 'wbraid', 'fbclid', 'msclkid', 'ttclid', 'email', 'phone']);
+  expect(JSON.stringify(summary)).not.toContain('TEST-');
+});
+
+test('buildSummary names canary forms in hit events and dataLayer labels, never the value', () => {
+  const records = canaryRecords(true);
+  const value = 'TEST-GCLID-7-RUN-0001';
+  const encoded = Buffer.from(value).toString('base64');
+  records.hits = [{ vendor: 'ga4', event: value }, { vendor: 'ga4', event: encoded }] as unknown as RunRecords['hits'];
+  records.dataLayerEvents = [{ id: 'dle_1', stepId: null, event: value, args: [{ event: value }], isConsentCommand: false, frame: { main: true, n: 0 } }] as unknown as RunRecords['dataLayerEvents'];
+  const summary = buildSummary(records, [], 'run.jsonl');
+  const text = formatSummary(summary) + JSON.stringify(summary);
+  expect(text).not.toContain(value);
+  expect(text).not.toContain(encoded);
+  expect(summary.hits.ga4).toEqual({ '(url param gclid)': 2 });
+  expect(JSON.stringify(summary.dataLayer)).toContain('(url param gclid)');
+});
+
+test('a run without canaries has no Canaries line and no canaries key', () => {
+  const summary = buildSummary(canaryRecords(false), [], 'run.jsonl');
+  expect(formatSummary(summary)).not.toContain('Canaries:');
+  expect(summary).not.toHaveProperty('canaries');
 });

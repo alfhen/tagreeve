@@ -90,6 +90,12 @@ export interface GtmOverrideRecord {
   applied: GtmOverrideApplied[];
 }
 
+export interface Canary {
+  source: 'urlParam';
+  name: string;
+  value: string;
+}
+
 export interface Run {
   type: 'run';
   id: Id<'run'>;
@@ -108,6 +114,8 @@ export interface Run {
   containerVersions: Record<string, string>;
   identity: Identity | null;
   identitySeed?: number;
+  /** Set when the scenario asked for `options.canaries`: the fake click IDs put on the start URL. */
+  canaries?: Canary[];
   coverage?: CaptureCoverage;
   /** The grace window the consent epochs were judged with: the scenario's `graceWindow`, or the default. */
   graceWindowMs?: number;

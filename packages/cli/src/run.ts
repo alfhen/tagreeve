@@ -1,6 +1,6 @@
 import { appendFile, readFile, rename, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { readRun, type TagreeveRecord, type Result, type Run, type RunRecords } from '@tagreeve/core';
+import { canaryValues, CANARY_NAMES, readRun, type Canary, type TagreeveRecord, type Result, type Run, type RunRecords } from '@tagreeve/core';
 import { parseTrackerList, type TrackerEntry } from '@tagreeve/decoders';
 import { DEFAULT_GRACE_MS, evaluate, isLoopbackPattern, mergeOptions, parseScenario, ScenarioError, type Scenario, type Viewport } from '@tagreeve/expect';
 import {
@@ -33,7 +33,7 @@ import { warnIfNotIgnored } from './git-ignore.ts';
 import { resolveRunFolder } from './out-dir.ts';
 import { NET_LOG_NEEDS_LIVE, UsageError, type Network, type RunArgs, type SuiteArgs } from './args.ts';
 import { ALLOW_TEST_PAYMENT_NEEDS_SITE, loadProjectConfig, ProjectConfigLoadError, siteMissingMessage, type LoadedConfig } from './project-config.ts';
-import { applyBaseline, buildSummary, exitCodeFor, formatSummary, type Summary } from './summary.ts';
+import { applyBaseline, buildSummary, exitCodeFor, formatSummary, maskCanaries, type Summary } from './summary.ts';
 import { acceptsDeclaration, checkTestPaymentGates, testPaymentHostsPath } from './test-payment-hosts.ts';
 import { readVersion } from './version.ts';
 
@@ -200,9 +200,9 @@ function storeCellSite(site: string): string {
   return new URL(site).origin;
 }
 
-export async function labelRecord(path: string, spec: Pick<RunSpec, 'label' | 'store' | 'consentCell' | 'variant' | 'out' | 'site'>): Promise<string> {
-  const { label, store, consentCell, variant, out, site } = spec;
-  if (label === undefined && store === undefined && !variant) return path;
+export async function labelRecord(path: string, spec: Pick<RunSpec, 'label' | 'store' | 'consentCell' | 'variant' | 'out' | 'site'> & { canaries?: Canary[] }): Promise<string> {
+  const { label, store, consentCell, variant, out, site, canaries } = spec;
+  if (label === undefined && store === undefined && !variant && !canaries) return path;
   const text = await readFile(path, 'utf8');
   const newline = text.indexOf('\n');
   const run = {
@@ -210,6 +210,7 @@ export async function labelRecord(path: string, spec: Pick<RunSpec, 'label' | 's
     ...(label !== undefined && { label }),
     ...(store !== undefined && { store, site: storeCellSite(site) }),
     ...(consentCell !== undefined && { consentCell }),
+    ...(canaries && { canaries }),
     ...(variant && { variant: variant.name }),
   };
   await writeFile(path, `${JSON.stringify(run)}${text.slice(newline)}`);
@@ -234,17 +235,66 @@ function declarationHint(spec: RunSpec, label: string | undefined): string | und
   return `Declare it in ${testPaymentHostsPath()} with ${hints.join(' or ')} if this store is in test mode.`;
 }
 
+function queryNames(start: string): string[] {
+  const query = start.split('#')[0]!.split('?').slice(1).join('?');
+  return query.split('&').map((pair) => {
+    const raw = pair.split('=')[0]!;
+    try {
+      return decodeURIComponent(raw.replace(/\+/g, ' '));
+    } catch {
+      return raw;
+    }
+  });
+}
+
+function withCanaries(start: string, canaries: Canary[], probe = start): string {
+  const hash = start.indexOf('#');
+  const base = hash < 0 ? start : start.slice(0, hash);
+  const tail = hash < 0 ? '' : start.slice(hash);
+  const probeHash = probe.indexOf('#');
+  const probeBase = probeHash < 0 ? probe : probe.slice(0, probeHash);
+  const added = canaries.map((c) => `${c.name}=${encodeURIComponent(c.value)}`).join('&');
+  return `${base}${probeBase.includes('?') ? (/[?&]$/.test(probeBase) ? '' : '&') : '?'}${added}${tail}`;
+}
+
+const nameCanaries = maskCanaries;
+
+async function scrubStepErrors(path: string, canaries: Canary[]): Promise<void> {
+  const lines = (await readFile(path, 'utf8')).split('\n');
+  const kept = lines.map((line, i) => (i > 0 && line.startsWith('{"type":"step"') ? nameCanaries(line, canaries) : line));
+  await writeFile(path, kept.join('\n'));
+}
+
 export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> {
-  const { parsed, gtmOverride, variant } = spec;
+  const { gtmOverride, variant } = spec;
+  let parsed = spec.parsed;
+  let canaries: Canary[] | undefined;
+  let seed = spec.seed;
   let io = rawIo;
   const scrubber = gtmOverride ? new Scrubber(gtmOverride.gtmAuth) : undefined;
   if (scrubber) {
     io = { stdout: (t) => rawIo.stdout(scrubber.text(t)), stderr: (t) => rawIo.stderr(scrubber.text(t)) };
   }
   const failed = (error: string): RunOutcome => {
+    if (canaries) error = nameCanaries(error, canaries);
     io.stderr(error);
     return { code: 2, error: scrubber ? scrubber.text(error) : error };
   };
+
+  if (parsed.options.canaries) {
+    const resolved = parsed.start.replace(/\{(\w+)\}/g, (m, name: string) => parsed.vars[name] ?? m);
+    const held = queryNames(resolved);
+    const taken = CANARY_NAMES.find((name) => held.includes(name));
+    if (taken) return failed(`options.canaries: the start URL already holds the ${taken} parameter. Remove it from start, or turn canaries off.\n`);
+    seed ??= parsed.options.seed ?? Math.floor(Math.random() * 2 ** 31);
+    canaries = canaryValues(seed, spec.consentCell);
+    // A var value that holds a {name} placeholder would be filled again by the visit step, so plant on the unresolved start then.
+    const refilled = [...resolved.matchAll(/\{(\w+)\}/g)].some((m) => Object.hasOwn(parsed.vars, m[1]!));
+    if (refilled && Object.values(parsed.vars).some((v) => v.includes('#'))) {
+      return failed('options.canaries: a variable value holds both a {placeholder} and a #, so the canary parameters could land in the URL fragment. Remove one, or turn canaries off.\n');
+    }
+    parsed = { ...parsed, start: refilled ? withCanaries(parsed.start, canaries, resolved) : withCanaries(resolved, canaries) };
+  }
 
   let records: RunRecords;
   let path: string;
@@ -261,7 +311,7 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
       unloadGapIgnore: parsed.options.unloadGapIgnore,
       dataLayerNames: parsed.options.dataLayerNames,
       graceWindowMs: parsed.options.graceWindow ?? DEFAULT_GRACE_MS,
-      seed: spec.seed,
+      seed,
       headed: spec.headed,
       viewport: spec.viewport ?? parsed.options.viewport,
       netLog: spec.netLog,
@@ -284,20 +334,22 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
     if (declareHint) text += `${declareHint}\n`;
     const written = (error instanceof StepError || error instanceof GtmOverrideFailure || error instanceof ServerContainerFailure) && error.run ? error.run.path : undefined;
     if (written) {
-      const kept = await labelRecord(written, spec);
+      const kept = await labelRecord(written, { ...spec, canaries });
+      if (canaries) await scrubStepErrors(kept, canaries);
       text += `Record: ${kept}\n`;
       return { ...failed(text), path: kept };
     }
     return failed(text);
   }
 
-  path = await labelRecord(path, spec);
+  path = await labelRecord(path, { ...spec, canaries });
   if (spec.label !== undefined) records.run.label = spec.label;
   if (spec.store !== undefined) {
     records.run.store = spec.store;
     records.run.site = storeCellSite(spec.site);
   }
   if (spec.consentCell !== undefined) records.run.consentCell = spec.consentCell;
+  if (canaries) records.run.canaries = canaries;
   if (variant) records.run.variant = variant.name;
   let results: Result[] = evaluate(allRecords(records), parsed);
   if (scrubber) results = scrubber.deep(results);

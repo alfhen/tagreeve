@@ -1,10 +1,29 @@
-import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { RunArgs } from './args.ts';
 import { parseScenario } from '@tagreeve/expect';
 import { prepareServerContainer, resolveNetwork, runCommand } from './run.ts';
+
+const failStart = vi.hoisted(() => ({ on: false, message: undefined as string | undefined, seen: undefined as unknown as { start: string; vars: Record<string, string> } | undefined }));
+
+vi.mock('@tagreeve/recorder', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tagreeve/recorder')>();
+  return {
+    ...actual,
+    recordScenario: async (opts: Parameters<typeof actual.recordScenario>[0]) => {
+      failStart.seen = { start: opts.parsed.start, vars: opts.parsed.vars };
+      if (!failStart.on) return actual.recordScenario(opts);
+      const path = join(opts.outDir!, 'failed-start.jsonl');
+      const step = JSON.stringify({ type: 'step', index: 0, label: 'start', error: `navigation to ${opts.parsed.start} failed` });
+      await writeFile(path, `{"type":"run"}\n${step}\n`);
+      const error = new actual.StepError('start', failStart.message ?? `navigation to ${opts.parsed.start} failed`);
+      error.run = { path } as never;
+      throw error;
+    },
+  };
+});
 
 test('--var for an inherited name exits 2 as undeclared', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
@@ -177,4 +196,105 @@ test('a bad digest override of the base image exits 2', async () => {
     expect(r.spec).toBeUndefined();
     expect(r.err).toContain('TAGREEVE_SERVER_CONTAINER_BASE');
   }
+});
+
+test('canaries refuse a start URL whose variable resolves to a canary name, and allow a case variant', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
+  const scenario = join(dir, 's.yaml');
+  await writeFile(scenario, 'start: /plain/product?{key}=pw-1\nvars: { key: gclid }\noptions: { canaries: true }\nsteps:\n  - visit: /\nexpect:\n  must: []\n  mustNot: []\n');
+  const err: string[] = [];
+  const code = await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: {}, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err.push(t) });
+  expect(code).toBe(2);
+  expect(err.join('')).toContain('already holds the gclid parameter');
+  await writeFile(scenario, 'start: /plain/product?GCLID=pw-1\noptions: { canaries: true }\nsteps:\n  - visit: /\nexpect:\n  must: []\n  mustNot: []\n');
+  const err2: string[] = [];
+  failStart.on = true;
+  try {
+    await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: {}, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err2.push(t) });
+  } finally {
+    failStart.on = false;
+  }
+  expect(err2.join('')).not.toContain('already holds');
+});
+
+test.each(['gclid', 'ttclid'])('canaries refuse a start URL that holds %s, name it and echo no value', async (name) => {
+  const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
+  const scenario = join(dir, 's.yaml');
+  const start = `/plain/product?${name}=pw-1`;
+  await writeFile(scenario, `start: ${start}\noptions: { canaries: true }\nsteps:\n  - visit: /\nexpect:\n  must: []\n  mustNot: []\n`);
+  const text = await readFile(scenario, 'utf8');
+  expect(text).toContain('pw-1');
+  expect(text.split('\n')[0]).toBe(`start: ${start}`);
+  const err: string[] = [];
+  const code = await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: {}, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err.push(t) });
+  const out = err.join('');
+  expect(code).toBe(2);
+  expect(out).toContain(name);
+  for (const leak of ['pw-1', start, `http://127.0.0.1:9${start}`, `?${name}=`, 'unknown option', 'Run failed']) expect(out).not.toContain(leak);
+});
+
+test('a failed start visit of a canary run prints and records no canary value', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
+  const scenario = join(dir, 's.yml');
+  await writeFile(scenario, 'start: /plain/product\noptions: { canaries: true, seed: 7 }\nsteps:\n  - wait: 1s\nexpect:\n  must: []\n  mustNot: []\n');
+  const err: string[] = [];
+  failStart.on = true;
+  let code: number;
+  try {
+    code = await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: {}, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err.push(t) });
+  } finally {
+    failStart.on = false;
+  }
+  expect(code).toBe(2);
+  expect(err.join('')).not.toContain('TEST-');
+  const file = (await readdir(dir)).find((f) => f.endsWith('.jsonl'))!;
+  const lines = (await readFile(join(dir, file), 'utf8')).split('\n').filter(Boolean);
+  expect((JSON.parse(lines[0]!) as { canaries?: unknown[] }).canaries).toHaveLength(6);
+  expect(lines.filter((l) => l.startsWith('{"type":"step"')).join('')).not.toContain('TEST-');
+});
+
+test('a failed canary run names the base64 forms of a canary value too', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
+  const scenario = join(dir, 's.yml');
+  await writeFile(scenario, 'start: /plain/product\noptions: { canaries: true, seed: 7 }\nsteps:\n  - wait: 1s\nexpect:\n  must: []\n  mustNot: []\n');
+  const value = 'TEST-GCLID-7-RUN-0001';
+  const forms = [Buffer.from(value).toString('base64'), Buffer.from(value).toString('base64url')];
+  const err: string[] = [];
+  failStart.message = `evaluate threw ${forms.join(' and ')}`;
+  failStart.on = true;
+  try {
+    await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: {}, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err.push(t) });
+  } finally {
+    failStart.on = false;
+    failStart.message = undefined;
+  }
+  const out = err.join('');
+  for (const form of forms) expect(out).not.toContain(form);
+  expect(out).toContain('(url param gclid)');
+});
+
+test('a canary run whose var value holds a placeholder keeps the start unresolved, so the visit step fills it once', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
+  const scenario = join(dir, 's.yml');
+  await writeFile(scenario, 'start: /p/{key}\nvars:\n  key: x\n  next: y\noptions: { canaries: true, seed: 7 }\nsteps:\n  - wait: 1s\nexpect:\n  must: []\n  mustNot: []\n');
+  failStart.on = true;
+  failStart.seen = undefined;
+  try {
+    await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: { key: '{next}' }, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: () => undefined });
+  } finally {
+    failStart.on = false;
+  }
+  const seen = failStart.seen as { start: string; vars: Record<string, string> } | undefined;
+  expect(seen?.start.startsWith('/p/{key}?gclid=')).toBe(true);
+  expect(seen?.vars.key).toBe('{next}');
+});
+
+test('a canary run refuses a var value that holds a placeholder and a #', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
+  const scenario = join(dir, 's.yml');
+  await writeFile(scenario, 'start: /p/{key}\nvars:\n  key: x\n  next: y\noptions: { canaries: true, seed: 7 }\nsteps:\n  - wait: 1s\nexpect:\n  must: []\n  mustNot: []\n');
+  const err: string[] = [];
+  const code = await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: { key: '{next}#frag' }, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err.push(t) });
+  expect(code).toBe(2);
+  expect(err.join('')).toContain('fragment');
 });
