@@ -111,15 +111,23 @@ function scan(text: string, pool: CanaryPool, transforms: ReadonlyMap<string, st
 
 function occurrencesOf(req: Request, url: URL, hits: readonly Hit[], searchBody: boolean, pool: CanaryPool, transforms: ReadonlyMap<string, string>): Occurrence[] {
   const out: Occurrence[] = [];
-  const add = (raw: string, value: string, field = guardFieldName(raw)) => {
+  const add = (raw: string, value: string, field = pool.match(raw) === undefined ? guardFieldName(raw) : OTHER_NAME) => {
     for (const { name, transform } of scan(value, pool, transforms)) {
       if (!out.some((o) => o.name === name && o.transform === transform && o.field === field && o.value === value)) out.push({ name, transform, raw, field, value });
     }
   };
-  for (const [key, value] of url.searchParams) add(key, value);
+  for (const [key, value] of url.searchParams) {
+    add(key, value);
+    add(key, key, OTHER_NAME);
+  }
   for (const segment of url.pathname.split('/')) if (segment) add(PATH_FIELD, decodeOrSame(segment), PATH_FIELD);
   const hash = url.hash.slice(1);
-  if (hash.includes('=')) for (const [key, value] of new URLSearchParams(hash)) add(key, value);
+  if (hash.includes('=')) {
+    for (const [key, value] of new URLSearchParams(hash)) {
+      add(key, value);
+      add(key, key, OTHER_NAME);
+    }
+  }
   else if (hash) add(FRAGMENT_FIELD, hash, FRAGMENT_FIELD);
   if (searchBody && req.postData) {
     for (const { name, value } of bodyEntries(req).entries) {
@@ -132,7 +140,12 @@ function occurrencesOf(req: Request, url: URL, hits: readonly Hit[], searchBody:
       if (req.postData.includes(form) && !out.some((o) => o.name === name)) out.push({ name, transform: transforms.get(form) ?? 'other', raw: BODY_FIELD, field: BODY_FIELD, value: form });
     }
   }
-  for (const hit of hits) for (const [key, value] of Object.entries(hit.params)) add(key, value);
+  for (const hit of hits) {
+    for (const [key, value] of Object.entries(hit.params)) {
+      add(key, value);
+      add(key, key, OTHER_NAME);
+    }
+  }
   return out;
 }
 
@@ -178,7 +191,7 @@ export function buildCanaryFlags(input: CanaryRouteInput): Flag[] {
     const binary = isBinaryBody(req);
     if (binary) skipped.binary.add(req.id);
     else if (req.postData !== null && req.postData.length >= MAX_POST_DATA) skipped.cut.add(req.id);
-    if (req.captured === 'netlog' && req.postData === null) skipped.netLog.add(req.id);
+    if (req.captured === 'netlog' && req.postData === null && req.method !== 'GET' && req.method !== 'HEAD') skipped.netLog.add(req.id);
     const own = hitsByRequest.get(req.id) ?? [];
     const occurrences = occurrencesOf(req, url, own, !binary, pool, transforms);
     const vendor = own[0]?.vendor ?? 'unknown';
@@ -196,7 +209,7 @@ export function buildCanaryFlags(input: CanaryRouteInput): Flag[] {
   const ids = [...new Set([...skipped.binary, ...skipped.cut, ...skipped.netLog])];
   const what = `${plural(canaries.length, 'canary value')}${identity ? ' and the identity email and phone' : ''}`;
   const detail =
-    `Searched ${plural(searched, 'request')} to non-first-party hosts for ${what} as plain text, URL-encoded, base64, base64url and SHA-256 (hex, base64, base64url). ` +
+    `Searched ${plural(searched, 'request')} to non-first-party hosts for ${what} as plain text, URL-encoded, base64, base64url and SHA-256 (hex, base64, base64url), and with the GCL. and fb.1. cookie prefixes. ` +
     'Searched: URL, body and decoded fields. Not searched: headers (Referer and Cookie). ' +
     `Skipped: compressed or binary body ${skipped.binary.size}, body cut at 64 KiB ${skipped.cut.size}, net-log request with no body ${skipped.netLog.size}.`;
   flags.push({ type: 'flag', id: newId('flag'), runId, kind: 'canarySearch', recordIds: ids, detail });

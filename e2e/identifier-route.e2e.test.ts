@@ -80,6 +80,8 @@ test('the relay page sets the first-party cookies _pw_click and _pw_other', () =
 test('send=granted sends no conversion while consent is rejected', async () => {
   const { text, result } = await runCopy('route-granted-', (t) => t.replace('visit: /click-id-relay-send', 'visit: /click-id-relay-send?send=granted'));
   expect(text).toContain('/click-id-relay-send?send=granted');
+  expect(result.failed).toEqual(reject.failed);
+  expect(result.records!.requests.some((q) => q.url.includes('/click-id-relay-send?send=granted'))).toBe(true);
   expect(adsRequest(reject.records!)).toBeDefined();
   expect(adsRequest(result.records!)).toBeUndefined();
   expect(routes(result.records!).filter((f) => f.route!.sink.vendor === 'google-ads')).toEqual([]);

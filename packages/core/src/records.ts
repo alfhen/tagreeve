@@ -412,7 +412,7 @@ export interface RouteSink {
   vendor: string;
   /** The name of the field that held the value, as `(other)` when it looks like a value. Never a raw value-like name. */
   field: string;
-  /** How the value was written: `plain`, `url`, `base64`, `base64url` or `sha256`. */
+  /** How the value was written: `plain`, `url`, `base64`, `base64url`, `sha256`, or `other` for a cookie prefix such as `GCL.` or `fb.1.`. */
   transform: string;
 }
 
