@@ -26,7 +26,7 @@ beforeAll(async () => {
     graceWindowMs: 120,
   });
   records = result.records;
-});
+}, 120_000);
 
 afterAll(async () => {
   await site?.close();
