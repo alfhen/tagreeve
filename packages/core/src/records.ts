@@ -428,12 +428,21 @@ export interface CookieHop {
   checkpointId: Id<'ckp'>;
 }
 
+/** A step from a browser hit to a server call. `hitId` is the browser hit. Only the type lives here. */
+export interface HitHop {
+  kind: 'hit';
+  hitId: Id<'hit'>;
+  confidence: HitVia['confidence'];
+}
+
+export type RouteHop = CookieHop | HitHop;
+
 export interface FlagRoute {
   kind: RouteKind;
   source: RouteSource;
   sink: RouteSink;
   /** The steps between source and sink. Empty until a hop is traced. */
-  hops: CookieHop[];
+  hops: RouteHop[];
 }
 
 export interface Flag {

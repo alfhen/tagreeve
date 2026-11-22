@@ -232,7 +232,7 @@ describe('the cookie hop', () => {
     const r = sink();
     const first = checkpoint('first', 1);
     const second = checkpoint('second', 3);
-    expect(run(r, [second, first])[0]!.route!.hops[0]!.checkpointId).toBe(first.id);
+    expect(run(r, [second, first])[0]!.route!.hops[0]).toMatchObject({ checkpointId: first.id });
   });
 
   test('a third-party cookie gives no hop', () => {
@@ -263,7 +263,7 @@ describe('the cookie hop', () => {
     const ckp = checkpoint('relay', 1, { name: 'jane@shop.example.net' });
     expect(ckp.cookies[0]!.name).toBe('jane@shop.example.net');
     const flags = run(sink(), [ckp]);
-    expect(flags[0]!.route!.hops[0]!.name).toBe('(other)');
+    expect(flags[0]!.route!.hops[0]).toMatchObject({ name: '(other)' });
     expect(flags[0]!.detail).toContain('cookie (other) (checkpoint');
     expect(JSON.stringify(flags)).not.toContain('jane@shop.example.net');
   });
