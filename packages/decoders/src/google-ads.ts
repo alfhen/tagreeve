@@ -1,4 +1,5 @@
 import type { Hit, Request } from '@tagreeve/core';
+import { PAGE_FIELDS } from './page-fields.ts';
 import { defaultHitId, type Decoder, type NewHitId } from './decoder.ts';
 import { bodyComplete, queryEntries, withFields } from './fields.ts';
 import { decodeGa4Consent } from './ga4.ts';
@@ -91,7 +92,7 @@ export const googleAds: Decoder = {
         event: p.get('en') ?? (REMARKETING.test(ping.url.pathname) ? 'remarketing' : 'conversion'),
         consent: decodeGa4Consent(p),
         ids,
-        page: p.get('url') ?? p.get('dl'),
+        page: p.get(PAGE_FIELDS['google-ads'].page[0]) ?? p.get(PAGE_FIELDS['google-ads'].page[1]),
         transport: req.resourceType === 'ping' ? 'beacon' : req.resourceType,
         params,
       }, queryEntries(p), bodyComplete(req)),

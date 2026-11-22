@@ -1,5 +1,6 @@
 import type { Hit, Request } from '@tagreeve/core';
 import { decodeBase64Text } from './base64.ts';
+import { PAGE_FIELDS } from './page-fields.ts';
 import { defaultHitId, type Decoder, type NewHitId } from './decoder.ts';
 import { bodyComplete, bodyEntries, jsonEntries, queryEntries, withFields } from './fields.ts';
 import { decodeGa4Consent } from './ga4.ts';
@@ -64,7 +65,7 @@ function dataRequest(req: Request, viaLoader: boolean): URL | undefined {
   if (Object.keys(parseDtdc(p.get('dtdc'))).length > 0) return url;
   if (p.has('v') && (p.has('event') || p.has('en'))) return url;
   const body = req.method === 'POST' ? parseObject(req.postData) : {};
-  if (str(body.event_name) && str(body.page_location)) return url;
+  if (str(body.event_name) && str(body[PAGE_FIELDS.sgtm.page[0]])) return url;
   return isCutDataBody(req) ? url : undefined;
 }
 
@@ -74,7 +75,7 @@ function dataRequest(req: Request, viaLoader: boolean): URL | undefined {
  */
 function isCutDataBody(req: Request): boolean {
   if (req.method !== 'POST' || req.postData === null || bodyComplete(req) || !req.postData.startsWith('{')) return false;
-  return /"event_name"\s*:/.test(req.postData) && /"page_location"\s*:/.test(req.postData);
+  return /"event_name"\s*:/.test(req.postData) && new RegExp(`"${PAGE_FIELDS.sgtm.page[0]}"\\s*:`).test(req.postData);
 }
 
 export const sgtmDataClient: Decoder = {
@@ -113,7 +114,7 @@ export const sgtmDataClient: Decoder = {
         event: p.get('event') ?? p.get('en') ?? str(dtdc.event_name) ?? str(body.event_name) ?? null,
         consent: decodeGa4Consent(p),
         ids,
-        page: str(dtdc.page_location) ?? str(body.page_location) ?? null,
+        page: str(dtdc[PAGE_FIELDS.sgtm.page[0]]) ?? str(body[PAGE_FIELDS.sgtm.page[0]]) ?? null,
         transport: req.resourceType === 'ping' ? 'beacon' : req.resourceType,
         params,
       }, entries, complete),
