@@ -763,3 +763,21 @@ test('a run without canaries has no Canaries line and no canaries key', () => {
   expect(formatSummary(summary)).not.toContain('Canaries:');
   expect(summary).not.toHaveProperty('canaries');
 });
+
+describe('canary flags in the text summary', () => {
+  const route = (i: number) => ({ kind: 'identifierRoute', detail: `url param gclid -> request to host${i}.example, param x${i}, base64` });
+  const searched = { kind: 'canarySearch', detail: 'Searched 4 requests to non-first-party hosts. Not searched: headers (Referer and Cookie).' };
+
+  test('shows at most 5 route lines and the searched line', () => {
+    const text = formatSummary({ ...base, flags: [...Array.from({ length: 7 }, (_, i) => route(i)), searched] });
+    expect(Array.from({ length: 7 }, (_, i) => text.includes(`host${i}.example`)).filter(Boolean)).toHaveLength(5);
+    expect(text.split('\n').filter((l) => l.includes('canarySearch'))).toHaveLength(1);
+    expect(text).toContain('2 more routes in the record');
+  });
+
+  test('a run with fewer routes shows each of them', () => {
+    const text = formatSummary({ ...base, flags: [route(0), route(1), route(2), searched] });
+    for (const i of [0, 1, 2]) expect(text).toContain(`host${i}.example`);
+    expect(text).not.toContain('more routes');
+  });
+});

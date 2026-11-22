@@ -242,6 +242,15 @@ A small shop with a stand-in Google Tag Manager container and no Shopify page, h
 
 `banner.js` sets a Consent Mode default of denied and pushes a `consent update` on the banner answer. `plain-gtm.js` is the stand-in for `gtm.js` and `gtag.js`. On each page it pushes `gtm.js`, a `page_view` event, `gtm.dom` and `gtm.load`. It sends a GA4 hit for each event (`tid=G-PWTEST0001`) and, for `purchase`, a Google Ads conversion for `AW-000000001`. Every hit carries `gcs` and `gcd` for the consent state at that moment. Any other path under `/plain/` is a 404.
 
+## Click ID relay pages
+
+Two plain pages that load `assets/banner.js`. They need no network.
+
+| Page | Switches | What it sends or does | Consent step |
+| --- | --- | --- | --- |
+| `/click-id-relay` | none | Reads `gclid` from the URL and writes it to the first-party cookie `_pw_click`. Sets `_pw_other=TEST-NOCANARY-0001`, which is not a canary. Sends a GA4 `page_view` for `G-PWTEST0001` whose `dl` is the page URL. | None. |
+| `/click-id-relay-send` | `?send=granted` | Sends the `_pw_click` value base64 encoded in a Google Ads conversion request for `AW-000000001`, as the parameter `x`. With `send=granted` it sends only once consent is granted. | Accept for `send=granted`. |
+
 ## Stand-in server container
 
 `standInContainerPath` (from `@tagreeve/fixture-site`) is the absolute path of `src/stand-in-container.ts`, an executable Node script that stands in for the server container image. A test sets `TAGREEVE_TEST_SERVER_CONTAINER_CMD` to it. The runner then starts it in place of `docker run`, with `PORT`, `HTTP_PROXY` and `NODE_EXTRA_CA_CERTS`. It needs no Docker and no network.

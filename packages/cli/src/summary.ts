@@ -175,12 +175,20 @@ export function exitCodeFor(results: Result[]): 0 | 1 {
   return results.every(passesGate) ? 0 : 1;
 }
 
+const ROUTE_LINES = 5;
+
 function formatFlags(flags: Summary['flags']): string[] {
   const lines: string[] = [];
   const groups = new Map<string, { kind: string; host: string; count: number; paths: Set<string> }>();
   let realData = 0;
   let realDataPush = 0;
+  let routes = 0;
   for (const f of flags) {
+    if (f.kind === 'identifierRoute') {
+      routes += 1;
+      if (routes <= ROUTE_LINES) lines.push(`  identifierRoute: ${f.detail}`);
+      continue;
+    }
     if (f.kind === 'possibleRealData') {
       realData += 1;
       continue;
@@ -207,6 +215,7 @@ function formatFlags(flags: Summary['flags']): string[] {
     const more = paths.size - shown.length;
     lines.push(`  ${kind}: ${host} x${count} (${shown.join(', ')}${more > 0 ? ` and ${more} more` : ''})`);
   }
+  if (routes > ROUTE_LINES) lines.push(`  ${routes - ROUTE_LINES} more routes in the record`);
   if (realData > 0) lines.push(`  possibleRealData: x${realData}`);
   if (realDataPush > 0) lines.push(`  possibleRealDataPush: x${realDataPush}`);
   lines.push(...platformHostLines(flags));
@@ -218,7 +227,7 @@ const URL_PARTS = /^(?:(?:([a-z][a-z0-9+.-]*:)?\/\/)([^/?#]*))?([^?#]*)(?:\?([^#
 // The URL runs to the end of the detail, so a space inside it does not end it.
 const RECEIVED_PAGE = /^(\S+ received )(.+)( as the page)$/s;
 // A kind not listed here is masked by default, so a new kind cannot leak a URL at the end of its detail.
-const PROSE_KINDS = new Set(['possibleRealData', 'possibleRealDataPush', 'unloadGap', 'netLogUnreadable', 'serverContainerFailed', 'dataLayerReassigned', 'dataLayerNotHooked', 'dataLayerIncomplete']);
+const PROSE_KINDS = new Set(['possibleRealData', 'possibleRealDataPush', 'unloadGap', 'netLogUnreadable', 'serverContainerFailed', 'dataLayerReassigned', 'dataLayerNotHooked', 'dataLayerIncomplete', 'identifierRoute', 'canarySearch']);
 const URL_AT_END = /^(.*?(?:\b[A-Z]+ |: ))((?:[a-z][a-z0-9+.-]*:)?\/\/.*|\/.*)$/s;
 
 // A raw name is checked, so a decoded `&`, `=`, `?` or space cannot break the shape. A bare item may be a value.

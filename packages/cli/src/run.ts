@@ -312,6 +312,7 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
       dataLayerNames: parsed.options.dataLayerNames,
       graceWindowMs: parsed.options.graceWindow ?? DEFAULT_GRACE_MS,
       seed,
+      ...(canaries && { canaries }),
       headed: spec.headed,
       viewport: spec.viewport ?? parsed.options.viewport,
       netLog: spec.netLog,

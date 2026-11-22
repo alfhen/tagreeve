@@ -394,7 +394,38 @@ export type FlagKind =
   | 'dataLayerReassigned'
   | 'dataLayerNotHooked'
   | 'dataLayerIncomplete'
+  // A canary or identity value seen in a request to a non-first-party host. `route` says where it came from and where it went.
+  | 'identifierRoute'
+  // One per run with canaries: what the route search covered and what it skipped.
+  | 'canarySearch'
   | (string & {});
+
+/** Where a planted value came from. Names only: a canary name, or `email` or `phone` for the identity. */
+export interface RouteSource {
+  source: 'urlParam' | 'identity';
+  name: string;
+}
+
+export interface RouteSink {
+  requestId: string;
+  host: string;
+  vendor: string;
+  /** The name of the field that held the value, as `(other)` when it looks like a value. Never a raw value-like name. */
+  field: string;
+  /** How the value was written: `plain`, `url`, `base64`, `base64url`, `sha256`, or `other` for a cookie prefix such as `GCL.` or `fb.1.`. */
+  transform: string;
+}
+
+/** `pageUrl`: only in a page or referrer field. `direct`: under its own name, or an identity value. `unknown`: anywhere else. */
+export type RouteKind = 'direct' | 'pageUrl' | 'unknown';
+
+export interface FlagRoute {
+  kind: RouteKind;
+  source: RouteSource;
+  sink: RouteSink;
+  /** The steps between source and sink. Empty until cookie and redirect hops are traced. */
+  hops: unknown[];
+}
 
 export interface Flag {
   type: 'flag';
@@ -403,6 +434,8 @@ export interface Flag {
   kind: FlagKind;
   recordIds: string[];
   detail: string;
+  /** Set on an `identifierRoute` flag. */
+  route?: FlagRoute;
 }
 
 /** A report that arrived at the collector origin and passed schema validation. */

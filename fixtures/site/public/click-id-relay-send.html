@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Click ID relay send</title>
+<script src="/assets/banner.js"></script>
+</head>
+<body>
+<h1>Click ID relay send</h1>
+<p>Sends the <code>_pw_click</code> cookie value, base64 encoded, in a Google Ads conversion request for <code>AW-000000001</code>. With <code>?send=granted</code> it sends only once consent is granted.</p>
+<script>
+(function () {
+  var granted = new URLSearchParams(location.search).get('send') === 'granted';
+  var sent = false;
+  function cookie(name) {
+    var m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+  function send() {
+    if (sent) return;
+    sent = true;
+    new Image().src = 'https://www.googleadservices.com/pagead/conversion/000000001/?' + new URLSearchParams({
+      tid: 'AW-000000001', label: 'fake-label', x: btoa(cookie('_pw_click'))
+    }).toString();
+  }
+  if (!granted) {
+    send();
+    return;
+  }
+  if (window.pwConsent.choice() === 'accept') send();
+  window.pwConsent.onAnswer(function (choice) {
+    if (choice === 'accept') send();
+  });
+})();
+</script>
+</body>
+</html>

@@ -107,6 +107,8 @@ const pages: Record<string, string> = {
   '/container/stape-script': 'container-stape-script.html',
   '/container/sandbox-script': 'container-sandbox-script.html',
   '/container/redirect-script': 'container-redirect-script.html',
+  '/click-id-relay': 'click-id-relay.html',
+  '/click-id-relay-send': 'click-id-relay-send.html',
   '/plain/product': 'plain/product.html',
   '/plain/checkout': 'plain/checkout.html',
   '/plain/thank-you': 'plain/thank-you.html',
