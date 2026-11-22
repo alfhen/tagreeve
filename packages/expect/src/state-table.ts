@@ -1,6 +1,7 @@
-import { guardFieldName, isValueSegment } from '@tagreeve/decoders';
+import { OTHER_NAME } from '@tagreeve/decoders';
 import type { Hit, HitIds, RunRecords } from '@tagreeve/core';
 import { CONSENT_STATES, type ConsentState } from './consent-matrix.ts';
+import { safeKey } from './push-shape.ts';
 import { DEFAULT_GRACE_MS, epochForHit, judgeIndex, judgedAt } from './evaluate.ts';
 
 export interface StateCell {
@@ -35,12 +36,18 @@ const EVENT_NAME = /^[\w.:-]+(?: [\w.:-]+)*$/;
 
 const byName = (x: string, y: string) => (x < y ? -1 : x > y ? 1 : 0);
 
+/** The one guard for every name a stored list holds. A value-like name becomes `other`, so no email, phone, ID or hash reaches suite.json. */
+function guardName(name: string, isEvent = false): string {
+  if (isEvent && (name.length > 64 || !EVENT_NAME.test(name))) return OTHER_NAME;
+  return safeKey(name);
+}
+
 function idNames(ids: HitIds): string[] {
   const names: string[] = [];
   for (const [name, value] of Object.entries(ids)) {
-    if (value === true) names.push(name);
+    if (value === true) names.push(guardName(name));
     else if (name === 'hashes' && value && typeof value === 'object') {
-      for (const [hash, h] of Object.entries(value)) if (h.present) names.push(`hashes.${hash}`);
+      for (const [hash, h] of Object.entries(value)) if (h.present) names.push(`hashes.${guardName(hash)}`);
     }
   }
   return names;
@@ -75,8 +82,8 @@ export function stateTable(records: RecordsByState): StateTable {
         const row = tallies.get(hit.vendor) ?? tallies.set(hit.vendor, {}).get(hit.vendor)!;
         const tally = (row[state] ??= { hits: 0, events: new Set(), fields: new Set(), ids: new Set() });
         tally.hits++;
-        if (hit.event && hit.event.length <= 64 && EVENT_NAME.test(hit.event) && !isValueSegment(hit.event) && guardFieldName(hit.event) === hit.event) tally.events.add(hit.event);
-        for (const f of hit.fields ?? []) tally.fields.add(f);
+        if (hit.event) tally.events.add(guardName(hit.event, true));
+        for (const f of hit.fields ?? []) tally.fields.add(guardName(f));
         for (const id of idNames(hit.ids)) tally.ids.add(id);
       }
     }

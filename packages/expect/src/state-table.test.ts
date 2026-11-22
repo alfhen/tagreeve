@@ -1,4 +1,5 @@
-import { newId, type ConsentEpoch, type Hit, type RunRecords } from '@tagreeve/core';
+import { newId, type ConsentEpoch, type Hit, type Request, type RunRecords } from '@tagreeve/core';
+import { meta } from '@tagreeve/decoders';
 import { describe, expect, test } from 'vitest';
 import { stateTable, type RecordsByState } from './state-table.ts';
 
@@ -97,17 +98,17 @@ describe('the epoch filter', () => {
 });
 
 describe('event names', () => {
-  test('value-like event text is counted as a hit but not stored', () => {
+  test('value-like event text is counted as a hit and stored as other', () => {
     const run = makeRun();
     hit(run, { event: 'page_view' });
     hit(run, { event: 'jane.doe@example.test' });
     hit(run, { event: 'x'.repeat(65) });
     const cell = stateTable({ accept: [run] }).vendors[0]!.states.accept!;
     expect(cell.hits).toBe(3);
-    expect(cell.events).toEqual(['page_view']);
+    expect(cell.events).toEqual(['(other)', 'page_view']);
   });
 
-  test('phone, client ID, UUID and hash event names are counted but not stored', () => {
+  test('phone, client ID, UUID and hash event names are counted and stored as other', () => {
     const values = ['4512345678', '1234567890.1234567890', '550e8400-e29b-41d4-a716-446655440000', 'd41d8cd98f00b204e9800998ecf8427e'];
     const run = makeRun();
     hit(run, { event: 'page_view' });
@@ -117,6 +118,31 @@ describe('event names', () => {
     expect(table.vendors[0]!.states.accept!.hits).toBe(5);
     const json = JSON.stringify(table);
     for (const v of values) expect(json).not.toContain(v);
+    expect(table.vendors[0]!.states.accept!.events).toEqual(['(other)', 'page_view']);
+  });
+
+  test('value-like field names are stored as other', () => {
+    const run = makeRun();
+    hit(run, { fields: ['cid', 'jane.doe@example.test', '4512345678'] });
+    const cell = stateTable({ accept: [run] }).vendors[0]!.states.accept!;
+    expect(cell.fields).toEqual(['(other)', 'cid']);
+  });
+
+  test('a Meta hit with an email and a phone as ud[] keys leaves neither in the table', () => {
+    const run = makeRun();
+    const request = {
+      type: 'request', id: newId('request'), runId: run.run.id, stepId: null, t: 0, method: 'GET',
+      url: 'https://www.facebook.com/tr?id=100000000000001&ev=PageView&ud[jane.doe@example.test]=abc&ud[4512345678]=x',
+      resourceType: 'image', frameUrl: 'http://localhost:3000/', initiator: null, headers: {}, postData: null, outcome: 'stubbed',
+    } as Request;
+    const hits = meta.decode(request);
+    expect(hits.length).toBe(1);
+    for (const h of hits) run.hits.push({ ...h, runId: run.run.id });
+    const table = stateTable({ accept: [run] });
+    const json = JSON.stringify(table);
+    expect(json).not.toContain('jane.doe@example.test');
+    expect(json).not.toContain('4512345678');
+    expect(table.vendors[0]!.states.accept!.ids).toContain('(other)');
   });
 });
 
