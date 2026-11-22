@@ -80,8 +80,7 @@ function safeName(name: string): string {
   return EVENT_CHARS.test(name) && !isValueSegment(name) && guardFieldName(name) === name ? name : OTHER_NAME;
 }
 
-/** A field or ID name as a stored list may hold it: the name, or `other` when it looks like a value. */
-export function safeKey(key: string): string {
+function safeKey(key: string): string {
   return guardFieldName(key) === key && !isValueSegment(key) ? key : OTHER_NAME;
 }
 

@@ -1,7 +1,6 @@
-import { OTHER_NAME } from '@tagreeve/decoders';
+import { OTHER_NAME, guardFieldName, isValueSegment } from '@tagreeve/decoders';
 import type { Hit, HitIds, RunRecords } from '@tagreeve/core';
 import { CONSENT_STATES, type ConsentState } from './consent-matrix.ts';
-import { safeKey } from './push-shape.ts';
 import { DEFAULT_GRACE_MS, epochForHit, judgeIndex, judgedAt } from './evaluate.ts';
 
 export interface StateCell {
@@ -39,7 +38,7 @@ const byName = (x: string, y: string) => (x < y ? -1 : x > y ? 1 : 0);
 /** The one guard for every name a stored list holds. A value-like name becomes `other`, so no email, phone, ID or hash reaches suite.json. */
 function guardName(name: string, isEvent = false): string {
   if (isEvent && (name.length > 64 || !EVENT_NAME.test(name))) return OTHER_NAME;
-  return safeKey(name);
+  return guardFieldName(name) === name && !isValueSegment(name) ? name : OTHER_NAME;
 }
 
 function idNames(ids: HitIds): string[] {
