@@ -8,6 +8,7 @@ import {
   readVersion,
   pageTimeToEpoch,
   RunWriter,
+  canaryPool,
   type CaptureCoverage,
   RECORD_SCHEMA_VERSION,
   type Checkpoint,
@@ -54,7 +55,7 @@ import { DATALAYER_BINDING, DATALAYER_TALLY, dataLayerEventFromPayload, dataLaye
 import { buildTallyFlags, PayloadCounts, postedAhead, validateTally, type FrameTally } from './datalayer-tally.ts';
 import { buildDataLayerNotHookedFlag, buildDataLayerReassignedFlags, isGoogleHostLoaderUrl, loaderLayerName } from './datalayer-names.ts';
 import { parseTagReport, TAG_REPORT_BINDING } from './tag-report.ts';
-import { buildCanaryFlags } from './canary-routes.ts';
+import { buildCanaryFlags, isFirstParty } from './canary-routes.ts';
 import { buildFlags, buildUnloadGapFlags, type FrameRef } from './flags.ts';
 import { mergeNetLog, NavigationWindows, parseNetLog, watchNetLogDir, type NetLogRequest } from './netlog.ts';
 import { redactHeaders } from './redact.ts';
@@ -998,13 +999,17 @@ export class Recorder {
 
   async checkpoint(label: string, step: Step | null): Promise<Checkpoint> {
     const host = new URL(this.options.site).hostname;
+    // The value is compared in memory with the canary pool and never stored.
+    const pool = this.options.canaries?.length ? canaryPool(this.options.canaries, this.run.identity) : undefined;
     const cookies: CheckpointCookie[] = (await this.context.cookies()).map((c) => {
       const domain = c.domain.replace(/^\./, '');
+      const canary = pool?.match(c.value);
       return {
         name: c.name,
         domain: c.domain,
         expires: c.expires > 0 ? c.expires * 1000 : null,
-        firstParty: host === domain || host.endsWith(`.${domain}`),
+        firstParty: isFirstParty(domain, host, this.options.firstPartyHosts ?? []),
+        ...(canary === undefined ? {} : { canary }),
       };
     });
     const checkpoint: Checkpoint = {
@@ -1149,7 +1154,7 @@ export class Recorder {
       redirectHeaderWithoutRedirect: this.redirectHeaderWithoutRedirect,
     });
     if (this.options.canaries?.length) {
-      flags.push(...buildCanaryFlags({ runId: this.runId, siteUrl: this.options.site, firstPartyHosts: this.options.firstPartyHosts, serverHosts: this.options.serverHosts, requests, hits, canaries: this.options.canaries, identity: this.run.identity }));
+      flags.push(...buildCanaryFlags({ runId: this.runId, siteUrl: this.options.site, firstPartyHosts: this.options.firstPartyHosts, serverHosts: this.options.serverHosts, requests, hits, checkpoints: this.checkpoints, canaries: this.options.canaries, identity: this.run.identity }));
     }
     if (!this.netLogPath) {
       const embedded = this.dataLayerEvents.filter((e) => !e.frame?.main);

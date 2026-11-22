@@ -1,10 +1,11 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import { canaryPool, type Flag, type RunRecords } from '../packages/core/src/index.ts';
 import { outDir, root, run, runCli, runText, scenario, site, type CliRun } from './cli-helpers.ts';
 
 const SCENARIO = 'identifier-route-reject';
+const OTHER = 'TEST-NOCANARY-0001';
 const temp: string[] = [];
 let reject: CliRun;
 
@@ -37,7 +38,7 @@ const adsRequest = (records: RunRecords) => records.requests.find((q) => q.url.i
 const routes = (records: RunRecords): Flag[] => records.flags.filter((f) => f.kind === 'identifierRoute');
 const b64 = (text: string) => Buffer.from(text).toString('base64');
 
-test('under reject the gclid canary in the Google Ads request gives one unknown base64 route', () => {
+test('under reject the gclid canary in the Google Ads request gives one cookie base64 route', () => {
   const records = reject.records!;
   const gclid = canary(records, 'gclid');
   const ads = adsRequest(records)!;
@@ -45,13 +46,15 @@ test('under reject the gclid canary in the Google Ads request gives one unknown 
   const found = routes(records).filter((f) => f.route!.sink.requestId === ads.id);
   expect(found).toHaveLength(1);
   const { route, recordIds, detail } = found[0]!;
-  expect(route!.kind).toBe('unknown');
+  expect(route!.kind).toBe('cookie');
   expect(route!.sink.transform).toBe('base64');
   expect(route!.sink.vendor).toBe('google-ads');
-  expect(route!.hops).toEqual([]);
+  const seen = records.checkpoints.find((c) => c.t !== undefined && c.t < ads.t && c.cookies.some((k) => k.name === '_pw_click' && k.canary === 'gclid'))!;
+  expect(seen).toBeDefined();
+  expect(route!.hops).toEqual([{ kind: 'cookie', name: '_pw_click', checkpointId: seen.id }]);
   expect(JSON.stringify(route!.source)).toContain('gclid');
   expect(recordIds).toContain(ads.id);
-  expect(detail.startsWith('url param gclid -> request to ')).toBe(true);
+  expect(detail.startsWith(`url param gclid -> cookie _pw_click (checkpoint ${seen.label}) -> request to www.googleadservices.com, param x, base64`)).toBe(true);
 });
 
 test('the GA4 page view of the relay page gives a pageUrl route for gclid', () => {
@@ -112,4 +115,22 @@ test('no flag and no output holds a form of a canary value or the identity', asy
   }
   expect(text.stdout).toContain('identifierRoute:');
   expect(text.stdout).toContain('canarySearch:');
+}, 150_000);
+
+test('no cookie value is stored in a checkpoint, the record or the output', async () => {
+  const text = await runText(SCENARIO);
+  const records = reject.records!;
+  const gclid = canary(records, 'gclid');
+  const names = records.checkpoints.flatMap((c) => c.cookies.map((k) => k.name));
+  expect(names).toContain('_pw_click');
+  expect(names).toContain('_pw_other');
+  const summary = JSON.parse(reject.stdout) as { path: string };
+  const file = await readFile(resolve(root, summary.path), 'utf8');
+  expect(file).not.toContain(OTHER);
+  const stored = JSON.stringify(records.checkpoints);
+  for (const value of [gclid, OTHER]) {
+    expect(stored).not.toContain(value);
+    expect(reject.stdout).not.toContain(value);
+    expect(text.stdout).not.toContain(value);
+  }
 }, 150_000);
