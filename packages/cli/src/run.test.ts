@@ -6,7 +6,7 @@ import type { RunArgs } from './args.ts';
 import { parseScenario } from '@tagreeve/expect';
 import { prepareServerContainer, resolveNetwork, runCommand } from './run.ts';
 
-const failStart = vi.hoisted(() => ({ on: false }));
+const failStart = vi.hoisted(() => ({ on: false, message: undefined as string | undefined }));
 
 vi.mock('@tagreeve/recorder', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@tagreeve/recorder')>();
@@ -17,7 +17,7 @@ vi.mock('@tagreeve/recorder', async (importOriginal) => {
       const path = join(opts.outDir!, 'failed-start.jsonl');
       const step = JSON.stringify({ type: 'step', index: 0, label: 'start', error: `navigation to ${opts.parsed.start} failed` });
       await writeFile(path, `{"type":"run"}\n${step}\n`);
-      const error = new actual.StepError('start', `navigation to ${opts.parsed.start} failed`);
+      const error = new actual.StepError('start', failStart.message ?? `navigation to ${opts.parsed.start} failed`);
       error.run = { path } as never;
       throw error;
     },
@@ -250,4 +250,24 @@ test('a failed start visit of a canary run prints and records no canary value', 
   const lines = (await readFile(join(dir, file), 'utf8')).split('\n').filter(Boolean);
   expect((JSON.parse(lines[0]!) as { canaries?: unknown[] }).canaries).toHaveLength(6);
   expect(lines.filter((l) => l.startsWith('{"type":"step"')).join('')).not.toContain('TEST-');
+});
+
+test('a failed canary run names the base64 forms of a canary value too', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
+  const scenario = join(dir, 's.yml');
+  await writeFile(scenario, 'start: /plain/product\noptions: { canaries: true, seed: 7 }\nsteps:\n  - wait: 1s\nexpect:\n  must: []\n  mustNot: []\n');
+  const value = 'TEST-GCLID-7-RUN-0001';
+  const forms = [Buffer.from(value).toString('base64'), Buffer.from(value).toString('base64url')];
+  const err: string[] = [];
+  failStart.message = `evaluate threw ${forms.join(' and ')}`;
+  failStart.on = true;
+  try {
+    await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: {}, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err.push(t) });
+  } finally {
+    failStart.on = false;
+    failStart.message = undefined;
+  }
+  const out = err.join('');
+  for (const form of forms) expect(out).not.toContain(form);
+  expect(out).toContain('(url param gclid)');
 });

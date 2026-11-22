@@ -256,7 +256,11 @@ function withCanaries(start: string, canaries: Canary[]): string {
 }
 
 function nameCanaries(text: string, canaries: Canary[]): string {
-  return canaries.reduce((out, c) => out.split(c.value).join(`(url param ${c.name})`).split(encodeURIComponent(c.value)).join(`(url param ${c.name})`), text);
+  const label = (c: Canary) => `(url param ${c.name})`;
+  return canaries.reduce(
+    (out, c) => [c.value, encodeURIComponent(c.value), Buffer.from(c.value).toString('base64'), Buffer.from(c.value).toString('base64url')].reduce((s, form) => s.split(form).join(label(c)), out),
+    text,
+  );
 }
 
 async function scrubStepErrors(path: string, canaries: Canary[]): Promise<void> {
@@ -306,6 +310,7 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
       dataLayerNames: parsed.options.dataLayerNames,
       graceWindowMs: parsed.options.graceWindow ?? DEFAULT_GRACE_MS,
       seed,
+      startResolved: parsed.options.canaries,
       headed: spec.headed,
       viewport: spec.viewport ?? parsed.options.viewport,
       netLog: spec.netLog,

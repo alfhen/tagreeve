@@ -711,3 +711,19 @@ describe('the addToCart failure message', () => {
     expect(other).not.toContain('429');
   });
 });
+
+test('a resolved start is not filled a second time, and later visits still are', async () => {
+  const gone: string[] = [];
+  const recorder = {
+    site: 'http://localhost',
+    setIdentity: () => undefined,
+    beginStep: () => ({}),
+    endStep: () => undefined,
+    checkpoint: () => Promise.resolve(),
+    context: { pages: () => [{ goto: (url: string) => (gone.push(url), Promise.resolve()) }] },
+  };
+  const yaml = 'start: /a?q=%7Bnext%7D\nvars: { next: changed }\nsteps:\n  - visit: /b?q={next}\n';
+  await playScenario(recorder as never, parseScenario(yaml), { seed: 1, startResolved: true });
+  await playScenario(recorder as never, parseScenario(yaml.replace('%7Bnext%7D', '{next}')), { seed: 1 });
+  expect(gone).toEqual(['http://localhost/a?q=%7Bnext%7D', 'http://localhost/b?q=changed', 'http://localhost/a?q=changed', 'http://localhost/b?q=changed']);
+});

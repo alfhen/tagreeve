@@ -77,6 +77,8 @@ export const defaultCartCheck: CartCheck = createCartCheck();
 export interface PlayOptions {
   /** Identity seed. Default: the scenario's `options.seed`, else random. */
   seed?: number;
+  /** The scenario's start is already filled in. The start visit then does not fill `{name}` placeholders a second time. */
+  startResolved?: boolean;
   consent?: ConsentHandler;
   /** Resolves when the person is done with a handoff. Default: waits for Enter on stdin. The Done control can end the wait first, and then the signal aborts. */
   handoffResolver?: (message: string, signal: AbortSignal) => Promise<void>;
@@ -576,7 +578,7 @@ export async function playScenario(recorder: Recorder, scenario: Scenario, optio
   for (const [index, step] of steps.entries()) {
     const record = recorder.beginStep(step.label, index);
     try {
-      await runStep(step, recorder, scenario, identity, options, record);
+      await runStep(step, recorder, index === 0 && options.startResolved ? { ...scenario, vars: {} } : scenario, identity, options, record);
       if (step.kind !== 'checkpoint') await recorder.checkpoint(step.label, record);
     } catch (error) {
       const message = error instanceof Error ? error.message.split('\n')[0]! : String(error);
