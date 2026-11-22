@@ -72,6 +72,7 @@ First-party hosts: the registrable domain of `--site` is first party, so `--site
 | `viewport` | `{ width, height }`, integers from 200 to 4000. The same as `--viewport`, which wins. See the `--viewport` row for what it does not change. |
 | `firstPartyHosts` | List of hosts or `*.domain` wildcards that are also first party, for example `['i.guim.co.uk', '*.shopifycdn.com']`. A wildcard matches subdomains, not the bare domain. |
 | `platformHosts` | Shopify-specific. `false` flags requests to known platform hosts (Shopify's CDN and telemetry hosts (`cdn.shopify.com`, `cdn.shopifycloud.com`, `monorail-edge.shopifysvc.com`, `*.shopifysvc.com`) and the Shop Pay hosts (`pay.shopify.com`, `shop.app`)) as `unknownDestination` again. The default is `true`: they get the flag `platformHost`, which is listed in the summary and the report and never fails a run. |
+| `withdrawWith` | A selector for the site's cookie settings link, for example `"#cookie-settings"`. `suite --consent` needs it for the `withdraw` state, where the cell clicks it to reopen the banner. See `suite`. |
 | `unloadGapIgnore` | List of dataLayer event names or `*` globs, for example `['consent_*']`, that the `unloadGap` warning never reports. The warning covers frame pushes shortly before a navigation and before the run ends. Use it for custom events that are not meant to produce a hit. |
 | `serverHosts` | List of hosts or `*.domain` wildcards for `--network server`. Collection requests to them pass through, and every other one is still stubbed. A host other than `localhost`, `127.0.0.1` or `::1` prints a warning on stderr. A wildcard on a public suffix (`*.com`), a vendor host (Google, Meta, Pinterest) and a tracker-list host are scenario errors. `server` mode without `serverHosts` exits 2. A `pagehide` or `visibilitychange` send to a server host is answered in the page, so the cookies it would set are not seen. A passing cookie rule in `server` mode can miss them. |
 | `allowUnknownDestination` | `true` allows every unknown destination. A list of hosts or wildcards allows only those, and every other unknown destination still fails. |
@@ -348,6 +349,8 @@ Writes the shape of one run to a small file you can commit, so a later run can b
 | --- | --- |
 | `--by-page` | Adds the page path to each key, as in `diff`. The path only: no query, no host. Segments that look like a value are stored as `*`, by the same rules as in `diff`. The baseline holds no per-order token of those shapes. |
 
+A record from a `suite --consent` cell is saved under `tagreeve/baselines/consent/<state>/`, with the plain name inside. See "Consent matrix" under `suite`.
+
 The file holds `baselineSchemaVersion`, the `scenario` name, the `site` host (no scheme, port or path), `byPage` and a sorted list of keys, and optionally a `dataLayer` section of push shapes. A key is the consent epoch label, the vendor and the event. Under each key are the tuples seen: the four consent states, the raw `gcs` and `gcd` values, the names of the IDs that are present, and a hit count. It holds no hit ID, time, URL, query, cookie or value (the `dataLayer` section holds key paths and types only, per push kind: `gtag` or `object`). A baseline saved by 0.6.0-rc.2 has no push kinds. It compares with the kinds merged, and the compare warns "dataLayer push kinds not compared" until you save it again. There is no `approve` command: to accept a change, save the baseline again and review the file diff in the pull request.
 
 Then check a new run against it:
@@ -380,6 +383,7 @@ tagreeve suite scenarios/ --site https://staging.example.com \
 | `--with-test-payment` | Also runs scenarios that have a `payment` step. It needs `--allow-test-payment <host>` too, as in `run`. Without both they are `SKIPPED`, which counts as a pass. With both, a failed gate exits 2 before any run. |
 | `--allow-test-payment <host>` | As in `run`. It needs `--site` or `--stores` on the command line. Without them `suite` exits 2 and names the flag, also when `tagreeve/stores.json` holds the host, because a default file never supplies the host a test payment runs on. A `site` from the project config does not count either. |
 | `--baseline [<folder>]` | Compares each cell with its own baseline file in the folder (default: `tagreeve/baselines/`), named `<scenario>[.<store>][.<variant>].json` as in `baseline save`. Every file is read before any browser starts. A missing, invalid or unreadable file exits 2 and the message lists each one, with a hint that fits the kind. Two cells that map to the same file name (for example scenarios `a.workspace.yml` and `a.yml` on the `workspace` variant) exit 2 and name both cells. A cell whose only failure is drift is `FAIL (baseline drift)`; a cell with other failures adds `baseline drift` to its list, as in `FAIL: 2 rules, baseline drift`. The suite exits 1 on drift. A skipped cell needs no file. Without `--baseline`, a saved baseline changes nothing. A bare `--baseline` goes last: a word after it is taken as the folder, and if the scenario folder is then missing, the error says so. |
+| `--consent <states>` | A comma-separated list of `accept`, `reject`, `none` and `withdraw`. Runs every scenario once for each state. See "Consent matrix". An unknown or repeated state exits 2. |
 | `--network`, `--out`, `--label`, `--seed`, `--viewport`, `--var`, `--tracker-list`, `--autoconsent-rules`, `--server-container`, `--server-container-config`, `--json` | As in `run`. Without `--out`, the `suite_<id>/` folder goes in `tagreeve/runs/<YYYY-MM-DD>/` (`<YYYY-MM-DD>-<label>/` with `--label`), and `suite` prints the same note about an older `./runs/`, after the payment checks. The suite errors for a missing site, a missing scenario folder, a config `site` together with a default `tagreeve/stores.json`, and a test payment that is not allowed also print the `--help` hint. `--server-container` starts one container for each run, not one for the suite, because each run needs its own capture window. A suite with it is slow. Every scenario must be in server mode. `--gtm-override`, `--headed` and `--net-log` are not options of `suite`. A `--var` that no scenario declares exits 2. |
 
 The runs go one after another, with one browser at a time. The variants of one scenario use the same seed, so they have the same fake identity. Output goes to `<out>/suite_<id>/`: one record per run, named `<scenario>.<variant>.jsonl` (with `--stores`, `<scenario>.<store>.<variant>.jsonl`, see Several stores; each has `Run.variant` set, and `Run.label` with `--label`; with `--stores` it also has `Run.store`), and the manifest `suite.json`. The manifest has the site origin, the variants, one cell per scenario and variant (with `--stores`, per scenario, store and variant) with its status, exit code and record file name, the failed rule count and the failed built-in check names on a failed or warned cell, and the diff counts. It holds no path, no query value, no override file path and no run message.
@@ -394,6 +398,30 @@ checkout-pay    SKIPPED     SKIPPED
 ```
 
 A difference between variants is not a failure. Your rules decide. A run that exits 2 (for example, the banner was not shown) shows `ERROR (exit 2)` and does not stop the suite. A failed or warned cell says what failed: `FAIL: 5 rules, deniedIdentifiers` counts the failed rules and names the failed built-in checks, and `WARN: 1 rule` does the same for warnings. It never prints a rule or a message. The report uses the same text. The suite's exit code is the worst cell, in this order: 2, then 1, then 0. With `--json`, stdout is the manifest instead of the table.
+
+#### Consent matrix
+
+`--consent accept,reject,none,withdraw` shows what each vendor got in each consent state.
+
+```bash
+tagreeve suite scenarios/ --consent accept,reject,none,withdraw --site https://staging.example.com
+```
+
+The matrix point is the first `consent` step of the scenario. Each cell is a copy of the scenario with that step set to the cell's state. The `withdraw` cell answers `accept` there, then plays `wait: 1s`, `click: <options.withdrawWith>` and `consent: withdraw`. Every check that can exit 2 runs before any browser starts: a scenario with no `consent` step, a first `consent` step that is `withdraw`, `withdraw` in the list without `options.withdrawWith`, a second `--variant` and `--baseline`. `--stores` works with it.
+
+A scenario's own rules run in the cell of its own state only, because they were written for the state the scenario answers. The other cells run the built-in checks, and their `suite.json` cell has `rulesSkipped`, the number of rules left out. The table has one column for each state. Each cell has `labels: { "consent": "<state>" }`, the records are named `<scenario>[.<store>].<state>.<variant>.jsonl`, and each record has `Run.consentCell`. The exit code is the worst of the cells.
+
+`suite.json` also has `consent`, the list, and `consentMatrix`: one entry for each scenario and store that wrote a record, `{ scenario, store?, vendors, vendorsNotInAccept }`. Each vendor has a hit count, events, field names and ID names for each state, and `notInAccept`: for each state other than `accept`, the events and fields that its accept records lack. `vendorsNotInAccept` lists the vendors that accept lacks. The counts leave out hits that a `reject` or `none` cell received after a later `consent: accept` step (the `granted` epoch), and the `withdraw` count holds only the hits of the `withdrawn` epoch. The matrix holds names and counts, never a field value, an ID or a URL. Names go through the value guard: an event, field, ID or `hashes.<key>` name that looks like a value, such as an email, a phone number or a hash, reads `(other)`. A plain word that is a person's name or a domain is not caught.
+
+After the table, the text output has one line for each vendor, for example:
+
+```
+ga4: accept 12 hits; reject 3 hits, 2 fields not in accept; none 0; withdraw 2 hits
+```
+
+A suite without `--consent` has no `consentMatrix` and no such line. `tagreeve report` of a consent suite folder exits 2 with `consent suites are shown from 0.8.0-rc.1` and writes no file.
+
+`tagreeve baseline save` of a cell record writes `tagreeve/baselines/consent/<state>/<scenario>[.<store>][.<variant>].json`, the plain default name inside a folder for the state. No plain `run --baseline` reads that folder. A record without `consentCell` keeps its plain name.
 
 #### Several stores
 
