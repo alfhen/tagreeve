@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startFixtureSite, type FixtureSite } from '@tagreeve/fixture-site';
-import { afterAll, beforeAll, expect, test } from 'vitest';
+import { afterAll, afterEach, beforeAll, expect, test } from 'vitest';
 import { canaryValues } from '@tagreeve/core';
 import { launchRecorder } from '../../src/index.ts';
 
@@ -25,8 +25,16 @@ afterAll(async () => {
   if (outDir) await rm(outDir, { recursive: true, force: true });
 });
 
+const open: Awaited<ReturnType<typeof launchRecorder>>[] = [];
+
+afterEach(async () => {
+  // A failed precondition must not leave the browser running.
+  for (const recorder of open.splice(0)) await recorder.close().catch(() => undefined);
+});
+
 async function relay() {
   const recorder = await launchRecorder({ networkMode: 'stub', outDir, site: site.url, canaries });
+  open.push(recorder);
   await recorder.visit(`${site.url}/click-id-relay?gclid=${gclid}`);
   await recorder.wait(500);
   return recorder;
