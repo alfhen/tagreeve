@@ -63,6 +63,7 @@ import { runSelfTest } from './selftest.ts';
 import { isKnownVendorCollection, isServerContainerRequest, isStubbedCollection, setCookieNameOf, setCookieNamesOf, stubResponse } from './stub.ts';
 import { QUIET_MS, startServerContainerSession, waitForQuiet, type ServerContainerSession } from './server-container/capture.ts';
 import { linkServerHits, type InFlightWindow } from './server-container/link.ts';
+import { containerPathFor, STAPE_LOADER_LOSES } from './server-container/loader-path.ts';
 import { ServerContainerError, type ConfigSource } from './server-container/runner.ts';
 import { onTerminate } from './terminate.ts';
 import { UNLOAD_BINDING, UNLOAD_FLUSH, unloadInitScript, type UnloadSendPayload } from './unload.ts';
@@ -214,6 +215,7 @@ export class Recorder {
   private readonly routed = new Set<string>();
   /** Memory only: never a record field. */
   private readonly containerFlights = new Map<string, InFlightWindow>();
+  private loaderUnwrapped = 0;
   private readonly handedToChromium = new Set<string>();
   private readonly redirectHeaderWithoutRedirect = new Set<string>();
   private readonly selfRecorded = new WeakSet<PwRequest>();
@@ -684,7 +686,6 @@ export class Recorder {
   /** Answers a non-load request to a `serverHosts` host with the local container's response. It never reaches the remote host. */
   private async routeToContainer(route: Route, record: Request, origin: string): Promise<void> {
     const original = route.request();
-    const live = new URL(original.url());
     // A separate client, so the container's loopback address never reads or writes the context cookie jar.
     // allHeaders() holds the Cookie header Chromium would send, so SameSite and credentials mode already apply.
     // The client falls back to its own jar when the header is absent, so each call gets a client with an empty jar that no other call shares.
@@ -697,7 +698,10 @@ export class Recorder {
     try {
       client = await playwrightRequest.newContext();
       const sentAt = nodeNow();
-      const response = await client.fetch(`${origin}${live.pathname}${live.search}`, {
+      const { pathAndQuery, unwrapped } = containerPathFor(original.url());
+      // Counted before the fetch: a failed fetch of a translated request is still a translated request.
+      if (unwrapped) this.loaderUnwrapped += 1;
+      const response = await client.fetch(`${origin}${pathAndQuery}`, {
         method: original.method(),
         headers,
         data: original.postDataBuffer() ?? undefined,
@@ -799,6 +803,7 @@ export class Recorder {
       refused: counts?.refused ?? 0,
       unlinked: hits.filter((h) => fromContainer.has(h.requestId) && h.via === undefined).length,
       ...(failure ? { error: failure.errorClass } : {}),
+      ...(this.loaderUnwrapped > 0 ? { loaderUnwrapped: { loader: 'stape' as const, requests: this.loaderUnwrapped, loses: STAPE_LOADER_LOSES } } : {}),
     };
     if (failure) {
       flags.push({ type: 'flag', id: newId('flag'), runId: this.runId, kind: 'serverContainerFailed', recordIds: [], detail: `The server container did not run: ${failure.errorClass}.` });

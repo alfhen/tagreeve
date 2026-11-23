@@ -140,7 +140,8 @@ The client ID link is narrower. It is `exact` only when exactly one browser hit 
 
 ## What it does not show
 
-- Stape-only hosting features: the custom loader and its domain features, Cookie Keeper, the geo and bot headers Stape adds in front of the container, store ID headers, request logs and the CDN. A cookie that Cookie Keeper would set, or a header a tag reads from the hosting layer, is missing.
+- The Stape loader in the stock image: the image has no Stape loader, so it would answer a loader request with 400 and fire no GA4 client tag. Tagreeve sends a loader request for `/g/collect` or `/data` at its real path, so those tags fire. It loses what Stape's hosting layer does with a loader request: its own headers, Cookie Keeper and any change to the path or body. The run says how many requests it sent this way (`loaderUnwrapped`). A loader request for any other path is sent as it is.
+- Stape-only hosting features: the custom loader's domain features, Cookie Keeper, the geo and bot headers Stape adds in front of the container, store ID headers, request logs and the CDN. A cookie that Cookie Keeper would set, or a header a tag reads from the hosting layer, is missing.
 - Unpublished workspaces with the live config. The container loads the published version. For a workspace, use a config from its preview environment (see "Test an unpublished workspace").
 - Sends from `pagehide` or `visibilitychange`. The page gets the answer, also for a `serverHosts` host, so the container never receives the hit and makes no vendor call for it.
 - Calls to a host that no decoder knows. They are recorded and flagged as unknown destinations.
