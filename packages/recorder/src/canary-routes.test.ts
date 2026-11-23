@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, test } from 'vitest';
 import { canaryPool, canaryValues, createIdentity, MAX_POST_DATA, newId, readRun, type Checkpoint, type CheckpointCookie, type Flag, type Hit, type Request } from '@tagreeve/core';
-import { PAGE_FIELDS } from '@tagreeve/decoders';
+import { OTHER_NAME, PAGE_FIELDS } from '@tagreeve/decoders';
 import { buildCanaryFlags, isFirstParty, type CanaryRouteInput } from './canary-routes.ts';
 
 const runId = newId('run');
@@ -331,6 +331,15 @@ describe('the server leg', () => {
       expect(JSON.stringify(flags)).not.toContain(identity.email);
       expect(JSON.stringify(flags)).not.toContain(mailHash);
     }
+  });
+
+  test('a canary as the linked event name is masked in the detail', () => {
+    const g = graph('exact');
+    const canary = canaryValues(7)[0]!.value;
+    const browserHit = { ...g.browserHit, event: canary };
+    const found = routes(flagsFor([g.browser, g.call], [browserHit, g.server], { identity })).find((f) => f.route!.sink.requestId === g.call.id)!;
+    expect(found.detail).not.toContain(canary);
+    expect(found.detail).toContain(`meta ${OTHER_NAME}`);
   });
 
   test('a call whose hit has no via gets no hop and keeps the request detail', () => {

@@ -178,11 +178,11 @@ function firstSighting(checkpoints: readonly Checkpoint[], canary: string, t: nu
 }
 
 /** The browser hit a server container call was linked to, as a hop, and the hit's name for the detail. */
-function linkedHit(own: readonly Hit[], byId: ReadonlyMap<string, Hit>): { hop: HitHop; label: string } | undefined {
+function linkedHit(own: readonly Hit[], byId: ReadonlyMap<string, Hit>, pool: CanaryPool): { hop: HitHop; label: string } | undefined {
   const via = (own.find((h) => h.via?.confidence === 'exact') ?? own.find((h) => h.via))?.via;
   const browser = via && byId.get(via.hitId);
   if (!via || !browser) return undefined;
-  return { hop: { kind: 'hit', hitId: via.hitId, confidence: via.confidence }, label: browser.event === null ? browser.vendor : `${browser.vendor} ${guardFieldName(browser.event)}` };
+  return { hop: { kind: 'hit', hitId: via.hitId, confidence: via.confidence }, label: browser.event === null ? browser.vendor : `${browser.vendor} ${pool.match(browser.event) === undefined ? guardFieldName(browser.event) : OTHER_NAME}` };
 }
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
@@ -223,7 +223,7 @@ export function buildCanaryFlags(input: CanaryRouteInput): Flag[] {
       const source: FlagRoute['source'] = canaryNames.has(name) ? { source: 'urlParam', name } : { source: 'identity', name };
       const seen = kind === 'unknown' && source.source === 'urlParam' ? firstSighting(checkpoints, name, req.t) : undefined;
       const cookie: CookieHop[] = seen ? [{ kind: 'cookie', name: pool.match(seen.cookie.name) === undefined ? guardFieldName(seen.cookie.name) : OTHER_NAME, checkpointId: seen.checkpoint.id }] : [];
-      const linked = req.captured === 'serverContainer' ? linkedHit(own, hitsById) : undefined;
+      const linked = req.captured === 'serverContainer' ? linkedHit(own, hitsById, pool) : undefined;
       const hops: RouteHop[] = [...cookie, ...(linked ? [linked.hop] : [])];
       const route: FlagRoute = { kind: seen ? 'cookie' : kind, source, sink: { requestId: req.id, host: url.hostname, vendor, field: chosen.field, transform: chosen.transform }, hops };
       const from = source.source === 'urlParam' ? `url param ${name}` : `identity ${name}`;
