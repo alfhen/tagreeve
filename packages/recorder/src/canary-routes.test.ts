@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, test } from 'vitest';
 import { canaryPool, canaryValues, createIdentity, MAX_POST_DATA, newId, readRun, type Checkpoint, type CheckpointCookie, type Flag, type Hit, type Request } from '@tagreeve/core';
-import { PAGE_FIELDS } from '@tagreeve/decoders';
+import { OTHER_NAME, PAGE_FIELDS } from '@tagreeve/decoders';
 import { buildCanaryFlags, isFirstParty, type CanaryRouteInput } from './canary-routes.ts';
 
 const runId = newId('run');
@@ -300,5 +300,55 @@ describe('a recorded run', () => {
     expect(search(flags)).toHaveLength(1);
     const ids = new Set(records.requests.map((r) => r.id));
     for (const id of search(flags)[0]!.recordIds) expect(ids.has(id as Request['id'])).toBe(true);
+  });
+});
+
+describe('the server leg', () => {
+  const mailHash = canaryPoolHex(identity.email);
+  const graph = (confidence?: 'exact' | 'probable') => {
+    const browser = req('https://www.facebook.com/tr/?id=1&ev=Purchase');
+    const browserHit = { ...hit(browser, 'meta', {}), event: 'Purchase' };
+    const call = req('https://graph.facebook.com/v19.0/1/events', { method: 'POST', postData: JSON.stringify({ data: [{ user_data: { em: [mailHash] } }] }), captured: 'serverContainer', t: 5 });
+    const server: Hit = { ...hit(call, 'meta-capi', {}), ...(confidence && { via: { hitId: browserHit.id, by: 'eventId' as const, confidence } }) };
+    expect(call.postData).toContain(mailHash);
+    return { browser, browserHit, call, server };
+  };
+
+  test('a call whose hit has a via gets one hit hop with the link confidence', () => {
+    for (const confidence of ['exact', 'probable'] as const) {
+      const g = graph(confidence);
+      expect(g.server.via?.confidence).toBe(confidence);
+      const flags = routes(flagsFor([g.browser, g.call], [g.browserHit, g.server], { identity }));
+      const found = flags.find((f) => f.route!.sink.requestId === g.call.id)!;
+      expect(found.route).toEqual({
+        kind: 'direct',
+        source: { source: 'identity', name: 'email' },
+        sink: { requestId: g.call.id, host: 'graph.facebook.com', vendor: 'meta-capi', field: found.route!.sink.field, transform: 'sha256' },
+        hops: [{ kind: 'hit', hitId: g.browserHit.id, confidence }],
+      });
+      expect(found.detail.startsWith('identity email -> hit (meta Purchase) -> server call (')).toBe(true);
+      expect(found.detail.endsWith(`-> server call (meta-capi, ${found.route!.sink.field}, sha256), link ${confidence}`)).toBe(true);
+      expect(JSON.stringify(flags)).not.toContain(identity.email);
+      expect(JSON.stringify(flags)).not.toContain(mailHash);
+    }
+  });
+
+  test('a canary as the linked event name is masked in the detail', () => {
+    const g = graph('exact');
+    const canary = canaryValues(7)[0]!.value;
+    const browserHit = { ...g.browserHit, event: canary };
+    const found = routes(flagsFor([g.browser, g.call], [browserHit, g.server], { identity })).find((f) => f.route!.sink.requestId === g.call.id)!;
+    expect(found.detail).not.toContain(canary);
+    expect(found.detail).toContain(`meta ${OTHER_NAME}`);
+  });
+
+  test('a call whose hit has no via gets no hop and keeps the request detail', () => {
+    const g = graph();
+    expect(g.server.via).toBeUndefined();
+    const found = routes(flagsFor([g.browser, g.call], [g.browserHit, g.server], { identity })).find((f) => f.route!.sink.requestId === g.call.id)!;
+    expect(found.route!.hops).toEqual([]);
+    expect(found.detail).not.toContain('-> hit (');
+    expect(found.detail).not.toContain('link ');
+    expect(found.detail.startsWith('identity email -> request to graph.facebook.com, ')).toBe(true);
   });
 });
