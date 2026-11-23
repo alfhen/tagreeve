@@ -1,4 +1,4 @@
-import { canaryPool, fieldHashes, isServerHostUrl, MAX_POST_DATA, newId, readings, type Canary, type CanaryPool, type Checkpoint, type CheckpointCookie, type CookieHop, type Flag, type FlagRoute, type Hit, type Id, type Identity, type Request, type RouteKind } from '@tagreeve/core';
+import { canaryPool, fieldHashes, isServerHostUrl, MAX_POST_DATA, newId, readings, type Canary, type CanaryPool, type Checkpoint, type CheckpointCookie, type CookieHop, type Flag, type FlagRoute, type Hit, type HitHop, type Id, type Identity, type Request, type RouteHop, type RouteKind } from '@tagreeve/core';
 import { bodyEntries, guardFieldName, OTHER_NAME, PAGE_FIELDS } from '@tagreeve/decoders';
 import { hostMatches } from '@tagreeve/expect';
 import { getDomain } from 'tldts';
@@ -177,6 +177,14 @@ function firstSighting(checkpoints: readonly Checkpoint[], canary: string, t: nu
   return best;
 }
 
+/** The browser hit a server container call was linked to, as a hop, and the hit's name for the detail. */
+function linkedHit(own: readonly Hit[], byId: ReadonlyMap<string, Hit>): { hop: HitHop; label: string } | undefined {
+  const via = (own.find((h) => h.via?.confidence === 'exact') ?? own.find((h) => h.via))?.via;
+  const browser = via && byId.get(via.hitId);
+  if (!via || !browser) return undefined;
+  return { hop: { kind: 'hit', hitId: via.hitId, confidence: via.confidence }, label: browser.event === null ? browser.vendor : `${browser.vendor} ${guardFieldName(browser.event)}` };
+}
+
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
 /** The `identifierRoute` flags and the one `canarySearch` flag of a run with canaries. Headers are not searched. */
@@ -190,6 +198,7 @@ export function buildCanaryFlags(input: CanaryRouteInput): Flag[] {
   const canaryNames = new Set(canaries.map((c) => c.name));
   const siteHost = parse(siteUrl)?.hostname ?? '';
   const hitsByRequest = new Map<string, Hit[]>();
+  const hitsById = new Map(hits.map((h) => [h.id as string, h]));
   for (const hit of hits) hitsByRequest.set(hit.requestId, [...(hitsByRequest.get(hit.requestId) ?? []), hit]);
 
   const flags: Flag[] = [];
@@ -213,11 +222,16 @@ export function buildCanaryFlags(input: CanaryRouteInput): Flag[] {
       const { kind, chosen } = routeKind(occurrences.filter((o) => o.name === name), pageFields, pages, !canaryNames.has(name));
       const source: FlagRoute['source'] = canaryNames.has(name) ? { source: 'urlParam', name } : { source: 'identity', name };
       const seen = kind === 'unknown' && source.source === 'urlParam' ? firstSighting(checkpoints, name, req.t) : undefined;
-      const hops: CookieHop[] = seen ? [{ kind: 'cookie', name: pool.match(seen.cookie.name) === undefined ? guardFieldName(seen.cookie.name) : OTHER_NAME, checkpointId: seen.checkpoint.id }] : [];
+      const cookie: CookieHop[] = seen ? [{ kind: 'cookie', name: pool.match(seen.cookie.name) === undefined ? guardFieldName(seen.cookie.name) : OTHER_NAME, checkpointId: seen.checkpoint.id }] : [];
+      const linked = req.captured === 'serverContainer' ? linkedHit(own, hitsById) : undefined;
+      const hops: RouteHop[] = [...cookie, ...(linked ? [linked.hop] : [])];
       const route: FlagRoute = { kind: seen ? 'cookie' : kind, source, sink: { requestId: req.id, host: url.hostname, vendor, field: chosen.field, transform: chosen.transform }, hops };
       const from = source.source === 'urlParam' ? `url param ${name}` : `identity ${name}`;
-      const via = seen ? ` -> cookie ${hops[0]!.name} (checkpoint ${seen.checkpoint.label})` : '';
-      flags.push({ type: 'flag', id: newId('flag'), runId, kind: 'identifierRoute', recordIds: [req.id], detail: `${from}${via} -> request to ${url.hostname}, param ${chosen.field}, ${chosen.transform}`, route });
+      const viaCookie = seen ? ` -> cookie ${cookie[0]!.name} (checkpoint ${seen.checkpoint.label})` : '';
+      const tail = linked
+        ? ` -> hit (${linked.label}) -> server call (${vendor}, ${chosen.field}, ${chosen.transform}), link ${linked.hop.confidence}`
+        : ` -> request to ${url.hostname}, param ${chosen.field}, ${chosen.transform}`;
+      flags.push({ type: 'flag', id: newId('flag'), runId, kind: 'identifierRoute', recordIds: [req.id], detail: `${from}${viaCookie}${tail}`, route });
     }
   }
 

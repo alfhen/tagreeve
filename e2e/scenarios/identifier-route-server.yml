@@ -1,0 +1,8 @@
+start: /server-container?email={email}&delayMs=1500
+vars: { email: '' }
+steps:
+  - consent: reject
+  - wait: 3s
+expect:
+  must: []
+options: { seed: 1, canaries: true, network: server, serverHosts: [127.0.0.1], allowUnknownDestination: true }
