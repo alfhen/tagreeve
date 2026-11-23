@@ -1230,7 +1230,7 @@ function builtInChecks(
     );
   }
 
-  const route = identifierRoute(records, ctx.grace, scenario.options.builtins?.identifierRoute);
+  const route = identifierRoute(records, ctx.grace, scenario.options.builtins?.identifierRoute, scenario.options.identifierRouteAllow);
   if (route) addResult('builtin: identifierRoute', route.pass, route.evidence, route.message, route.severity, route.note);
 
   if (rejected) {

@@ -1,3 +1,4 @@
+import { hostMatches } from '@tagreeve/core';
 import type { ConsentState, Flag, FlagRoute, Hit, Request, ResultNote, Severity, TagreeveRecord } from '@tagreeve/core';
 import { GOOGLE_VENDORS } from './consent-mode-setup.ts';
 import { consentFields } from './scenario.ts';
@@ -107,7 +108,7 @@ function searchedText(search: Flag): string {
  * Judges the `identifierRoute` flags of a run by the consent of the epoch each sink left in. Returns nothing for a run with no `canarySearch` flag.
  * Route names come from the masked flag, never from the raw request.
  */
-export function identifierRoute(records: readonly (TagreeveRecord | EvalEpoch)[], graceMs: number, override?: Severity): IdentifierRouteResult | undefined {
+export function identifierRoute(records: readonly (TagreeveRecord | EvalEpoch)[], graceMs: number, override?: Severity, allow: readonly string[] = []): IdentifierRouteResult | undefined {
   const search = records.find((r): r is Flag => r.type === 'flag' && r.kind === 'canarySearch');
   if (!search) return undefined;
   const epochs = records.filter((r): r is EvalEpoch => r.type === 'consentEpoch').sort((a, b) => a.startT - b.startT);
@@ -119,16 +120,24 @@ export function identifierRoute(records: readonly (TagreeveRecord | EvalEpoch)[]
   const routes = records.filter((r): r is Flag & { route: FlagRoute } => r.type === 'flag' && r.kind === 'identifierRoute' && r.route !== undefined);
 
   const findings: Finding[] = [];
+  const allowedByHost = new Map<string, number>();
+  let judged = 0;
   for (const { route } of routes) {
+    if (allow.length > 0 && hostMatches(route.sink.host, allow)) {
+      allowedByHost.set(route.sink.host, (allowedByHost.get(route.sink.host) ?? 0) + 1);
+      continue;
+    }
+    judged++;
     const requestId = route.sink.requestId;
     const { level, note } = judge(route, requests.get(requestId), hitsByRequest.get(requestId) ?? [], hitsById, epochs, graceMs);
     if (level !== 'ok') findings.push({ line: routeLine(route, level, note), level, requestId, note });
   }
+  const allowedText = allowedByHost.size === 0 ? '' : ` (allowed by identifierRouteAllow: ${[...allowedByHost].map(([host, n]) => `${n} route${n === 1 ? '' : 's'} to ${host}`).join(', ')})`;
   const sorted = [...findings.filter((f) => f.level === 'fail'), ...findings.filter((f) => f.level === 'warn')];
   if (sorted.length === 0) {
-    const allowed = routes.length;
+    const allowed = judged;
     const head = allowed > 0 ? `No planted value reached a sink while consent forbade it (${allowed} route${allowed === 1 ? '' : 's'} allowed by consent); ` : 'No planted value found in the ';
-    return { pass: true, evidence: [], message: `${head}${searchedText(search)}`, severity: override ?? 'fail' };
+    return { pass: true, evidence: [], message: `${head}${searchedText(search)}${allowedText}`, severity: override ?? 'fail' };
   }
   const failing = sorted.some((f) => f.level === 'fail');
   const shown = sorted.slice(0, MAX_LINES).map((f) => f.line).join('; ');
@@ -137,7 +146,7 @@ export function identifierRoute(records: readonly (TagreeveRecord | EvalEpoch)[]
   return {
     pass: false,
     evidence: [...new Set(sorted.map((f) => f.requestId))],
-    message: `Expected no planted value to reach a sink while consent forbids it, found ${sorted.length}: ${shown}${more}. Headers, including Referer and Cookie, were not searched.`,
+    message: `Expected no planted value to reach a sink while consent forbids it, found ${sorted.length}: ${shown}${more}. Headers, including Referer and Cookie, were not searched.${allowedText}`,
     severity: failing ? (override ?? 'fail') : 'warn',
     ...(note && { note }),
   };
