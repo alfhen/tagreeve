@@ -356,6 +356,22 @@ function serverRecords(error?: string): RunRecords {
   } as unknown as RunRecords;
 }
 
+test.each([
+  [2, '; 2 Stape loader requests sent as their real path'],
+  [1, '; 1 Stape loader request sent as their real path'],
+])('the summary line and --json show %i translated Stape loader requests', (requests, text) => {
+  const records = serverRecords();
+  const loses = "what Stape's hosting layer does with a loader request";
+  records.run.serverContainer!.loaderUnwrapped = { loader: 'stape', requests, loses };
+  const summary = buildSummary(records, [], 'run.jsonl');
+  expect(summary.serverContainer?.loaderUnwrapped).toBe(requests);
+  expect(JSON.stringify(summary)).not.toContain(loses);
+  expect(formatSummary(summary).split('\n').find((l) => l.startsWith('Server container:'))).toContain(text);
+  const plain = buildSummary(serverRecords(), [], 'run.jsonl');
+  expect(plain.serverContainer).not.toHaveProperty('loaderUnwrapped');
+  expect(formatSummary(plain)).not.toContain('Stape loader');
+});
+
 test('the summary counts the server container calls by link, in the line and in --json', () => {
   const summary = buildSummary(serverRecords(), [], 'run.jsonl');
   expect(summary.serverContainer).toEqual({ calls: 4, exact: 2, probable: 1, unlinked: 1, forwarded: 3, notExact: { eventId: { none: 1, noMatch: 1, several: 0 }, clientId: { noClientId: 0, noSameKeyHit: 0, severalSameKeyHits: 0, answeredBefore: 2, concurrentRequest: 0 } } });

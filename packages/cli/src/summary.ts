@@ -26,6 +26,8 @@ export interface ServerContainerSummary {
   /** Why the calls that are not `exact` are not: each such call counts once under each rule. */
   notExact: NotExactCounts;
   error?: ServerContainerErrorClass;
+  /** Stape loader requests sent to the container at their real path. */
+  loaderUnwrapped?: number;
 }
 
 export interface NotExactCounts {
@@ -130,6 +132,7 @@ function serverContainerOf(records: RunRecords): ServerContainerSummary | undefi
     forwarded: serverjs + config + destination,
     notExact: notExactCounts(sent),
     ...(container.error && { error: container.error }),
+    ...(container.loaderUnwrapped && { loaderUnwrapped: container.loaderUnwrapped.requests }),
   };
 }
 
@@ -294,7 +297,8 @@ function serverContainerLines(summary: Summary): string[] {
   if (!c) return testServerContainer ? [`Server container: ${head}${rejectedSuffix(summary)}`] : [];
   const error = testServerContainer && c.error ? `, failed (${c.error})` : '';
   const calls = `${c.calls} vendor call${c.calls === 1 ? '' : 's'}, ${c.exact} linked exactly, ${c.probable} probable, ${c.unlinked} unlinked`;
-  return [`Server container: ${head}${error}; ${calls}; ${c.forwarded} request${c.forwarded === 1 ? '' : 's'} forwarded to Google${c.error ? '' : rejectedSuffix(summary)}`, SERVER_CONTAINER_LIMITS];
+  const loader = c.loaderUnwrapped ? `; ${c.loaderUnwrapped} Stape loader request${c.loaderUnwrapped === 1 ? '' : 's'} sent as their real path` : '';
+  return [`Server container: ${head}${error}; ${calls}; ${c.forwarded} request${c.forwarded === 1 ? '' : 's'} forwarded to Google${c.error ? '' : rejectedSuffix(summary)}${loader}`, SERVER_CONTAINER_LIMITS];
 }
 
 const DATALAYER_EVENTS_SHOWN = 3;

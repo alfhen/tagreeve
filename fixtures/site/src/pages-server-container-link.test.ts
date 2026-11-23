@@ -21,3 +21,8 @@ test('/server-container-link sends GA4 hits to the container from its options, w
   expect(html).not.toContain('site.js');
   expect(html).not.toContain('banner.js');
 });
+
+test('/server-container-link wraps each hit for the Stape loader with loader=stape', async () => {
+  const html = await (await fetch(`${site.url}/server-container-link`)).text();
+  expect(html).toContain('/pwloader?k=');
+});

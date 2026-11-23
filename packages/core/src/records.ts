@@ -62,6 +62,8 @@ export interface ServerContainerRecord {
   unlinked: number;
   /** Set when the container did not start or died. */
   error?: ServerContainerErrorClass;
+  /** Set when a Stape loader request was sent to the container at its real path. Counts only: the translated URL is never stored. */
+  loaderUnwrapped?: { loader: 'stape'; requests: number; loses: string };
 }
 
 export interface GtmOverrideTag {
