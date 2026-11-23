@@ -579,6 +579,17 @@ describe('a container that rejected the browser requests', () => {
     expect(mustNotOf(rs).note).toBeUndefined();
   });
 
+  test.each([
+    ['too many hits for an exact count', 'count: 1', [capi(1500, undefined), capi(1600, undefined)]],
+    ['a failed identity.hashesMatch', 'identity.hashesMatch: true', [capi(1500, undefined, { params: { 'user_data.em[]': 'deadbeef' } })]],
+  ])('a must that fails with its hits present keeps FAIL: %s', (_name, extra, pairs) => {
+    const rs = go(`expect:\n  must:\n    - { vendor: meta-capi, sentBy: server, ${extra} }`, { pairs });
+    expect(check(rs, 'serverContainerRejected').pass).toBe(false);
+    expect(mustOf(rs).pass).toBe(false);
+    expect(mustOf(rs).note).toBeUndefined();
+    expect(mustOf(rs).severity).toBeUndefined();
+  });
+
   test('a sentBy browser rule keeps its verdict', () => {
     const rs = go('expect:\n  must:\n    - { vendor: meta-capi, sentBy: browser }\n  mustNot:\n    - { vendor: meta-capi, sentBy: browser }');
     expect(check(rs, 'serverContainerRejected').pass).toBe(false);

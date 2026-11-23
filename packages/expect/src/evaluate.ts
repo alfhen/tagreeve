@@ -38,7 +38,7 @@ import { serverContainerRejected, type ServerContainerRejected } from './server-
 import { hostMatches } from './hosts.ts';
 import { evaluatePushRule, fieldGlob } from './push-rules.ts';
 import { evaluateTagRule, expectedTagsOf, type ExpectedTags } from './tags.ts';
-import { consentFields, countHolds, describeCount, type ConsentField, type Filter, type Rule, type Scenario, type BuiltinName } from './scenario.ts';
+import { consentFields, countHolds, type Count, describeCount, type ConsentField, type Filter, type Rule, type Scenario, type BuiltinName } from './scenario.ts';
 
 export type EvalEpoch = ConsentEpoch;
 
@@ -133,7 +133,7 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
       const { pass, evidence, message } = outcome;
       // A verdict that rests on no server hit being there says nothing when the container rejected the requests that would have made them.
       const absence = kind === 'must' ? !pass : pass;
-      if (rejected &&!rejected.pass && absence && !outcome.note && rule.filter.sentBy !== 'browser' && !rule.tag && !rule.dataLayer && !rule.cookie) {
+      if (rejected &&!rejected.pass && absence && (kind === 'mustNot' || outcome.absent) && !outcome.note && rule.filter.sentBy !== 'browser' && !rule.tag && !rule.dataLayer && !rule.cookie) {
         add(`${kind}: ${rule.description}`, false, evidence, REJECTED_MESSAGE, 'warn', 'serverContainerRejected');
         continue;
       }
@@ -154,7 +154,10 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
 
 const REJECTED_MESSAGE = 'cannot evaluate: the server container rejected most browser requests';
 
-type RuleOutcome = { pass: boolean; evidence: string[]; message: string; note?: ResultNote; severity?: Severity };
+type RuleOutcome = { pass: boolean; evidence: string[]; message: string; note?: ResultNote; severity?: Severity; /** A failed must that more matching hits could turn into a pass. */ absent?: boolean };
+
+/** True when a count fails for too few hits, not too many. */
+const countNeedsMore = (count: Count, actual: number): boolean => !countHolds(count, actual) && (count.op === '>=' || count.op === '>' || (count.op === '=' && actual < count.n));
 
 const isScoped = (rule: Rule) => Boolean(rule.before || rule.inEpoch || rule.after || rule.from || consentFields.some((f) => rule.filter.consent[f]));
 
@@ -350,7 +353,7 @@ function evaluateRuleHits(rule: Rule, ctx: Context): RuleOutcome {
     const headline = check.headline ?? (countHolds(count, 0) ? UNMATCHED_HEADLINE : `Expected ${describeCount(count)} hits matching all conditions, found 0.`);
     return { pass: false, evidence: check.evidence, message: `${headline} ${matched}, but identity.hashesMatch failed: ${check.message}` };
   }
-  return { pass, evidence: ids, message };
+  return { pass, evidence: ids, message, ...(countNeedsMore(count, hits.length) && { absent: true }) };
 }
 
 const STUB_NO_COOKIES = 'stub mode: stubbed endpoints set no cookies';
@@ -607,7 +610,7 @@ function evaluateBodyRule(rule: Rule, body: NonNullable<Rule['body']>, selected:
     const expected = rule.kind === 'must' ? `Expected ${describeCount(count)} hits with body.has fields${where}` : `Expected no hit with body.has fields${where}`;
     const nested = matching.length ? [] : nestedNames(body.has.filter((n) => !n.includes('*')), selected);
     const nestedText = nested.length ? `; no top-level match; nested fields with this name: ${listNames(nested)}` : '';
-    return { pass: low, evidence, message: `${expected}, ${found} (${total} before narrowing)${nestedText}.${tail}`, ...(nested.length && { note: 'nestedNameOnly' as const }) };
+    return { pass: low, evidence, ...(rule.kind === 'must' && countNeedsMore(count, matching.length) && { absent: true }), message: `${expected}, ${found} (${total} before narrowing)${nestedText}.${tail}`, ...(nested.length && { note: 'nestedNameOnly' as const }) };
   }
 
   const only = body.only!;
@@ -615,7 +618,7 @@ function evaluateBodyRule(rule: Rule, body: NonNullable<Rule['body']>, selected:
   if (rule.kind === 'must') {
     const count = rule.count ?? { op: '>=' as const, n: 1 };
     if (!countHolds(count, selected.length))
-      return { pass: false, evidence: selected.map((h) => h.id), message: `Expected ${describeCount(count)} matching hits${where}, found ${selected.length}.${tail}` };
+      return { pass: false, evidence: selected.map((h) => h.id), message: `Expected ${describeCount(count)} matching hits${where}, found ${selected.length}.${tail}`, ...(countNeedsMore(count, selected.length) && { absent: true }) };
   }
   const unreadable: Hit[] = [];
   const offenders: { hit: Hit; outside: string[] }[] = [];
