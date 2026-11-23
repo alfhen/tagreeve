@@ -121,6 +121,8 @@ Send a unique event ID with each event, for example the GA4 parameter `event_id`
 
 The client ID link is narrower. It is `exact` only when exactly one browser hit with that client ID and event name was sent to the container before the call, and its request was still waiting for an answer, and no other browser request to the container shares one of the call's client IDs, or has no decoded hit, and was sent between that hit and the call. A send from `pagehide` or `visibilitychange` does not count as that other request. On a run with several pages, one client ID is on every hit of the same event name, so two or more hits usually match and the link stays `probable`. Do not count on it.
 
+A Stape loader request packs the GA4 query into one encoded parameter. Tagreeve reads the client ID from the query it unwraps, in memory only, so a loader hit links by client ID like a plain `/g/collect` hit. The ID is never written to the record or the output.
+
 ### Why a call is not exact
 
 `--json` has `serverContainer.notExact` with counts for the calls that are not `exact`. Each such call counts once under each rule, and the record gives the same two reasons on the hit as `linkMiss`. Neither holds an ID or a value.
