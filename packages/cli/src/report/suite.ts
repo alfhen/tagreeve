@@ -214,7 +214,7 @@ function isManifest(value: unknown): value is SuiteManifest {
     Array.isArray(m.cells) &&
     m.cells.every((c: unknown) => {
       const cell = c as Record<string, unknown> | null;
-      return typeof cell === 'object' && cell !== null && typeof cell.scenario === 'string' && typeof cell.variant === 'string' && typeof cell.status === 'string' && typeof cell.exitCode === 'number' && isFailedField(cell.failed) && isLabels(cell.labels) && isBaselineField(cell.baseline);
+      return typeof cell === 'object' && cell !== null && typeof cell.scenario === 'string' && typeof cell.variant === 'string' && typeof cell.status === 'string' && typeof cell.exitCode === 'number' && isFailedField(cell.failed) && isLabels(cell.labels) && isBaselineField(cell.baseline) && (cell.rulesSkipped === undefined || (Number.isInteger(cell.rulesSkipped) && (cell.rulesSkipped as number) >= 0));
     })
   );
 }
