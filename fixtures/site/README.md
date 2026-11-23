@@ -248,7 +248,7 @@ Two plain pages that load `assets/banner.js`. They need no network.
 
 | Page | Switches | What it sends or does | Consent step |
 | --- | --- | --- | --- |
-| `/click-id-relay` | none | Reads `gclid` from the URL and writes it to the first-party cookie `_pw_click`. Sets `_pw_other=TEST-NOCANARY-0001`, which is not a canary. Sends a GA4 `page_view` for `G-PWTEST0001` whose `dl` is the page URL. | None. |
+| `/click-id-relay` | none | Reads `gclid` from the URL and writes it to the first-party cookie `_pw_click`. Sets `_pw_other=TEST-NOCANARY-0001`, which is not a canary. Sends a GA4 `page_view` for `G-PWTEST0001` whose `dl` is the page URL, once, after the consent answer (accept or reject). | Accept or reject. |
 | `/click-id-relay-send` | `?send=granted` | Sends the `_pw_click` value base64 encoded in a Google Ads conversion request for `AW-000000001`, as the parameter `x`. With `send=granted` it sends only once consent is granted. | Accept for `send=granted`. |
 
 ## Stand-in server container
