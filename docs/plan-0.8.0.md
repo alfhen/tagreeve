@@ -1,6 +1,6 @@
 # Plan for 0.8.0
 
-0.8.0 has one goal: two commands give a DPO-ready audit of a site's consent behaviour (#1391): `tagreeve suite --consent ...` runs it and `tagreeve report <suite dir> --html <out.html>` shows it. It adds a consent matrix to `suite`, which runs each scenario under accept, reject, no answer and accept then withdraw. It adds canaries: seeded test click IDs on the start URL, searched for in every request, with the route each one took. It adds a consent audit to the HTML report. It also fixes the issues found in the 0.7.0 field tests and reviews: the install docs (#1587), baseline drift on `gcd` letters (#1569), the `addToCart` message on a 429 (#1576), the `Server container` line wording (#1583), path moves in `diff` (#1584), scrubbed secrets on server container records (#1585), server-side rules when the container rejects requests (#1579), and six review follow-ups (#1533, #1532, #1531, #1530, #1519, #1513). Each item is one PR. A PR is done when its acceptance test passes in CI, an adversarial review reports no blockers or majors, and it is squash-merged.
+0.8.0 has one goal: two commands give a DPO-ready audit of a site's consent behaviour (#1391): `tagreeve suite --consent ...` runs it and `tagreeve report <suite dir> --html <out.html>` shows it. It adds a consent matrix to `suite`, which runs each scenario under accept, reject, no answer and accept then withdraw. It adds canaries: seeded test click IDs on the start URL, searched for in every request, with the route each one took. It adds a consent audit to the HTML report. It also fixes the issues found in the 0.7.0 field tests and reviews: the install docs (#1587), baseline drift on `gcd` letters (#1569), the `addToCart` message on a 429 (#1576), the `Server container` line wording (#1583), path moves in `diff` (#1584), scrubbed secrets on server container records (#1585), server-side rules when the container rejects requests (#1579), and six review follow-ups (#1533, #1532, #1531, #1530, #1519, #1513). It also sends Stape custom loader requests to the local server container at their real path (#1622). Each item is one PR. A PR is done when its acceptance test passes in CI, an adversarial review reports no blockers or majors, and it is squash-merged.
 
 0.8.0 starts from `main` at `119e6b9` ("Release prep for 0.7.0 (#1586)").
 
@@ -9,6 +9,7 @@
 From `docs/goals.md`:
 
 - **Record what a site sends to each tracking vendor, for a scripted visitor, at each consent state.** S13 runs one scenario under each consent state. T13 lists what each vendor got in each state.
+- **Test an unpublished GTM workspace before publishing it, in the test browser only.** With `--server-container` and a workspace preview config, a site that sends GA4 through the Stape custom loader gets no GA4-client tag today. L14 lets those tags fire in the local container.
 - **Express expected behaviour as data, and report pass or fail with evidence.** J13 judges each canary route by the consent epoch it left in, with request IDs as evidence.
 - **Be safe by default.** Canaries are fake values. No observed real value is stored: the cookie hop (V13) keeps only the canary's name. Q13 marks scrubbed secrets.
 - **The first run shows where the setup likely breaks consent rules.** A13 puts the findings of every state on one report page.
@@ -43,8 +44,11 @@ Each issue was read on 2026-11-19 against `main` at `119e6b9`.
 | #1530 | bug | Open, four points. | L13 | `loaderReachesScope` in `packages/expect/src/evaluate.ts`; `parsePushSelector` in `packages/expect/src/scenario.ts` |
 | #1519 | bug | Open, four points. Needs a choice on whole-email matching. | Y13 | `ownValueKinds`, `ownMatcher` and `scan` in `packages/core/src/identity.ts`; `ownLeaves` in `packages/expect/src/early-identity-push.ts` |
 | #1513 | test | Open. Not shown that `gtm.uniqueEventId` can reach `args`. | E13 | `argumentsListOf` in `packages/core/src/consent-command.ts`; `packages/recorder/src/datalayer.ts` |
+| #1622 | enhancement | Open. Added on 2026-11-23. `routeToContainer` sends the loader path unchanged. Google's stock image has no Stape loader, so it answers 400 and no GA4-client tag fires. The browser side already decodes these requests (`unwrapStapeLoader`). | L14 | `routeToContainer` in `packages/recorder/src/recorder.ts`; `unwrapStapeLoader` in `packages/decoders/src/stape-custom-loader.ts` |
 
 No issue on the 0.8.0 milestone is left out.
+
+#1622 lists three fixes. L14 builds option 1. Option 2 (rewrite the page's GA4 transport) changes what the site sends, so the run would no longer test the site as it is. Option 3 is out of scope. O13 already makes absence-based `sentBy: server` rules read `cannot evaluate` with the `serverContainerRejected` note, which answers the issue's point that nothing in the result said so.
 
 ## Decisions
 
@@ -54,6 +58,7 @@ Decided by the maintainer:
 2. **The matrix comes first,** then the canaries, then the report.
 3. **Install docs** (#1587, 2026-11-19): the main install command is `npm i -g tagreeve`. `npm i -g tagreeve@next` stays as the way to try a release candidate. No release step moves `next` after a final release.
 4. **The open 0.8.0 issues are in:** #1587, #1569, #1576, #1583, #1584, #1585, #1579, #1533, #1532, #1531, #1530, #1519 and #1513.
+5. **#1622 joins 0.8.0-rc.1** (2026-11-23), as L14 in wave 9.
 
 Rules from #1391 that every entry keeps:
 
@@ -63,7 +68,7 @@ Rules from #1391 that every entry keeps:
 
 Decided in this plan:
 
-- **The record stays at schema version 5.** Every new record item is an optional field or a new flag kind or note, which design §4 allows within a version: `Request.secretsRedacted` (Q13), `Run.canaries` (C13), `Flag.route` and the flag kinds `identifierRoute` and `canarySearch` (U13), `CheckpointCookie.canary` (V13), `Run.consentCell` (S13) and the result note `serverContainerRejected` (O13). No entry changes the meaning of a field.
+- **The record stays at schema version 5.** Every new record item is an optional field or a new flag kind or note, which design §4 allows within a version: `Request.secretsRedacted` (Q13), `Run.canaries` (C13), `Flag.route` and the flag kinds `identifierRoute` and `canarySearch` (U13), `CheckpointCookie.canary` (V13), `Run.consentCell` (S13), the result note `serverContainerRejected` (O13) and `ServerContainerRecord.loaderUnwrapped` (L14). No entry changes the meaning of a field.
 - **The matrix is a `suite` dimension: `tagreeve suite [<dir>] --consent accept,reject,none,withdraw`** (choice: maintainer may change). #1391 allows `run --consent` or a suite dimension. `suite` already has cells, `suite.json`, a table and a suite report, so the matrix reuses them.
 - **The matrix point is the scenario's first `consent` step** (choice: maintainer may change). Each cell copies the scenario and sets that step's value to the cell's state. A scenario with no `consent` step, or whose first one is `withdraw`, exits 2 before any browser starts and names the scenario.
 - **The withdraw cell needs `options.withdrawWith`,** a selector for the site's cookie settings link (choice: maintainer may change). The cell answers `accept` at the matrix point and then plays `wait: 1s`, `click: <withdrawWith>` and `consent: withdraw`, the steps `e2e/scenarios/accept-then-withdraw.yml` uses. `withdraw` in the list without the option exits 2 and names the option.
@@ -77,6 +82,11 @@ Decided in this plan:
 - **Names in a route are masked.** `route.sink.field`, the V13 cookie hop name and every parameter, key or cookie name a route prints go through `guardFieldName` from `packages/decoders/src/fields.ts`. A value-like name, such as a body key that is an email, reads `(other)`. The raw name is never stored.
 - **A sink is a request to a host outside the site, `firstPartyHosts` and `serverHosts`** (choice: maintainer may change). A request to the site or to the user's own server container is a hop, not a leak.
 - **`identifierRoute` fails by default, and a `pageUrl` route warns** (choice: maintainer may change). One rule judges every sink. A sink that decoded into a Google hit that carries its own consent (`gcs` or `gcd`, design §7.3) takes that consent. Every other sink, a hit of another vendor or a request that decoded into no hit, takes the consent of its epoch, with the grace window. The sink fails when that consent is `undecided`, `denied` or `withdrawn`, or `mixed` with `ad_user_data` or `analytics_storage` denied. A `pageUrl` route only warns, because a cookieless ping sends the page URL by design. The result exists only on a run that planted canaries, so no existing run changes.
+- **Stape loader (L14): translate only to known server client paths** (choice: maintainer may change). A request to a `serverHosts` host is sent to the local container at its decoded path and query when `unwrapStapeLoader` gives one, and the decoded path is `/g/collect` (the GA4 client) or `/data` (the Data Client). Every other request is sent as today. This keeps paths that work today, such as the `/s` data client path in #1622, unchanged. It also guards against a plain request whose single query value happens to base64-decode to a path.
+- **Stape loader (L14): keep everything else of the request** (choice: maintainer may change). The method, the headers (minus `host`, as today), the body and the browser's cookies are sent as before. Only the path and query change. No query parameter outside the encoded value is kept, because the loader carries the whole real path and query in that one value.
+- **Stape loader (L14): the record keeps what the browser sent** (choice: maintainer may change). `Request.url` stays the loader URL. The decoders already decode it as a GA4 or Data Client hit with the transport `... via stape-loader`. The translated URL is not stored anywhere, so no new place holds query values.
+- **Stape loader (L14): the run says it translated** (choice: maintainer may change). `ServerContainerRecord.loaderUnwrapped` is `{ loader: 'stape', requests: <n>, loses: <text> }`, set only when at least one request was translated. `loses` reads "what Stape's hosting layer does with a loader request: its own headers, Cookie Keeper and any change to the path or body". The `Server container:` summary line adds `; <n> Stape loader request(s) sent as their real path`. The record stays at schema version 5: the field is optional (design §4).
+- **Stape loader (L14): one pure function decides** (choice: maintainer may change). A new `containerPathFor(url)` in `packages/recorder/src/server-container/loader-path.ts` takes the live URL and returns the path and query to send and whether it unwrapped. `routeToContainer` calls it. It reads the live request URL, not `record.url`, which may be redacted during a handoff.
 - **Docs owners** (choice: maintainer may change). To keep the files of one wave apart, some code entries leave `docs/cli.md` and `docs/design.md` to a later entry: D13 documents G13, K13, Q13, Y13 and N13; T13 documents S13; J13 documents C13 and U13; W13 documents V13; A13 documents F13. The release candidate is cut only after all of them merge.
 - **CHANGELOG** (choice: maintainer may change). No entry edits `CHANGELOG.md`. Each PR body ends with the one CHANGELOG line it wants, and R18 writes the `## 0.8.0-rc.1` section from them.
 - **#1569: a `gcd` letter change is a warning, not drift.** An added and a removed tuple of one key pair up when their IDs, four consent states and `gcs` are equal, and `gcd` differs only in signal letters where each pair is `p` and `q`, or `t` and `v`. The pair gives a warning line and no drift. The letter rule lives next to `GCD_LETTERS` in `packages/decoders/src/ga4.ts`. Only these two pairs count (choice: maintainer may change).
@@ -102,7 +112,8 @@ flowchart LR
   W5 --> W6["Wave 6: W13, F13"]
   W6 --> W7["Wave 7: A13"]
   W7 --> W8["Wave 8: O13"]
-  W8 --> R["R18: release prep for 0.8.0-rc.1"]
+  W8 --> W9["Wave 9: L14"]
+  W9 --> R["R18: release prep for 0.8.0-rc.1"]
 ```
 
 The small fixes first, then the matrix, then the canaries, then the report.
@@ -110,15 +121,18 @@ The small fixes first, then the matrix, then the canaries, then the report.
 No two entries of one wave touch the same file. Why the waves are this way:
 
 - **O13 in wave 8.** It edits `packages/core/src/records.ts`, which has one entry per wave from wave 1 to wave 5 (S13 takes wave 2), `packages/cli/src/report/model.ts`, which F13 edits in wave 6, and `docs/cli.md` and `docs/design.md`, which A13 edits in wave 7. Wave 8 is free of all of them. O13 documents itself.
+- **L14 in wave 9.** It edits `packages/core/src/records.ts` and `docs/cli.md`, which O13 edits in wave 8, `packages/cli/src/summary.ts`, which C13 and U13 edit, and `docs/design.md`, which A13 and O13 edit. It joined the plan after wave 8 was set, so it goes last. L14 documents itself.
 - **Small fixes in waves 1 to 3.** They do not depend on #1391. G13 and N13 both edit `packages/expect/src/diff.ts`, so N13 waits for wave 2. D13 documents the code fixes of waves 1 and 2, so it is in wave 3.
 - **The matrix: S13 in wave 2, T13 in wave 4.** S13 and L13 both edit `packages/expect/src/scenario.ts`. T13 needs S13's cells and writes the matrix docs, so it is not in wave 3 with D13.
 - **The canaries: C13 and B13, U13, J13, then V13 and W13.** C13 needs S13's cell name in `packages/cli/src/run.ts`. B13 puts the decoders' page fields in one module, which U13 reads. It is in wave 3 because no other wave 3 entry touches `packages/decoders/`; G13 edits `ga4.ts` in wave 1. U13 needs C13's canaries and B13's module. J13 judges U13's flags. V13 adds the cookie hop to U13's routes and runs next to J13, because they share no file. W13 needs J13's judge and V13's routes.
 - **The report: F13 in wave 6, A13 in wave 7.** F13 reads J13's results. A13 needs T13's table and F13's route view, and writes the report docs.
-- **`docs/cli.md` and `docs/design.md`.** At most one entry per wave edits them: I13 (wave 1, `docs/cli.md` only), D13 (wave 3), T13 (wave 4), J13 (wave 5), W13 (wave 6), A13 (wave 7), O13 (wave 8). The other entries leave them to their docs owner (Decisions).
-- **`packages/core/src/records.ts`.** Q13 (wave 1), S13 (wave 2), C13 (wave 3), U13 (wave 4), V13 (wave 5), O13 (wave 8): one per wave.
+- **`docs/cli.md` and `docs/design.md`.** At most one entry per wave edits them: I13 (wave 1, `docs/cli.md` only), D13 (wave 3), T13 (wave 4), J13 (wave 5), W13 (wave 6), A13 (wave 7), O13 (wave 8), L14 (wave 9). The other entries leave them to their docs owner (Decisions).
+- **`packages/core/src/records.ts`.** Q13 (wave 1), S13 (wave 2), C13 (wave 3), U13 (wave 4), V13 (wave 5), O13 (wave 8), L14 (wave 9): one per wave.
 - **`packages/expect/src/scenario.ts`.** L13 (wave 1), S13 (wave 2), C13 (wave 3), J13 (wave 5).
 - **`packages/cli/src/run.ts`.** S13 (wave 2), C13 (wave 3), U13 (wave 4).
-- **`packages/cli/src/summary.ts`.** C13 (wave 3), U13 (wave 4).
+- **`packages/cli/src/summary.ts`.** C13 (wave 3), U13 (wave 4), L14 (wave 9, `serverContainerOf` and `serverContainerLines`).
+- **`packages/recorder/src/recorder.ts`.** V13 (`checkpoint`, wave 5), L14 (`routeToContainer` and `recordServerContainer`, wave 9).
+- **`docs/guide/server-container.md`.** D13 (wave 3), L14 (wave 9, the Stape-only features list).
 - **`packages/decoders/src/index.ts`.** B13 only (wave 3).
 - **`packages/decoders/src/ga4.ts` and `packages/decoders/src/ga4.test.ts`.** G13 (wave 1), B13 (wave 3).
 - **`packages/decoders/src/page-fields.ts`.** B13 makes it (wave 3); U13 (wave 4) only imports it.
@@ -610,6 +624,32 @@ Evals:
 
 Acceptance: O13-1 and O13-6 pass, and fail on `main`, where the rules fail or pass on missing server hits.
 
+### Wave 9
+
+**L14 Server container: send Stape loader requests at their real path (#1622).** Round cap 4. Touches: `routeToContainer` and `recordServerContainer` in `packages/recorder/src/recorder.ts`; new `packages/recorder/src/server-container/loader-path.ts` and `loader-path.test.ts`; `ServerContainerRecord` in `packages/core/src/records.ts`; `ServerContainerSummary`, `serverContainerOf` and `serverContainerLines` in `packages/cli/src/summary.ts` and their cases in `packages/cli/src/summary.test.ts`; `fixtures/site/public/server-container-link.html` (a new `loader=stape` option); `fixtures/site/src/pages-server-container-link.test.ts`; new `e2e/server-container-stape-loader.e2e.test.ts`; `docs/design.md` (§8.5 the paragraph after the diagram, §15.5 the "Not available locally" line, and the `Run.serverContainer` field list in §4); `docs/cli.md` (the `Server container` paragraph); `docs/guide/server-container.md` (the Stape-only features list).
+Closes #1622
+- `containerPathFor(url)` returns `{ pathAndQuery, unwrapped: true }` when `unwrapStapeLoader` gives a URL whose path is exactly `/g/collect` or `/data`, and `{ pathAndQuery: <path + search of url>, unwrapped: false }` otherwise. It never throws.
+- `routeToContainer` fetches `${origin}${pathAndQuery}` with the method, headers, body and `maxRedirects: 0` as today, and counts each unwrapped request.
+- `recordServerContainer` writes `loaderUnwrapped` when the count is above 0, with the fixed `loses` text from Decisions. The count covers requests the container answered and requests whose fetch failed.
+- The fixture page gets `loader=stape`: each hit goes to `<sgtmUrl>/pwloader?k=<base64 of "/g/collect?<query>">` by POST with the same empty body. `loader=stape&path=s` wraps `/s?<query>` instead, for the negative case. The `reject` option still works inside the wrapped query.
+- The summary line and `--json` (`serverContainer.loaderUnwrapped`, the count only) show the translation. Docs say the stock image has no Stape loader, that Tagreeve sends loader requests for `/g/collect` and `/data` at their real path, and what that loses.
+Invariants: `Request.url` of a loader request is the URL the browser sent. No record, log line, message or `--json` field holds the translated URL or a decoded query value. A request that is not a loader request, or whose decoded path is not on the list, reaches the container with exactly the path and query it has on `main`. The method, headers and body sent to the container are the same bytes as on `main`. `stub` and `live` runs and runs without `--server-container` do not change.
+Evals:
+
+| Id | Kind | What must be true | How to check |
+| --- | --- | --- | --- |
+| L14-1 | behaviour | On `/server-container-link?n=2&eid=e1&loader=stape` in server mode with the stand-in, the stand-in receives `/g/collect`, answers 200, and the run has server container hits linked `exact` to the browser hits. `run.serverContainer.loaderUnwrapped.requests` is 2. | `pnpm exec vitest run --project e2e e2e/server-container-stape-loader.e2e.test.ts`. |
+| L14-2 | regression | The same run without `loader=stape` gives the same server hits and no `loaderUnwrapped`. | The same file, paired case. |
+| L14-3 | behaviour | With `loader=stape&path=s`, the request reaches the stand-in at the loader path (the stand-in answers 404), no server hit is recorded and there is no `loaderUnwrapped`. | The same file. |
+| L14-4 | behaviour | `Request.url` of each loader request is the `/pwloader?k=...` URL, and the browser hit's transport ends in `via stape-loader`. | The same file. |
+| L14-5 | privacy | The decoded query (for example `tid=G-PWTEST0001` and the event ID) is in the record's loader URL only in base64, and appears in no summary text, `--json` field or stderr line. The test first checks the base64 value is in `Request.url`. | The same file. |
+| L14-6 | behaviour | `containerPathFor` covers: a `/g/collect` and a `/data` loader URL; a decoded `/s` path; a decoded `/g/collect/extra`; two decodable values; a plain `/g/collect?v=2` URL; a bad URL. | `pnpm exec vitest run --project unit packages/recorder/src/server-container/loader-path.test.ts`. |
+| L14-7 | behaviour | The summary line reads `...; 2 Stape loader requests sent as their real path` and `1 Stape loader request` for one. Without the field it is unchanged. | `pnpm exec vitest run --project unit packages/cli/src/summary.test.ts`. |
+| L14-8 | regression | Existing server container runs keep their results. | `pnpm exec vitest run --project e2e e2e/server-container.e2e.test.ts e2e/server-container-link.e2e.test.ts e2e/server-container-rejected.e2e.test.ts`. |
+| L14-9 | behaviour | The docs describe the translation and what it loses. | `grep -n "sent as their real path" docs/cli.md docs/guide/server-container.md` prints a line in each; `pnpm docs:build` passes. |
+
+Acceptance: L14-1 passes, and fails on `main` of wave 8, where the stand-in gets the loader path, answers 404 and no server hit is recorded.
+
 ## Release
 
 **R18 Release prep for 0.8.0-rc.1.** Written as its own entry after every entry above has merged. 0.8.0-rc.1 is cut through a release-prep PR. The PR runs `scripts/bump-version.sh 0.8.0-rc.1`, which sets `package.json` and the version lines of the README, `docs/cli.md` and `docs/design.md`. It writes the `## 0.8.0-rc.1` section of `CHANGELOG.md` from the PR lines, the README "In 0.8.0-rc.1" line, design §15 item 8 and a new §15.8 "Differences in 0.8", and re-records `site/demo/` if `pnpm docs:test` shows a change. `package.json` is gated, so the maintainer merges it, and CI publishes the release under `next`. No agent publishes, pushes a tag or starts the release workflow.
@@ -634,6 +674,9 @@ The maintainer field-tests 0.8.0-rc.1 in `stub` mode, supervised:
 - **A pass is a lower bound.** Salted, rebuilt or swapped IDs, compressed bodies, request headers (including `Referer` and `Cookie`) and the container's internals are not searched. `canarySearch` says what was skipped.
 - **Y13 changes `possibleRealData`.** A foreign email that contains the run's email is now reported, so a run can newly fail on it.
 - **Y13 keeps the contains rule inside base64.** A foreign email or phone glued to the run's own inside a base64 reading still counts as the run's own, for `earlyIdentityPush` and `scan`. Y13-7 pins it as known behaviour.
+- **L14: the list of paths is short.** `/g/collect` and `/data` are the two client paths the decoders know. A container with another client path behind the loader still gets the loader path and is still rejected. The maintainer may want `/j/collect` or a scenario option to extend the list.
+- **L14: the local run is not the Stape run.** Stape's hosting layer may add headers or change the request before the container sees it. The `loses` note says so, and the guide keeps listing the Stape-only features.
+- **L14: not field-tested.** That the real Stape loader sends POST bodies unchanged, and that the stock GA4 client claims the translated request, is shown only by the stand-in. The release candidate field test should rerun #1622's Shopify scenario with `--network server --server-container` and a `sentBy: server` Google Ads rule.
 - **Docs lag inside the release.** Some features are documented one or two waves after their code merges (Decisions). The release candidate is cut only after all docs owners merge.
 
 ## Out of scope
@@ -648,3 +691,6 @@ The maintainer field-tests 0.8.0-rc.1 in `stub` mode, supervised:
 | `run --consent` | The matrix is a `suite` dimension (Decisions). |
 | A consent dimension with `--baseline` or several variants | Exits 2 in 0.8.0 (Decisions). |
 | An MCP server (#362) | AGENTS.md: CLI only. |
+| Option 2 of #1622: rewrite the page's GA4 transport | Changes what the site sends. |
+| Option 3 of #1622: name the loader in `serverContainerRejected` | O13 already marks the affected rules. After L14 only loader paths off the list can still be rejected; a later entry can name them if the field test shows it matters. |
+| Sending the loader path to a real Stape server | A hosted service. Not planned. |
