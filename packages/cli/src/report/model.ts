@@ -347,13 +347,16 @@ function routesView(records: RunRecords, epochs: ConsentEpoch[], graceMs: number
     const route = flag.route;
     if (flag.kind !== 'identifierRoute' || !route) continue;
     const request = records.requests.find((r) => r.id === route.sink.requestId);
-    const epoch = request ? (epochForHit(epochs, request.t, graceMs)?.label ?? 'undecided') : 'unknown';
+    const placed = request ? epochForHit(epochs, request.t, graceMs) : undefined;
+    const epoch = request ? (placed?.label ?? 'undecided') : 'unknown';
+    // Two separate epochs with one label stay apart.
+    const epochKey = placed ? epochs.indexOf(placed) : epoch;
     // The check gets the whole run and only this route, so a hit on another request that the route depends on still counts.
     const judged = identifierRoute([search, flag, ...epochs, ...records.requests, ...records.hits], graceMs);
     const stored = records.results.find((r) => r.expectation === 'builtin: identifierRoute');
     const failing = judged !== undefined && !judged.pass && (!stored || (!stored.pass && stored.evidence.includes(route.sink.requestId)));
     const verdict = !failing ? 'PASS' : judged.severity === 'warn' || stored?.severity === 'warn' ? 'WARN' : 'FAIL';
-    const key = JSON.stringify([route.sink.host, route.sink.field, route.sink.transform, route.kind, epoch, verdict]);
+    const key = JSON.stringify([route.sink.host, route.sink.field, route.sink.transform, route.kind, epochKey, verdict]);
     let group = groups.get(key);
     if (!group) groups.set(key, (group = { route, epoch, verdict, sources: [], requestIds: new Set(), flags: 0 }));
     const source = routeSource(route);

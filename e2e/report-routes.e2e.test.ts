@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, test } from 'vitest';
+import { DEFAULT_GRACE_MS, epochForHit } from '../packages/expect/src/index.ts';
 import { canaryPool, type Flag, type RunRecords } from '../packages/core/src/index.ts';
 import { outDir, root, run, runCli, scenario, site, type CliRun } from './cli-helpers.ts';
 
@@ -37,8 +38,11 @@ type Verdict = 'PASS' | 'WARN' | 'FAIL';
 // Rebuilds the report's groups from the record: host, field, transform, kind, epoch at sink and verdict.
 const groupCount = (records: RunRecords, verdictOf: (flag: Flag) => Verdict): { total: number; byVerdict: Record<Verdict, number> } => {
   const epochOf = (flag: Flag) => {
-    const t = records.requests.find((q) => q.id === flag.route!.sink.requestId)!.t;
-    return records.consentEpochs.find((e) => e.startT <= t && (e.endT === null || t < e.endT))?.label ?? 'unknown';
+    const request = records.requests.find((q) => q.id === flag.route!.sink.requestId);
+    if (!request) return 'unknown';
+    const epochs = [...records.consentEpochs].sort((a, b) => a.startT - b.startT);
+    const placed = epochForHit(epochs, request.t, records.run.graceWindowMs ?? DEFAULT_GRACE_MS);
+    return placed ? epochs.indexOf(placed) : 'undecided';
   };
   const keys = new Map<string, Verdict>();
   for (const f of routeFlags(records)) {
