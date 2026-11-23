@@ -1,6 +1,6 @@
-import { newId, RunWriter, type ConsentState, type Hit, type TagreeveRecord, type RunRecords } from '@tagreeve/core';
+import { newId, readRun, RunWriter, type ConsentState, type Hit, type TagreeveRecord, type RunRecords } from '@tagreeve/core';
 import { createHash } from 'node:crypto';
-import { link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, link, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, test } from 'vitest';
@@ -334,21 +334,89 @@ test('a manifest whose cell failed field is malformed exits 2 with the manifest 
   }
 });
 
-test('a consent suite is refused and the same manifest without the consent fields loads', async () => {
-  const consentDir = await mkdtemp(join(tmpdir(), 'pw-suite-consent-'));
+const consentManifest = (extra: Partial<SuiteManifest> = {}): SuiteManifest => ({
+  suiteSchemaVersion: 3,
+  id: 'suite_consent',
+  startedAt: 1_800_000_000_000,
+  site: 'https://shop.example.com',
+  stores: [],
+  variants: ['published'],
+  consent: ['accept', 'reject'],
+  cells: [
+    { scenario: 'a', variant: 'published', labels: { consent: 'accept' }, status: 'pass', exitCode: 0, record: 'a.jsonl' },
+    { scenario: 'a', variant: 'published', labels: { consent: 'reject' }, status: 'fail', exitCode: 1, record: 'r.jsonl', rulesSkipped: 2 },
+  ],
+  diffs: [],
+  exitCode: 1,
+  ...extra,
+});
+
+const consentRecords = (acceptCell: 'accept' | 'reject' | undefined, rejectCell: 'accept' | 'reject' | undefined) => ({
+  a: records('a', 'published', ['page_view'], { run: { ...records('a', 'published', []).run, ...(acceptCell && { consentCell: acceptCell }) } }),
+  r: records('a', 'published', ['page_view'], { run: { ...records('a', 'published', []).run, ...(rejectCell && { consentCell: rejectCell }) } }),
+});
+
+async function consentFolder(rec: ReturnType<typeof consentRecords>, only: ('a' | 'r')[] = ['a', 'r']): Promise<string> {
+  const folder = await mkdtemp(join(tmpdir(), 'pw-suite-consent-'));
+  for (const key of only) {
+    const writer = await RunWriter.create(folder, rec[key].run);
+    const { run, truncatedAtLine, ...rest } = rec[key];
+    void run;
+    void truncatedAtLine;
+    for (const record of Object.values(rest).flat() as TagreeveRecord[]) await writer.append(record);
+    await writer.close();
+    await rename(writer.path, join(folder, `${key}.jsonl`));
+  }
+  await writeFile(join(folder, 'suite.json'), JSON.stringify(consentManifest()));
+  return folder;
+}
+
+test('each consent cell has its own view, chosen by the state its record names', async () => {
+  const folder = await consentFolder(consentRecords('accept', 'reject'));
   try {
-    const withConsent = { ...manifest, consent: ['accept', 'reject'], cells: manifest.cells.map((c) => ({ ...c, labels: { ...c.labels, consent: 'accept' } })) };
-    await writeFile(join(consentDir, 'suite.json'), JSON.stringify(withConsent));
-    await expect(loadSuite(consentDir)).rejects.toThrow('consent suites are shown from 0.8.0-rc.1');
-    expect(() => buildSuiteModel(withConsent as unknown as SuiteManifest, loaded)).toThrow('consent suites are shown from 0.8.0-rc.1');
-    const html = join(consentDir, 'a.html');
-    const capture = io();
-    expect(await main(['report', consentDir, '--html', html], capture.io)).toBe(2);
-    expect(capture.err.join('')).toContain('consent suites are shown from 0.8.0-rc.1');
-    await writeFile(join(consentDir, 'suite.json'), JSON.stringify({ ...manifest, cells: manifest.cells.map((c) => ({ ...c, labels: {} })) }));
-    await expect(loadSuite(consentDir)).resolves.toBeDefined();
+    const { manifest: m, records: r } = await loadSuite(folder);
+    const model = buildSuiteModel(m, r);
+    const views = model.scenarios[0]!.cells;
+    expect(views.map((c) => c.consent)).toEqual(['accept', 'reject']);
+    expect(views[0]!.model).toEqual(buildReportModel(await readRun(join(folder, 'a.jsonl'))));
+    expect(views[1]!.model).toEqual(buildReportModel(await readRun(join(folder, 'r.jsonl'))));
+    expect(model.warnings).toEqual([]);
+    expect(renderSuiteReport(model)).toContain('Consent audit');
+
+    const swapped = await consentFolder(consentRecords('accept', 'accept'));
+    try {
+      const again = await loadSuite(swapped);
+      expect((await readRun(join(swapped, 'r.jsonl'))).run.consentCell).toBe('accept');
+      const wrong = buildSuiteModel(again.manifest, again.records);
+      expect(wrong.scenarios[0]!.cells[1]!.model).toBeUndefined();
+      expect(wrong.warnings.some((w) => w.includes('consent reject'))).toBe(true);
+    } finally {
+      await rm(swapped, { recursive: true, force: true });
+    }
   } finally {
-    await rm(consentDir, { recursive: true, force: true });
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
+test('a consent suite with a missing record still reports, and says which state has none', async () => {
+  const folder = await consentFolder(consentRecords('accept', 'reject'));
+  const html = join(folder, 'out.html');
+  try {
+    const present = io();
+    expect(await main(['report', folder, '--html', html], present.io)).toBe(0);
+    expect(await readFile(html, 'utf8')).not.toContain('Warning: a (published, consent reject)');
+    await rm(join(folder, 'r.jsonl'));
+    await expect(access(join(folder, 'r.jsonl'))).rejects.toThrow();
+    const missing = io();
+    expect(await main(['report', folder, '--html', html], missing.io)).toBe(0);
+    const text = await readFile(html, 'utf8');
+    expect(text).toContain('Warning: a (published, consent reject): no record');
+    const [accept, reject] = text.split('<section class="audit-col"').slice(1);
+    expect(reject).toContain('No record to show.');
+    expect(accept).toContain('consentModeSetup');
+    expect(accept).not.toContain('No record to show.');
+  } finally {
+    await rm(folder, { recursive: true, force: true });
   }
 });
 

@@ -3,7 +3,7 @@ import { diffRuns } from '@tagreeve/expect';
 import { readdir, readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { flagChangeLabel } from '../diff.ts';
-import { cellText, type CellBaseline, type SuiteCell, type SuiteManifest } from '../suite.ts';
+import { cellText, type CellBaseline, type ConsentMatrixEntry, type SuiteCell, type SuiteManifest } from '../suite.ts';
 import { buildReportModel, type ReportModel } from './model.ts';
 import { addFindings, emptyFindings, findingsSentence } from './verdict.ts';
 import { definitionList, escapeHtml, page, runHeader, runSections } from './render.ts';
@@ -11,6 +11,10 @@ import { definitionList, escapeHtml, page, runHeader, runSections } from './rend
 export interface SuiteCellView {
   /** Set with `--stores`. */
   store?: string;
+  /** Set on a cell of a `--consent` suite. */
+  consent?: string;
+  /** Set on a `--consent` cell that ran without the scenario's rules. */
+  rulesSkipped?: number;
   variant: string;
   status: string;
   exitCode: number;
@@ -46,11 +50,14 @@ export interface SuiteReportModel {
   warnings: string[];
   scenarios: { name: string; cells: SuiteCellView[] }[];
   diffs: DiffView[];
+  /** Set for a `--consent` suite. */
+  consent?: { states: string[]; matrix: ConsentMatrixEntry[] };
 }
 
 export type SuiteRecords = ReadonlyMap<string, RunRecords | undefined>;
 
-export const recordKey = (scenario: string, variant: string, store?: string): string => JSON.stringify(store === undefined ? [scenario, variant] : [scenario, variant, store]);
+export const recordKey = (scenario: string, variant: string, store?: string, consent?: string): string =>
+  JSON.stringify(consent !== undefined ? [scenario, variant, store ?? null, consent] : store === undefined ? [scenario, variant] : [scenario, variant, store]);
 
 function hostOf(url: string): string {
   try {
@@ -84,16 +91,12 @@ function diffView(scenario: string, store: string | undefined, from: string, to:
   };
 }
 
-export const CONSENT_SUITE_REFUSAL = 'consent suites are shown from 0.8.0-rc.1';
-
-/** The model keeps one cell per scenario, store and variant, and the cells of a consent suite share them. */
-function refuseConsentSuite(manifest: SuiteManifest): void {
-  if (manifest.consent !== undefined || manifest.cells.some((c) => c.labels?.consent !== undefined)) throw new Error(CONSENT_SUITE_REFUSAL);
-}
+const isConsentSuite = (manifest: SuiteManifest): boolean => manifest.consent !== undefined || manifest.cells.some((c) => c.labels?.consent !== undefined);
 
 /** Diffs run from the first variant to each other, within one store, as the suite table does. */
 export function buildSuiteModel(manifest: SuiteManifest, records: SuiteRecords): SuiteReportModel {
-  refuseConsentSuite(manifest);
+  const consentSuite = isConsentSuite(manifest);
+  const states: (string | undefined)[] = consentSuite ? [...new Set([...(manifest.consent ?? []), ...manifest.cells.flatMap((c) => (c.labels?.consent === undefined ? [] : [c.labels.consent]))])] : [undefined];
   const warnings: string[] = [];
   const names = [...new Set(manifest.cells.map((c) => c.scenario))];
   const storeNames = manifest.stores.map((s) => s.name);
@@ -101,21 +104,40 @@ export function buildSuiteModel(manifest: SuiteManifest, records: SuiteRecords):
   const scenarios = names.map((name) => ({
     name,
     cells: storeAxis.flatMap((store) =>
-      manifest.variants.flatMap((variant): SuiteCellView[] => {
-        const cell = manifest.cells.find((c) => c.scenario === name && c.labels?.store === store && c.variant === variant);
-        if (!cell) return [];
-        const label = `${name}${store === undefined ? '' : ` on ${store}`} (${variant})`;
-        const loaded = records.get(recordKey(name, variant, store));
-        if (!loaded && cell.status !== 'skipped') warnings.push(`${label}: no record, so the run is not in this report`);
-        if (loaded?.truncatedAtLine) warnings.push(`${label}: record is truncated at line ${loaded.truncatedAtLine}, so later records are missing from this report`);
-        return [{ ...(store !== undefined && { store }), variant, status: cell.status, exitCode: cell.exitCode, ...(cell.failed && { failed: cell.failed }), ...(cell.baseline && { baseline: cell.baseline }), model: loaded && buildReportModel(loaded) }];
-      }),
+      manifest.variants.flatMap((variant) =>
+        states.flatMap((consent): SuiteCellView[] => {
+          const cell = manifest.cells.find((c) => c.scenario === name && c.labels?.store === store && c.variant === variant && c.labels?.consent === consent);
+          if (!cell) return [];
+          const label = `${name}${store === undefined ? '' : ` on ${store}`} (${variant}${consent === undefined ? '' : `, consent ${consent}`})`;
+          let loaded = records.get(recordKey(name, variant, store, consent));
+          if (!loaded && cell.status !== 'skipped') warnings.push(`${label}: no record, so the run is not in this report`);
+          // The record says which state it ran in, so a record that names another state is not this cell's.
+          if (loaded && consent !== undefined && loaded.run.consentCell !== consent) {
+            warnings.push(`${label}: the record ${loaded.run.consentCell === undefined ? 'names no consent state' : `is for consent state ${loaded.run.consentCell}`}, so it is not shown for this cell`);
+            loaded = undefined;
+          }
+          if (loaded?.truncatedAtLine) warnings.push(`${label}: record is truncated at line ${loaded.truncatedAtLine}, so later records are missing from this report`);
+          return [
+            {
+              ...(store !== undefined && { store }),
+              ...(consent !== undefined && { consent }),
+              variant,
+              status: cell.status,
+              exitCode: cell.exitCode,
+              ...(cell.failed && { failed: cell.failed }),
+              ...(cell.rulesSkipped !== undefined && { rulesSkipped: cell.rulesSkipped }),
+              ...(cell.baseline && { baseline: cell.baseline }),
+              model: loaded && buildReportModel(loaded),
+            },
+          ];
+        }),
+      ),
     ),
   }));
 
   const [first, ...others] = manifest.variants;
   const diffs: DiffView[] = [];
-  for (const name of names) {
+  for (const name of consentSuite ? [] : names) {
     for (const store of storeAxis) {
       const a = records.get(recordKey(name, first!, store));
       for (const to of others) {
@@ -138,6 +160,7 @@ export function buildSuiteModel(manifest: SuiteManifest, records: SuiteRecords):
     warnings,
     scenarios,
     diffs,
+    ...(consentSuite && { consent: { states: states as string[], matrix: manifest.consentMatrix ?? [] } }),
   };
 }
 
@@ -191,7 +214,7 @@ function isManifest(value: unknown): value is SuiteManifest {
     Array.isArray(m.cells) &&
     m.cells.every((c: unknown) => {
       const cell = c as Record<string, unknown> | null;
-      return typeof cell === 'object' && cell !== null && typeof cell.scenario === 'string' && typeof cell.variant === 'string' && typeof cell.status === 'string' && typeof cell.exitCode === 'number' && isFailedField(cell.failed) && isLabels(cell.labels) && isBaselineField(cell.baseline);
+      return typeof cell === 'object' && cell !== null && typeof cell.scenario === 'string' && typeof cell.variant === 'string' && typeof cell.status === 'string' && typeof cell.exitCode === 'number' && isFailedField(cell.failed) && isLabels(cell.labels) && isBaselineField(cell.baseline) && (cell.rulesSkipped === undefined || (Number.isInteger(cell.rulesSkipped) && (cell.rulesSkipped as number) >= 0));
     })
   );
 }
@@ -227,14 +250,13 @@ export async function loadSuite(dir: string): Promise<{ manifest: SuiteManifest;
     throw new Error(`${dir} has no readable suite.json. report reads one .jsonl run record or a suite directory.`);
   }
   if (!isManifest(manifest)) throw new Error(`${join(dir, 'suite.json')} is not a suite manifest`);
-  refuseConsentSuite(manifest);
   manifest.stores ??= [];
   for (const cell of manifest.cells) cell.labels ??= {};
   const records = new Map<string, RunRecords | undefined>();
   for (const cell of manifest.cells) {
     const name = cell.record;
     if (typeof name !== 'string' || name !== basename(name)) continue;
-    records.set(recordKey(cell.scenario, cell.variant, cell.labels.store), await readRun(join(dir, name)).catch(() => undefined));
+    records.set(recordKey(cell.scenario, cell.variant, cell.labels.store, cell.labels.consent), await readRun(join(dir, name)).catch(() => undefined));
   }
   return { manifest, records };
 }
@@ -300,10 +322,112 @@ export function suiteTitle(h: SuiteReportModel['header']): string {
   return `Tagreeve suite: ${h.variants.join(' vs ')}${where}, ${h.startedAt.slice(0, 10)}`;
 }
 
+const AUDIT_INTRO =
+  'This report shows what was sent and flags likely problems. People decide what is allowed. A pass means no planted value was found in the searched forms. The searched parts are the URL, the body and decoded fields. Request headers, including Referer and Cookie, were not searched.';
+
+const VERDICT_CLASS: Record<string, string> = { PASS: 'full', WARN: 'ping', FAIL: 'leak' };
+
+function cellVerdict(status: string): string {
+  return status === 'error' ? 'ERROR (did not finish)' : status.toUpperCase();
+}
+
+function auditColumn(c: SuiteCellView): string {
+  const verdict = cellVerdict(c.status);
+  const head = `<h4>${escapeHtml(c.consent ?? '')}</h4><p class="verdict m-${VERDICT_CLASS[verdict] ?? 'nothing'}"><strong>${escapeHtml(verdict)}</strong></p>`;
+  const skipped = c.rulesSkipped === undefined ? '' : `<p class="empty">${c.rulesSkipped} ${c.rulesSkipped === 1 ? 'rule' : 'rules'} skipped: the scenario's own rules run in their own state.</p>`;
+  const model = c.model;
+  if (!model) return `${head}${skipped}<p class="empty">${c.status === 'skipped' ? 'Skipped.' : 'No record to show.'}</p>`;
+  const setup = model.expectations.find((e) => e.text === 'builtin: consentModeSetup');
+  const problems = model.expectations.filter((e) => e.status !== 'PASS' && e !== setup);
+  const list = problems.length
+    ? `<ul class="results">${problems.map((e) => `<li class="s-${e.status.toLowerCase().replace(' ', '-')}"><span class="status">${escapeHtml(e.status)}</span><code>${escapeHtml(e.text)}</code>${e.note ? `<span class="note">${escapeHtml(e.note)}</span>` : ''}</li>`).join('')}</ul>`
+    : '<p class="empty">No rule or built-in check needs attention.</p>';
+  const setupLine = setup ? `<p>consentModeSetup: <strong>${escapeHtml(setup.status)}</strong>${setup.note ? ` <span class="empty">${escapeHtml(setup.note)}</span>` : ''}</p>` : '<p class="empty">consentModeSetup: no result in this record</p>';
+  const routes = model.routes;
+  const routeList = !routes
+    ? '<p class="empty">The run had no canaries, so no identifier route was searched.</p>'
+    : routes.rows.length === 0
+      ? '<p class="empty">No planted value was found in a request to a non-first-party host.</p>'
+      : `<ul class="results">${routes.rows.map((r) => `<li class="s-${r.verdict.toLowerCase()}"><span class="status">${r.verdict}</span><code>${escapeHtml(r.host)}</code>${escapeHtml(r.line)}<span class="note">epoch at sink: ${escapeHtml(r.epoch)}</span></li>`).join('')}</ul>`;
+  const search = routes?.search;
+  const reasons = search?.reasons.length ? ` (${search.reasons.map((r) => `${r.count} ${r.reason}`).join(', ')})` : '';
+  const searched = [
+    ...(search?.forms ? [`Forms searched: ${search.forms}.`] : []),
+    'Parts searched: URL, body and decoded fields.',
+    'Parts not searched: request headers, including Referer and Cookie.',
+    ...(search ? [...(search.requests === undefined ? [] : [`Requests searched: ${search.requests}.`]), `Requests skipped: ${search.skipped}${reasons}.`] : ['No canaries in this run, so no request was searched.']),
+  ];
+  return `${head}${skipped}<h5>Rules and built-in checks</h5>${list}${setupLine}<h5>Identifier routes</h5>${routeList}<h5>Searched and skipped</h5><ul class="fields">${searched.map((i) => `<li>${escapeHtml(i)}</li>`).join('')}</ul>`;
+}
+
+function matrixTable(entry: ConsentMatrixEntry, states: string[]): string {
+  const head = states.map((s) => `<th scope="col">${escapeHtml(s)}</th>`).join('');
+  const rows = entry.vendors
+    .map((v) => {
+      const counts = states.map((s) => {
+        const hits = (v.states as Record<string, { hits?: unknown } | undefined>)[s]?.hits;
+        return `<td>${typeof hits === 'number' ? hits : '-'}</td>`;
+      });
+      return `<tr><th scope="row">${escapeHtml(v.vendor)}</th>${counts.join('')}</tr>`;
+    })
+    .join('');
+  return `<div class="scroll"><table class="matrix"><thead><tr><th scope="col">Vendor (hits)</th>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function consentAudit(model: SuiteReportModel): string {
+  const { states, matrix } = model.consent!;
+  const groups = model.scenarios
+    .flatMap((s) => [...new Set(s.cells.map((c) => c.store))].map((store) => ({ name: s.name, store, cells: s.cells.filter((c) => c.store === store) })))
+    .map((g) => {
+      const where = g.store === undefined ? g.name : `${g.name} on ${g.store}`;
+      const entry = matrix.find((e) => e.scenario === g.name && e.store === g.store);
+      const table = entry ? matrixTable(entry, states) : '';
+      const variants = [...new Set(g.cells.map((c) => c.variant))].map((variant) => {
+        const columns = g.cells.filter((c) => c.variant === variant);
+        const grid = `<div style="display:grid;grid-template-columns:repeat(${columns.length},minmax(220px,1fr));gap:12px;overflow-x:auto">${columns.map((c) => `<section class="audit-col" data-state="${escapeHtml(c.consent ?? '')}">${auditColumn(c)}</section>`).join('')}</div>`;
+        return `${g.cells.some((c) => c.variant !== variant) ? `<h4>${escapeHtml(variant)}</h4>` : ''}${grid}`;
+      });
+      return `<h3>${escapeHtml(where)}</h3>${table}${variants.join('')}`;
+    });
+  return `<section class="consent-audit"><h2>Consent audit</h2><p class="verdict">${escapeHtml(AUDIT_INTRO)}</p>${groups.join('')}</section>`;
+}
+
+function consentRuns(model: SuiteReportModel): string {
+  return model.scenarios
+    .map((s) => {
+      const cells = s.cells
+        .map((c) => {
+          const where = `${s.name}${c.store === undefined ? '' : ` on ${c.store}`}, ${c.variant}, consent ${c.consent ?? ''}`;
+          const title = `<h3>${escapeHtml(where)}: ${escapeHtml(cellVerdict(c.status))}</h3>`;
+          if (!c.model) return `${title}<p class="empty">${c.status === 'skipped' ? 'Skipped.' : 'No record to show.'}</p>`;
+          return `${title}${definitionList(runHeader(c.model.header))}${runSections(c.model, 'h4')}`;
+        })
+        .join('');
+      return `<section><h2>Runs: ${escapeHtml(s.name)}</h2>${cells}</section>`;
+    })
+    .join('');
+}
+
 export function renderSuiteReport(model: SuiteReportModel): string {
   const h = model.header;
   const title = suiteTitle(h);
   const warnings = model.warnings.map((w) => `<p class="warn-box">Warning: ${escapeHtml(w)}</p>`).join('');
+  if (model.consent) {
+    return page(`<h1>${escapeHtml(title)}</h1>
+${definitionList([
+  ['Suite', h.id],
+  ...(h.label === undefined ? [] : [['Label', h.label] as [string, string]]),
+  ['Started', h.startedAt],
+  ['Site host', h.host],
+  ...(h.stores.length ? [['Stores', h.stores.join(', ')] as [string, string]] : []),
+  ['Variants', h.variants.join(', ')],
+  ['Consent states', model.consent.states.join(', ')],
+  ['Exit code', String(Number(h.exitCode))],
+])}
+${warnings}
+${consentAudit(model)}
+${consentRuns(model)}`, title);
+  }
   const scenarios = model.scenarios
     .map((s) => {
       const cells = s.cells

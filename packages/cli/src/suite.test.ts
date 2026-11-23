@@ -1214,7 +1214,7 @@ test('a consent suite with two stores has one consentMatrix entry for each store
   expect(ga4('de').states.accept!.events).toContain('add_to_cart');
 });
 
-test('report refuses a malformed consentMatrix as a bad manifest, and a good one as a consent suite', async () => {
+test('report refuses a malformed consentMatrix as a bad manifest, and reads a good one', async () => {
   const folder = await mkdtemp(join(tmpdir(), 'pw-suite-matrix-'));
   const base = {
     suiteSchemaVersion: 3,
@@ -1238,7 +1238,6 @@ test('report refuses a malformed consentMatrix as a bad manifest, and a good one
   expect(bad.code).toBe(2);
   expect(bad.err).toContain('is not a suite manifest');
   const good = await report([{ scenario: 'a', vendors: [], vendorsNotInAccept: {} }]);
-  expect(good.code).toBe(2);
-  expect(good.err).toContain('consent suites are shown from 0.8.0-rc.1');
-  await expect(readFile(html)).rejects.toThrow();
+  expect(good.code).toBe(0);
+  await expect(readFile(html, 'utf8')).resolves.toContain('Consent audit');
 });
