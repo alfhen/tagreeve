@@ -114,6 +114,29 @@ export function skippedFields(model: ReportModel, level: 'h2' | 'h4'): string {
   return `\n<${level}>Skipped fields</${level}>\n<ul class="fields">${items}</ul>`;
 }
 
+const VERDICT_CLASS = { PASS: 'full', WARN: 'ping', FAIL: 'leak' } as const;
+
+export function routes(model: ReportModel): string {
+  if (!model.routes) return '';
+  const { rows, search } = model.routes;
+  const table =
+    rows.length === 0
+      ? '<p class="empty">No planted value was found in a request to a non-first-party host.</p>'
+      : `<div class="scroll"><table><thead><tr><th scope="col">Route</th><th scope="col">Sink host</th><th scope="col">Epoch at sink</th><th scope="col">Verdict</th></tr></thead><tbody>${rows
+          .map((r) => `<tr><td>${escapeHtml(r.line)}</td><td>${escapeHtml(r.host)}</td><td>${escapeHtml(r.epoch)}</td><td class="m-${VERDICT_CLASS[r.verdict]}"><strong>${r.verdict}</strong></td></tr>`)
+          .join('')}</tbody></table></div>`;
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const reasons = search.reasons.length ? ` (${search.reasons.map((r) => `${r.count} ${r.reason}`).join(', ')})` : '';
+  const items = [
+    ...(search.forms ? [`Forms searched: ${search.forms}.`] : []),
+    'Parts searched: URL, body and decoded fields.',
+    'Parts not searched: request headers, including Referer and Cookie.',
+    ...(search.requests !== undefined ? [`Requests searched: ${plural(search.requests, 'request')} to non-first-party hosts.`] : []),
+    `Skipped: ${plural(search.skipped, 'request')}${reasons}.`,
+  ];
+  return `${table}\n<p><strong>Searched and skipped</strong></p>\n<ul class="fields">${items.map((i) => `<li>${escapeHtml(i)}</li>`).join('')}</ul>`;
+}
+
 export const STYLE = `
 :root{color-scheme:light dark;--bg:#fff;--fg:#1b1f24;--muted:#57606a;--line:#d0d7de;--card:#f6f8fa;--full:#1a7f37;--ping:#9a6700;--nothing:#6e7781;--leak:#cf222e;--unchecked:#8250df;--mixed:#bc4c00;--early:#0969da}
 @media (prefers-color-scheme:dark){:root{--bg:#0d1117;--fg:#e6edf3;--muted:#8d96a0;--line:#30363d;--card:#161b22;--full:#3fb950;--ping:#d29922;--nothing:#8b949e;--leak:#ff7b72;--unchecked:#d2a8ff;--mixed:#ffa657;--early:#58a6ff}}
@@ -176,7 +199,7 @@ ${timeline(model)}
 <${level}>Expectations</${level}>
 ${expectations(model)}
 <${level}>Flags</${level}>
-${flags(model)}
+${flags(model)}${model.routes ? `\n<${level}>Identifier routes</${level}>\n${routes(model)}` : ''}
 <${level}>Fields seen while a signal was denied</${level}>
 ${fields(model)}${skippedFields(model, level)}`;
 }

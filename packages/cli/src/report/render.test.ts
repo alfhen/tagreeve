@@ -320,3 +320,69 @@ test('the header shows the label, escaped, and nothing without one', () => {
   expect(html).toMatch(/<dt>Variant<\/dt><dd>ws<\/dd>\s*<dt>Label<\/dt><dd>ca-307<\/dd>/);
   expect(renderReport(buildReportModel(base))).not.toContain('<dt>Label</dt>');
 });
+
+const SEARCH_DETAIL =
+  'Searched 4 requests to non-first-party hosts for 2 values as plain text, URL-encoded, base64, base64url and SHA-256 (hex, base64, base64url), and with the GCL. and fb.1. cookie prefixes. Searched: URL, body and decoded fields. Not searched: headers (Referer and Cookie). Skipped: compressed or binary body 1, body cut at 64 KiB 2, net-log request with no body 0.';
+
+function routeRecords(sinkPostData: string | null, field: string, detail: string): RunRecords {
+  const base = records();
+  const sink = { ...base.requests[0]!, id: newId('request'), t: 1500, url: 'https://www.googleadservices.com/pagead/conversion/AW-000000001/', postData: sinkPostData };
+  const flag = (kind: string, recordIds: string[], d: string, route?: object) => ({ type: 'flag' as const, id: newId('flag'), runId, kind, recordIds, detail: d, ...(route && { route }) }) as RunRecords['flags'][number];
+  return {
+    ...base,
+    requests: [...base.requests, sink],
+    flags: [
+      flag('canarySearch', [newId('request'), newId('request'), newId('request')], SEARCH_DETAIL),
+      flag('identifierRoute', [sink.id], detail, {
+        kind: 'unknown',
+        source: { source: 'urlParam', name: 'gclid' },
+        sink: { requestId: sink.id, host: 'www.googleadservices.com', vendor: 'google-ads', field, transform: 'base64' },
+        hops: [],
+      }),
+    ],
+  };
+}
+
+const textOf = (html: string) => html.replace(/<[^>]*>/g, ' ');
+
+test('the route section is built from Flag.route, not from the flag detail', () => {
+  const detail = 'url param fbclid -> request to detail.example.test, param y, plain';
+  const data = routeRecords(null, 'x', detail);
+  expect(data.flags[1]!.detail).toContain('fbclid');
+  expect(data.flags[1]!.detail).toContain('detail.example.test');
+  const html = renderReport(buildReportModel(data));
+  const section = html.slice(html.indexOf('Identifier routes'), html.indexOf('Fields seen'));
+  expect(section).toContain('gclid');
+  expect(section).toContain('www.googleadservices.com');
+  expect(section).toContain('FAIL');
+  expect(html).not.toContain('fbclid');
+  expect(html).not.toContain('detail.example.test');
+});
+
+test('a value-like field is shown as the masked name and the raw key stays out', () => {
+  const gclid = 'TEST-GCLID-7-RUN-0001';
+  const b64 = Buffer.from(gclid).toString('base64');
+  const key = 'jane@shop.example.net';
+  const data = routeRecords(JSON.stringify({ [key]: b64 }), '(other)', 'url param gclid -> request');
+  expect(data.requests.at(-1)!.postData).toContain(key);
+  expect(data.requests.at(-1)!.postData).toContain(b64);
+  const html = renderReport(buildReportModel(data));
+  expect(html.slice(html.indexOf('Identifier routes'))).toContain('(other)');
+  for (const secret of [key, gclid, b64]) expect(html).not.toContain(secret);
+});
+
+test('the search list shows the forms, the parts, the request count and the skipped reasons', () => {
+  const html = renderReport(buildReportModel(routeRecords(null, 'x', 'd')));
+  const text = textOf(html.slice(html.indexOf('Searched and skipped')));
+  for (const re of [/base64/, /SHA-256/i, /URL-encoded/i, /URL/, /body/i, /decoded/i, /4 requests/, /headers/i, /Referer/, /Cookie/, /not searched/i]) expect(text).toMatch(re);
+  expect(text).toMatch(/Skipped: 3 requests/);
+  expect(text).toMatch(/1 compressed or binary body|compressed or binary body:? 1/);
+  expect(text).toMatch(/2 body cut at 64 KiB|body cut at 64 KiB:? 2/);
+  expect(text).not.toMatch(/net-log request with no body/);
+});
+
+test('a run with no canarySearch flag has no route section', () => {
+  const html = renderReport(buildReportModel(records()));
+  expect(html).not.toContain('Identifier routes');
+  expect(html).not.toContain('Searched and skipped');
+});
