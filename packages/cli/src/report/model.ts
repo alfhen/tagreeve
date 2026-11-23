@@ -50,8 +50,12 @@ export interface FieldsView {
 }
 
 export interface RouteRowView {
-  /** Source, hops, field and transform, all from the masked `Flag.route`. */
+  /** Source names with any cookie hop, field, transform and request count, all from the masked `Flag.route`. */
   line: string;
+  /** The `identifierRoute` flags in this group. */
+  flags: number;
+  /** Distinct sink requests in this group. */
+  requests: number;
   host: string;
   /** The consent epoch the sink request left in, or `unknown` when the request is not in the record. */
   epoch: string;
@@ -323,28 +327,48 @@ function searchView(search: Flag): SearchView {
   };
 }
 
-function routeLine(route: FlagRoute): string {
+function routeSource(route: FlagRoute): string {
   const from = route.source.source === 'identity' ? `identity ${route.source.name}` : `url param ${route.source.name}`;
   const via = route.hops.flatMap((h) => (h.kind === 'cookie' ? [`cookie ${h.name}`] : []));
+  return [from, ...via].join(' via ');
+}
+
+function routeLine(sources: string[], route: FlagRoute, requests: number): string {
   const where = route.kind === 'pageUrl' ? 'page URL only' : route.kind;
-  return `${[from, ...via].join(' via ')}, field ${route.sink.field}, ${route.sink.transform} (${where})`;
+  return `${sources.join(', ')}, field ${route.sink.field}, ${route.sink.transform} (${where}), ${requests} request${requests === 1 ? '' : 's'}`;
 }
 
 function routesView(records: RunRecords, epochs: ConsentEpoch[], graceMs: number): RoutesView | undefined {
   const search = records.flags.find((f) => f.kind === 'canarySearch');
   if (!search) return undefined;
-  const rows = records.flags.flatMap((flag): RouteRowView[] => {
+  // One row per sink host, field, transform, route kind, epoch at sink and verdict. A FAIL is never merged into a PASS or WARN row.
+  const groups = new Map<string, { route: FlagRoute; epoch: string; verdict: RouteRowView['verdict']; sources: string[]; requestIds: Set<string>; flags: number }>();
+  for (const flag of records.flags) {
     const route = flag.route;
-    if (flag.kind !== 'identifierRoute' || !route) return [];
+    if (flag.kind !== 'identifierRoute' || !route) continue;
     const request = records.requests.find((r) => r.id === route.sink.requestId);
-    const epoch = request ? epochForHit(epochs, request.t, graceMs) : undefined;
+    const epoch = request ? (epochForHit(epochs, request.t, graceMs)?.label ?? 'undecided') : 'unknown';
     // The check gets the whole run and only this route, so a hit on another request that the route depends on still counts.
     const judged = identifierRoute([search, flag, ...epochs, ...records.requests, ...records.hits], graceMs);
     const stored = records.results.find((r) => r.expectation === 'builtin: identifierRoute');
     const failing = judged !== undefined && !judged.pass && (!stored || (!stored.pass && stored.evidence.includes(route.sink.requestId)));
     const verdict = !failing ? 'PASS' : judged.severity === 'warn' || stored?.severity === 'warn' ? 'WARN' : 'FAIL';
-    return [{ line: routeLine(route), host: route.sink.host, epoch: request ? (epoch?.label ?? 'undecided') : 'unknown', verdict }];
-  });
+    const key = JSON.stringify([route.sink.host, route.sink.field, route.sink.transform, route.kind, epoch, verdict]);
+    let group = groups.get(key);
+    if (!group) groups.set(key, (group = { route, epoch, verdict, sources: [], requestIds: new Set(), flags: 0 }));
+    const source = routeSource(route);
+    if (!group.sources.includes(source)) group.sources.push(source);
+    group.requestIds.add(route.sink.requestId);
+    group.flags += 1;
+  }
+  const rows = [...groups.values()].map((g): RouteRowView => ({
+    line: routeLine(g.sources, g.route, g.requestIds.size),
+    host: g.route.sink.host,
+    epoch: g.epoch,
+    verdict: g.verdict,
+    flags: g.flags,
+    requests: g.requestIds.size,
+  }));
   return { rows, search: searchView(search) };
 }
 

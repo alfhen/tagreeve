@@ -359,6 +359,23 @@ test('the route section is built from Flag.route, not from the flag detail', () 
   expect(html).not.toContain('detail.example.test');
 });
 
+test('6 canaries in 7 requests to one host show one route row', () => {
+  const base = routeRecords(null, 'x', 'd');
+  const sinks = Array.from({ length: 7 }, (_, i) => ({ ...base.requests.at(-1)!, id: newId('request'), t: 1500 + i }));
+  const names = ['gclid', 'gbraid', 'wbraid', 'fbclid', 'msclkid', 'ttclid'];
+  const template = base.flags[1]!;
+  const routeFlags = sinks.flatMap((sink) =>
+    names.map((name) => ({ ...template, id: newId('flag'), recordIds: [sink.id], route: { ...template.route!, source: { source: 'urlParam' as const, name }, sink: { ...template.route!.sink, requestId: sink.id } } })),
+  );
+  const data = { ...base, requests: [...base.requests.slice(0, -1), ...sinks], flags: [base.flags[0]!, ...routeFlags] };
+  expect(routeFlags).toHaveLength(42);
+  const html = renderReport(buildReportModel(data));
+  const section = html.slice(html.indexOf('Identifier routes'), html.indexOf('Searched and skipped'));
+  const rows = (section.match(/<tr>.*?<\/tr>/g) ?? []).filter((r) => !r.includes('<th'));
+  expect(rows).toHaveLength(1);
+  for (const text of ['www.googleadservices.com', ...names, '7 requests', 'FAIL']) expect(rows[0]).toContain(text);
+});
+
 test('a value-like field is shown as the masked name and the raw key stays out', () => {
   const gclid = 'TEST-GCLID-7-RUN-0001';
   const b64 = Buffer.from(gclid).toString('base64');
