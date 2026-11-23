@@ -1,4 +1,4 @@
-import { newId, type ConsentEpoch, type ConsentState, type Hit, type Request, type Result, type RunRecords } from '@tagreeve/core';
+import { newId, type ConsentEpoch, type ConsentState, type Flag, type Hit, type Request, type Result, type RunRecords } from '@tagreeve/core';
 import { decodeRequest } from '@tagreeve/decoders';
 import { TAG_REPORTER_HINT } from '@tagreeve/expect';
 import { describe, expect, test } from 'vitest';
@@ -537,4 +537,57 @@ test('the header carries the run label and has no key without one', () => {
   const base = records();
   expect(buildReportModel({ ...base, run: { ...base.run, label: 'ca-307' } }).header.label).toBe('ca-307');
   expect(buildReportModel(base).header).not.toHaveProperty('label');
+});
+
+describe('identifier routes', () => {
+  const searchFlag = (): Flag => ({
+    type: 'flag',
+    id: newId('flag'),
+    runId,
+    kind: 'canarySearch',
+    recordIds: [],
+    detail: 'Searched 1 request to non-first-party hosts for 2 values as plain text, URL-encoded, base64, base64url and SHA-256 (hex, base64, base64url). Searched: URL, body and decoded fields. Not searched: headers (Referer and Cookie). Skipped: compressed or binary body 0, body cut at 64 KiB 0, net-log request with no body 0.',
+  });
+  const sinkRequest = (t: number): Request => ({
+    type: 'request',
+    id: newId('request'),
+    runId,
+    stepId: null,
+    t,
+    method: 'GET',
+    url: 'https://ads.example.test/c?x=abc',
+    resourceType: 'image',
+    frameUrl: null,
+    initiator: null,
+    headers: {},
+    postData: null,
+    outcome: 'stubbed',
+  });
+  const routeFlag = (request: Request, kind: 'direct' | 'pageUrl'): Flag => ({
+    type: 'flag',
+    id: newId('flag'),
+    runId,
+    kind: 'identifierRoute',
+    recordIds: [request.id],
+    detail: 'url param gclid -> request',
+    route: { kind, source: { source: 'urlParam', name: 'gclid' }, sink: { requestId: request.id, host: 'ads.example.test', vendor: 'unknown', field: 'x', transform: 'base64' }, hops: [] },
+  });
+
+  test('each route gets its own verdict and the epoch of its sink', () => {
+    const denied = sinkRequest(1500);
+    const granted = sinkRequest(2500);
+    const model = buildReportModel(
+      records({
+        consentEpochs: [epoch('undecided', 0, state(), 1000), epoch('denied', 1000, DENIED, 2000), epoch('granted', 2000, GRANTED)],
+        requests: [denied, granted],
+        flags: [searchFlag(), routeFlag(denied, 'direct'), routeFlag(denied, 'pageUrl'), routeFlag(granted, 'direct')],
+      }),
+    );
+    expect(model.routes!.rows.map((r) => [r.epoch, r.verdict])).toEqual([['denied', 'FAIL'], ['denied', 'WARN'], ['granted', 'PASS']]);
+    expect(model.routes!.search).toMatchObject({ requests: 1, skipped: 0, reasons: [] });
+  });
+
+  test('a run without a canarySearch flag has no routes view', () => {
+    expect(buildReportModel(records())).not.toHaveProperty('routes');
+  });
 });

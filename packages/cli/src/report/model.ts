@@ -1,6 +1,6 @@
-import type { ConsentEpoch, ConsentState, Hit, Result, ResultNote, RunRecords } from '@tagreeve/core';
+import type { ConsentEpoch, ConsentState, Flag, FlagRoute, Hit, Result, ResultNote, RunRecords } from '@tagreeve/core';
 import { guardFieldName, identifierClass, identifierSignal } from '@tagreeve/decoders';
-import { DEFAULT_GRACE_MS, effectiveConsentAt, epochForHit, isServerHit, judgeIndex, judgedAt, TAG_REPORTER_HINT } from '@tagreeve/expect';
+import { DEFAULT_GRACE_MS, effectiveConsentAt, epochForHit, identifierRoute, isServerHit, judgeIndex, judgedAt, TAG_REPORTER_HINT } from '@tagreeve/expect';
 
 export type Mark = 'full' | 'ping' | 'nothing' | 'leak' | 'unchecked' | 'mixed' | 'early';
 export type EpochLabel = ConsentEpoch['label'] | 'unlinked';
@@ -49,6 +49,28 @@ export interface FieldsView {
   names: string[];
 }
 
+export interface RouteRowView {
+  /** Source, hops, field and transform, all from the masked `Flag.route`. */
+  line: string;
+  host: string;
+  /** The consent epoch the sink request left in, or `unknown` when the request is not in the record. */
+  epoch: string;
+  verdict: 'PASS' | 'WARN' | 'FAIL';
+}
+
+/** From the `canarySearch` flag. Counts and form names only. */
+export interface SearchView {
+  forms: string | undefined;
+  requests: number | undefined;
+  skipped: number;
+  reasons: { reason: string; count: number }[];
+}
+
+export interface RoutesView {
+  rows: RouteRowView[];
+  search: SearchView;
+}
+
 export interface ReportModel {
   header: {
     scenario: string;
@@ -71,6 +93,8 @@ export interface ReportModel {
   skippedFields: { step: string; selector: string }[];
   /** Set when the run has hits sent by a server container. */
   serverContainer?: { hits: number; exact: number; probable: number; unlinked: number };
+  /** Set when the run has a `canarySearch` flag, that is, a run with canaries. */
+  routes?: RoutesView;
 }
 
 export const NOTE_TEXT: Record<ResultNote, string> = {
@@ -283,6 +307,45 @@ function flagViews(records: RunRecords): FlagView[] {
     .sort((a, b) => a.kind.localeCompare(b.kind));
 }
 
+const SKIP_REASONS = ['compressed or binary body', 'body cut at 64 KiB', 'net-log request with no body'];
+
+function searchView(search: Flag): SearchView {
+  const num = (re: RegExp): number | undefined => {
+    const m = re.exec(search.detail)?.[1];
+    return m === undefined ? undefined : Number(m);
+  };
+  return {
+    forms: /\bas (plain text.+?)\. Searched:/.exec(search.detail)?.[1],
+    requests: num(/Searched (\d+) requests?/),
+    skipped: search.recordIds.length,
+    reasons: SKIP_REASONS.map((reason) => ({ reason, count: num(new RegExp(`${reason} (\\d+)`)) ?? 0 })).filter((r) => r.count > 0),
+  };
+}
+
+function routeLine(route: FlagRoute): string {
+  const from = route.source.source === 'identity' ? `identity ${route.source.name}` : `url param ${route.source.name}`;
+  const via = route.hops.flatMap((h) => (h.kind === 'cookie' ? [`cookie ${h.name}`] : []));
+  const where = route.kind === 'pageUrl' ? 'page URL only' : route.kind;
+  return `${[from, ...via].join(' via ')}, field ${route.sink.field}, ${route.sink.transform} (${where})`;
+}
+
+function routesView(records: RunRecords, epochs: ConsentEpoch[], graceMs: number): RoutesView | undefined {
+  const search = records.flags.find((f) => f.kind === 'canarySearch');
+  if (!search) return undefined;
+  const rows = records.flags.flatMap((flag): RouteRowView[] => {
+    const route = flag.route;
+    if (flag.kind !== 'identifierRoute' || !route) return [];
+    const request = records.requests.find((r) => r.id === route.sink.requestId);
+    const epoch = request ? epochForHit(epochs, request.t, graceMs) : undefined;
+    const own = [search, flag, ...epochs, ...(request ? [request] : []), ...records.hits.filter((h) => h.requestId === route.sink.requestId)];
+    // The check judges one route at a time, so each row gets its own verdict.
+    const judged = identifierRoute(own, graceMs);
+    const verdict = !judged || judged.pass ? 'PASS' : judged.severity === 'warn' ? 'WARN' : 'FAIL';
+    return [{ line: routeLine(route), host: route.sink.host, epoch: request ? (epoch?.label ?? 'undecided') : 'unknown', verdict }];
+  });
+  return { rows, search: searchView(search) };
+}
+
 export function buildReportModel(records: RunRecords): ReportModel {
   const { run } = records;
   const graceMs = run.graceWindowMs ?? DEFAULT_GRACE_MS;
@@ -355,6 +418,8 @@ export function buildReportModel(records: RunRecords): ReportModel {
       .filter((v) => v.names.length > 0);
   }
 
+  const routes = routesView(records, epochs, graceMs);
+
   return {
     header: {
       scenario: run.scenario,
@@ -375,5 +440,6 @@ export function buildReportModel(records: RunRecords): ReportModel {
     fields,
     skippedFields: (records.steps ?? []).flatMap((s) => (s.skippedFields ?? []).map((selector) => ({ step: s.label, selector }))),
     ...(serverContainer && { serverContainer }),
+    ...(routes && { routes }),
   };
 }
