@@ -55,6 +55,7 @@ Tagreeve is built so that a coding agent, a CI job or a person can answer these 
 
 - What did the site send to each vendor, before and after the visitor's consent choice?
 - Which tags fired for each event, and which expected tags did not? See [Report which tags fired](docs/guide/tag-reports.md).
+- What does each consent state send, and where does a planted click ID go? See [Audit consent across the four states](docs/guide/consent-audit.md).
 - Does an unpublished GTM workspace behave as intended, before you publish it? Run the same scenario with and without `--gtm-override` and compare the two records with `tagreeve diff`. (In 0.2.)
 
 ## What it does

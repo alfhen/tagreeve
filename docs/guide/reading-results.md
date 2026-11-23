@@ -106,6 +106,12 @@ Built-in checks run on every run. You do not write them:
 
 The [CLI page](../cli.md) lists the options that change these checks. One of them, `options.builtins`, sets a check to `warn`. The summary then shows `WARN` for it and the exit code stays 0.
 
+## Identifier routes
+
+A run with `canaries: true` plants fake click IDs on the start URL. The HTML report then has an Identifier routes section: one row for each planted value that reached a host other than the store. A row shows the route (where the value came from, any cookie it passed through, and the field and encoding it left in), the sink host, the consent epoch of the request and the verdict of the `identifierRoute` check for that route. A value found only in a page URL field is a WARN.
+
+Under the rows, Searched and skipped lists what the search covered: the URL, the body and decoded fields. Request headers, including `Referer` and `Cookie`, were not searched. It also counts the requests searched and the requests skipped, with the reason. A pass means no planted value was found in the searched forms. It does not mean the value never left. The section shows names and counts only. To compare the four consent states, see [Audit consent across the four states](./consent-audit.md).
+
 ## The record file
 
 The record file is a JSONL file. Each line is one JSON object, and its `type` says what it is: `run`, `step`, `request`, `response`, `hit`, `dataLayerEvent`, `consentEpoch`, `flag`, `checkpoint` and `result`. Every record has an `id` that starts with a short prefix, such as `hit_`. The summary prints these IDs as evidence. Search the record file for an ID to see the whole line. This finds the first evidence hit from the summary above:

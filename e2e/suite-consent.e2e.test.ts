@@ -104,12 +104,11 @@ test('the scenario rules run in the accept cell only', () => {
   }
 });
 
-test('report refuses a consent suite and writes no file', async () => {
+test('report writes the consent audit of a consent suite', async () => {
   const html = join(outDir, 'consent.html');
   const r = await cliRun(['report', dir, '--html', html]);
-  expect(r.code).toBe(2);
-  expect(r.stderr).toContain('consent suites are shown from 0.8.0-rc.1');
-  await expect(access(html)).rejects.toThrow();
+  expect(r.code).toBe(0);
+  expect(await readFile(html, 'utf8')).toContain('Consent audit');
 });
 
 test('a bad --consent value exits 2 and runs nothing', async () => {

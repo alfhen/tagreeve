@@ -9,6 +9,7 @@ describe('findPages', () => {
       'README.md',
       'docs/cli.md',
       'docs/design.md',
+      'docs/guide/consent-audit.md',
       'docs/guide/first-run.md',
       'docs/guide/project-layout.md',
       'docs/guide/reading-results.md',

@@ -35,6 +35,7 @@ const sidebar = [
       { label: "Reading a run's results", link: '/docs/guide/reading-results' },
       { label: 'Run your server container locally', link: '/docs/guide/server-container' },
       { label: 'Report which tags fired', link: '/docs/guide/tag-reports' },
+      { label: 'Audit consent across the four states', link: '/docs/guide/consent-audit' },
       { label: 'Project layout', link: '/docs/guide/project-layout' },
     ],
   },
