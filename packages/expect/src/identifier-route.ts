@@ -132,13 +132,11 @@ export function identifierRoute(records: readonly (TagreeveRecord | EvalEpoch)[]
     const { level, note } = judge(route, requests.get(requestId), hitsByRequest.get(requestId) ?? [], hitsById, epochs, graceMs);
     if (level !== 'ok') findings.push({ line: routeLine(route, level, note), level, requestId, note });
   }
-  const allowedHosts = [...allowedByHost].map(([host, n]) => `${n} route${n === 1 ? '' : 's'} to ${host}`);
-  const allowedMore = allowedHosts.length > MAX_LINES ? `, and ${allowedHosts.length - MAX_LINES} more hosts` : '';
-  const allowedText = allowedHosts.length === 0 ? '' : ` (allowed by identifierRouteAllow: ${allowedHosts.slice(0, MAX_LINES).join(', ')}${allowedMore})`;
+  const allowedText = allowedByHost.size === 0 ? '' : ` (allowed by identifierRouteAllow: ${[...allowedByHost].map(([host, n]) => `${n} route${n === 1 ? '' : 's'} to ${host}`).join(', ')})`;
   const sorted = [...findings.filter((f) => f.level === 'fail'), ...findings.filter((f) => f.level === 'warn')];
   if (sorted.length === 0) {
     const allowed = judged;
-    const head = allowed > 0 ? `No planted value reached a sink while consent forbade it (${allowed} route${allowed === 1 ? '' : 's'} allowed by consent); ` : allowedByHost.size > 0 ? 'No planted value reached a judged sink; the ' : 'No planted value found in the ';
+    const head = allowed > 0 ? `No planted value reached a sink while consent forbade it (${allowed} route${allowed === 1 ? '' : 's'} allowed by consent); ` : 'No planted value found in the ';
     return { pass: true, evidence: [], message: `${head}${searchedText(search)}${allowedText}`, severity: override ?? 'fail' };
   }
   const failing = sorted.some((f) => f.level === 'fail');
