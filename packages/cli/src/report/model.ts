@@ -105,11 +105,12 @@ export const NOTE_TEXT: Record<ResultNote, string> = {
   nestedNameOnly: 'a plain name matches a top-level field only; use **.name to match at any depth',
   serverSendProbableLink: 'a server container hit is placed by a probable link to a browser hit, which cannot fail a run',
   serverSendUnlinked: 'cannot evaluate: a server container hit has no link to a browser hit, so no consent state applies',
+  serverContainerRejected: 'cannot evaluate: the server container rejected most browser requests',
   noTagReports: `cannot evaluate: no tag report from this container. For web tags, install the reporter and run with --gtm-override: ${TAG_REPORTER_HINT}`,
   tagNameUnknown: 'cannot evaluate: the tag has no name in its report or in expectedTags',
 };
 
-const CANNOT_EVALUATE_NOTES: readonly ResultNote[] = ['cannotEvaluateBody', 'fieldsNotRecorded', 'serverSendUnlinked', 'noTagReports', 'tagNameUnknown'];
+const CANNOT_EVALUATE_NOTES: readonly ResultNote[] = ['cannotEvaluateBody', 'fieldsNotRecorded', 'serverSendUnlinked', 'serverContainerRejected', 'noTagReports', 'tagNameUnknown'];
 
 const WORST_FIRST: Mark[] = ['leak', 'unchecked', 'mixed', 'early', 'full', 'ping'];
 const CONSENT_FIELDS: (keyof ConsentState)[] = ['analytics', 'ads', 'adUserData', 'adPersonalization'];

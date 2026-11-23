@@ -34,11 +34,11 @@ import { consentModeSetup, GOOGLE_VENDORS } from './consent-mode-setup.ts';
 import { identifierRoute } from './identifier-route.ts';
 import { earlyIdentityPush } from './early-identity-push.ts';
 import { idHandover } from './id-handover.ts';
-import { serverContainerRejected } from './server-container-rejected.ts';
+import { serverContainerRejected, type ServerContainerRejected } from './server-container-rejected.ts';
 import { hostMatches } from './hosts.ts';
 import { evaluatePushRule, fieldGlob } from './push-rules.ts';
 import { evaluateTagRule, expectedTagsOf, type ExpectedTags } from './tags.ts';
-import { consentFields, countHolds, describeCount, type ConsentField, type Filter, type Rule, type Scenario, type BuiltinName } from './scenario.ts';
+import { consentFields, countHolds, type Count, describeCount, type ConsentField, type Filter, type Rule, type Scenario, type BuiltinName } from './scenario.ts';
 
 export type EvalEpoch = ConsentEpoch;
 
@@ -124,27 +124,40 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
     });
   };
 
+  const containerRan = Boolean(runRecord && (runRecord.serverContainer || runRecord.testServerContainer) && !runRecord.serverContainer?.error);
+  const rejected = containerRan ? serverContainerRejected([...ctx.requests.values()], ctx.responses, scenario.options.serverHosts ?? []) : undefined;
+
   for (const kind of ['mustNot', 'must'] as const)
     for (const rule of scenario.expect[kind]) {
       const outcome = evaluateRule(rule, ctx);
       const { pass, evidence, message } = outcome;
+      // A nested-name note is only a hint, so it must not hide that a placement of the probable hits would flip the verdict.
+      const ownNote = outcome.note === 'nestedNameOnly' ? undefined : outcome.note;
+      // A verdict that rests on no server hit being there says nothing when the container rejected the requests that would have made them.
+      const absence = kind === 'must' ? !pass : pass;
+      if (rejected &&!rejected.pass && absence && (kind === 'mustNot' || outcome.absent) && !ownNote && rule.filter.sentBy !== 'browser' && !rule.tag && !rule.dataLayer && !rule.cookie) {
+        add(`${kind}: ${rule.description}`, false, evidence, REJECTED_MESSAGE, 'warn', 'serverContainerRejected');
+        continue;
+      }
       const passes = (c: Context) => evaluateRuleHits(rule, c).pass;
       const scoped = !rule.tag && !rule.dataLayer && isScoped(rule);
       const failureRests = scoped && !pass && failureRestsOnProbableLink(ctx, passes, rule);
-      // A nested-name note is only a hint, so it must not hide that a placement of the probable hits would flip the verdict.
-      const ownNote = outcome.note === 'nestedNameOnly' ? undefined : outcome.note;
       const note = ownNote ?? (pass && scoped && passRestsOnProbableLink(ctx, passes, rule) ? 'serverSendProbableLink' : outcome.note);
       // A count rule's evidence can hold exact browser hits next to the probable ones, so the leak gate in settleServerSends must not turn it into a hard FAIL.
       const countRests = kind === 'must' && failureRests && !ownNote;
       add(`${kind}: ${rule.description}`, pass, evidence, message, countRests ? 'warn' : outcome.severity, countRests ? 'serverSendProbableLink' : note, scoped && (pass || failureRests));
     }
 
-  const containerRan = Boolean(runRecord && (runRecord.serverContainer || runRecord.testServerContainer) && !runRecord.serverContainer?.error);
-  builtInChecks(records, scenario, ctx, add, containerRan);
+  builtInChecks(records, scenario, ctx, add, rejected);
   return results;
 }
 
-type RuleOutcome = { pass: boolean; evidence: string[]; message: string; note?: ResultNote; severity?: Severity };
+const REJECTED_MESSAGE = 'cannot evaluate: the server container rejected most browser requests';
+
+type RuleOutcome = { pass: boolean; evidence: string[]; message: string; note?: ResultNote; severity?: Severity; /** A failed must that more matching hits could turn into a pass. */ absent?: boolean };
+
+/** True when a count fails for too few hits, not too many. */
+const countNeedsMore = (count: Count, actual: number): boolean => !countHolds(count, actual) && (count.op === '>=' || count.op === '>' || (count.op === '=' && actual < count.n));
 
 const isScoped = (rule: Rule) => Boolean(rule.before || rule.inEpoch || rule.after || rule.from || consentFields.some((f) => rule.filter.consent[f]));
 
@@ -340,7 +353,7 @@ function evaluateRuleHits(rule: Rule, ctx: Context): RuleOutcome {
     const headline = check.headline ?? (countHolds(count, 0) ? UNMATCHED_HEADLINE : `Expected ${describeCount(count)} hits matching all conditions, found 0.`);
     return { pass: false, evidence: check.evidence, message: `${headline} ${matched}, but identity.hashesMatch failed: ${check.message}` };
   }
-  return { pass, evidence: ids, message };
+  return { pass, evidence: ids, message, ...(countNeedsMore(count, hits.length) && { absent: true }) };
 }
 
 const STUB_NO_COOKIES = 'stub mode: stubbed endpoints set no cookies';
@@ -597,7 +610,7 @@ function evaluateBodyRule(rule: Rule, body: NonNullable<Rule['body']>, selected:
     const expected = rule.kind === 'must' ? `Expected ${describeCount(count)} hits with body.has fields${where}` : `Expected no hit with body.has fields${where}`;
     const nested = matching.length ? [] : nestedNames(body.has.filter((n) => !n.includes('*')), selected);
     const nestedText = nested.length ? `; no top-level match; nested fields with this name: ${listNames(nested)}` : '';
-    return { pass: low, evidence, message: `${expected}, ${found} (${total} before narrowing)${nestedText}.${tail}`, ...(nested.length && { note: 'nestedNameOnly' as const }) };
+    return { pass: low, evidence, ...(rule.kind === 'must' && countNeedsMore(count, matching.length) && { absent: true }), message: `${expected}, ${found} (${total} before narrowing)${nestedText}.${tail}`, ...(nested.length && { note: 'nestedNameOnly' as const }) };
   }
 
   const only = body.only!;
@@ -605,7 +618,7 @@ function evaluateBodyRule(rule: Rule, body: NonNullable<Rule['body']>, selected:
   if (rule.kind === 'must') {
     const count = rule.count ?? { op: '>=' as const, n: 1 };
     if (!countHolds(count, selected.length))
-      return { pass: false, evidence: selected.map((h) => h.id), message: `Expected ${describeCount(count)} matching hits${where}, found ${selected.length}.${tail}` };
+      return { pass: false, evidence: selected.map((h) => h.id), message: `Expected ${describeCount(count)} matching hits${where}, found ${selected.length}.${tail}`, ...(countNeedsMore(count, selected.length) && { absent: true }) };
   }
   const unreadable: Hit[] = [];
   const offenders: { hit: Hit; outside: string[] }[] = [];
@@ -1123,7 +1136,7 @@ function builtInChecks(
   scenario: Scenario,
   ctx: Context,
   addResult: (expectation: string, pass: boolean, evidence: string[], message: string, severity?: Severity, note?: ResultNote, timeJudged?: boolean) => void,
-  containerRan: boolean,
+  rejected: ServerContainerRejected | undefined,
 ) {
   const add = (name: BuiltinName, pass: boolean, evidence: string[], message: string, note?: ResultNote, timeJudged = false) =>
     addResult(
@@ -1220,8 +1233,7 @@ function builtInChecks(
   const route = identifierRoute(records, ctx.grace, scenario.options.builtins?.identifierRoute);
   if (route) addResult('builtin: identifierRoute', route.pass, route.evidence, route.message, route.severity, route.note);
 
-  if (containerRan) {
-    const rejected = serverContainerRejected([...ctx.requests.values()], ctx.responses, scenario.options.serverHosts ?? []);
+  if (rejected) {
     add('serverContainerRejected', rejected.pass, rejected.evidence, rejected.message);
   }
 }

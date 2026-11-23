@@ -1,0 +1,11 @@
+start: /server-container-link?n=5&reject=400
+steps:
+  - wait: 2s
+expect:
+  must:
+    - { vendor: ga4, event: purchase, host: www.google-analytics.com, sentBy: server, count: 5 }
+    - { vendor: ga4, host: 127.0.0.1 }
+  mustNot:
+    - { vendor: ga4, host: www.google-analytics.com, sentBy: browser }
+    - { vendor: meta-capi, event: Purchase }
+options: { seed: 1, network: server, serverHosts: [127.0.0.1], allowUnknownDestination: true, builtins: { possibleRealData: warn } }
