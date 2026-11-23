@@ -88,7 +88,7 @@ function sharedKind(server: Facts, browser: Facts): 'eventId' | 'clientId' | 'id
 
 /**
  * Adds `via` to each hit decoded from a server container call. The proxy cannot see which browser hit led to a call,
- * so the first rule that fits decides: (1) the event ID and event name match exactly one browser hit, `exact`;
+ * so the first rule that fits decides: (1) the event ID and event name match exactly one browser hit sent before the call (at or before its request time, when that is known), `exact`;
  * (2) the client ID and event name match exactly one browser hit to a `serverHosts` host sent before the call, and its request to the
  * container was still in flight when the call arrived, `exact`; two or more such hits, in flight or answered, give no exact link, and neither does another
  * container-routed request that shares a client ID or has no decoded hit and was sent in between (`concurrentRequest`);
@@ -110,10 +110,11 @@ export function linkServerHits({ hits, requests, serverHosts, identity, inFlight
     };
   });
   const hitRequestIds = new Set(hits.map((h) => h.requestId));
+  const sentAtOf = (requestId: string, t: number) => inFlight?.get(requestId)?.sentAt ?? t;
   const hasConcurrentRequest = (only: Facts, from: number, to: number, callClientIds: ReadonlySet<string>) =>
     requests.some((r) => {
       if (r.captured === 'serverContainer' || r.id === only.hit.requestId || r.initiator === 'unload' || !isServerContainerRequest(r, serverHosts)) return false;
-      const sentAt = inFlight?.get(r.id)?.sentAt ?? r.t;
+      const sentAt = sentAtOf(r.id, r.t);
       if (sentAt < from || sentAt > to) return false;
       if (!hitRequestIds.has(r.id)) return true;
       return [...clientIdsOf(r)].some((id) => callClientIds.has(id));
@@ -122,16 +123,22 @@ export function linkServerHits({ hits, requests, serverHosts, identity, inFlight
   const browser = facts.filter((f) => !isServer(f));
   return facts.map((f): Hit => {
     if (!isServer(f)) return f.hit;
-    const exact = f.eventId === undefined ? [] : browser.filter((b) => b.eventId === f.eventId && b.hit.event === f.hit.event);
+    const callAt = f.request?.t;
+    const exact =
+      f.eventId === undefined
+        ? []
+        : browser.filter((b) => {
+            if (b.eventId !== f.eventId || b.hit.event !== f.hit.event) return false;
+            return callAt === undefined || sentAtOf(b.hit.requestId, b.hit.t) <= callAt;
+          });
     if (exact.length === 1) return { ...f.hit, via: { hitId: exact[0]!.hit.id, by: 'eventId', confidence: 'exact' } };
     const eventIdMiss: HitLinkMiss['eventId'] = f.eventId === undefined || f.hit.event === null ? 'none' : exact.length === 0 ? 'noMatch' : 'several';
-    const callAt = f.request?.t;
     const sameKey =
       callAt === undefined || f.hit.event === null
         ? []
         : browser.filter((b) => {
             if (!b.onServerHost || b.hit.event !== f.hit.event) return false;
-            const sentAt = inFlight?.get(b.hit.requestId)?.sentAt ?? b.hit.t;
+            const sentAt = sentAtOf(b.hit.requestId, b.hit.t);
             if (sentAt > callAt) return false;
             for (const id of f.clientIds) if (b.clientIds.has(id)) return true;
             return false;

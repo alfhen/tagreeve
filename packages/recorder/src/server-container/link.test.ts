@@ -58,6 +58,74 @@ describe('rule 1: event ID and event name', () => {
     expect(via?.hitId).toBe(other.id);
   });
 
+  describe('send time', () => {
+    const callReq = () => serverRequest('https://graph.facebook.com/v21.0/1/events', { t: 1000 });
+    const pix = (t: number) => {
+      const r = request('https://www.facebook.com/tr/?id=1&ev=Purchase&eid=evt-12345678', { t });
+      return [r, hit(r, 'meta', 'Purchase', t, { eid: 'evt-12345678' })] as const;
+    };
+    const run = (pixels: Array<readonly [Request, Hit]>, inFlight?: Array<[Request, InFlightWindow]>, over: Partial<Request> = {}) => {
+      const req = { ...callReq(), ...over };
+      const c = hit(req, 'meta-capi', 'Purchase', 1000, { eventId: 'evt-12345678' });
+      expect(req.captured).toBe('serverContainer');
+      expect(c.event).toBe('Purchase');
+      for (const [, h] of pixels) {
+        expect(h.params.eid).toBe(c.params.eventId);
+        expect(h.event).toBe(c.event);
+      }
+      const out = linkServerHits({
+        hits: [...pixels.map(([, h]) => h), c],
+        requests: [...pixels.map(([r]) => r), req],
+        serverHosts: hosts,
+        identity,
+        ...(inFlight ? { inFlight: new Map(inFlight.map(([r, w]) => [r.id, w])) } : {}),
+      });
+      return out[out.length - 1]!;
+    };
+    const isExact = (h: Hit) => h.via?.by === 'eventId' && h.via.confidence === 'exact';
+
+    test('a pixel hit sent after the call is not an exact match', () => {
+      const out = run([pix(2900)]);
+      expect(isExact(out)).toBe(false);
+      expect(out.linkMiss?.eventId).toBe('noMatch');
+    });
+
+    test('a pixel hit sent before the call is exact', () => {
+      const p = pix(900);
+      expect(run([p]).via).toEqual({ hitId: p[1].id, by: 'eventId', confidence: 'exact' });
+    });
+
+    test('a pixel hit sent at the call time is exact', () => {
+      const p = pix(1000);
+      expect(run([p]).via).toEqual({ hitId: p[1].id, by: 'eventId', confidence: 'exact' });
+    });
+
+    test('an unknown call time keeps the old behaviour', () => {
+      const p = pix(2900);
+      const over = { t: undefined as unknown as number };
+      expect(over.t).toBeUndefined();
+      expect(run([p], undefined, over).via).toEqual({ hitId: p[1].id, by: 'eventId', confidence: 'exact' });
+    });
+
+    test('the in-flight send time wins over the hit time', () => {
+      const p = pix(900);
+      expect(p[1].t).toBe(900);
+      expect(run([p], [[p[0], { sentAt: 900, answeredAt: 1200 }]]).via).toEqual({ hitId: p[1].id, by: 'eventId', confidence: 'exact' });
+      const late = run([p], [[p[0], { sentAt: 1100, answeredAt: 1200 }]]);
+      expect(isExact(late)).toBe(false);
+      expect(late.linkMiss?.eventId).toBe('noMatch');
+    });
+
+    test('the miss reason counts only hits sent before the call', () => {
+      const after = run([pix(2900), pix(3000)]);
+      expect(after.linkMiss?.eventId).toBe('noMatch');
+      expect(isExact(after)).toBe(false);
+      expect(run([pix(900), pix(950)]).linkMiss?.eventId).toBe('several');
+      const early = pix(900);
+      expect(run([early, pix(2900)]).via).toEqual({ hitId: early[1].id, by: 'eventId', confidence: 'exact' });
+    });
+  });
+
   test('a GA4 call with the same event ID and name is exact too', () => {
     const ga4Req = serverRequest('https://www.google-analytics.com/g/collect', { t: 50 });
     const ga4 = hit(ga4Req, 'ga4', 'Purchase', 50, { event_id: 'evt-12345678' });
