@@ -563,7 +563,7 @@ describe('identifier routes', () => {
     postData: null,
     outcome: 'stubbed',
   });
-  const routeFlag = (request: Request, kind: 'direct' | 'pageUrl'): Flag => ({
+  const routeFlag = (request: Request, kind: 'direct' | 'pageUrl' | 'unknown'): Flag => ({
     type: 'flag',
     id: newId('flag'),
     runId,
@@ -611,6 +611,129 @@ describe('identifier routes', () => {
       }),
     );
     expect(model.routes!.rows.map((r) => r.verdict)).toEqual(['PASS']);
+  });
+
+  const NAMES = ['gclid', 'gbraid', 'wbraid', 'fbclid', 'msclkid', 'ttclid'];
+  const hostRequest = (t: number, host: string): Request => ({ ...sinkRequest(t), url: `https://${host}/c?x=abc` });
+  const namedRoute = (request: Request, name: string, over: { host?: string; field?: string; transform?: string; kind?: 'direct' | 'pageUrl' | 'unknown'; hops?: NonNullable<Flag['route']>['hops'] } = {}): Flag => {
+    const flag = routeFlag(request, over.kind ?? 'direct');
+    const route = flag.route!;
+    return {
+      ...flag,
+      route: {
+        ...route,
+        source: { source: 'urlParam', name },
+        sink: { ...route.sink, host: over.host ?? route.sink.host, field: over.field ?? route.sink.field, transform: (over.transform ?? route.sink.transform) as typeof route.sink.transform },
+        hops: over.hops ?? [],
+      },
+    };
+  };
+  const sevenRequests = (host: string, t = 1500) => Array.from({ length: 7 }, (_, i) => hostRequest(t + i, host));
+  const fanOut = (requests: Request[]) => requests.flatMap((q) => NAMES.map((n) => namedRoute(q, n, { host: new URL(q.url).host })));
+  const routeFlagCount = (flags: Flag[]) => flags.filter((f) => f.kind === 'identifierRoute').length;
+
+  test('6 canaries in 7 requests to one host make one row', () => {
+    const requests = sevenRequests('ads.example.test');
+    const flags = fanOut(requests);
+    expect(routeFlagCount(flags)).toBe(42);
+    expect(new Set(flags.map((f) => f.route!.sink.requestId)).size).toBe(7);
+    const { rows } = buildReportModel(records({ consentEpochs: [epoch('denied', 0, DENIED)], requests, flags: [searchFlag(), ...flags] })).routes!;
+    expect(rows).toHaveLength(1);
+    for (const name of NAMES) expect(rows[0]!.line).toContain(name);
+    expect(rows[0]!.line).toContain('7 requests');
+    expect(rows[0]).toMatchObject({ flags: 42, requests: 7, verdict: 'FAIL', epoch: 'denied', host: 'ads.example.test' });
+  });
+
+  test('the same routes to a second host make two rows', () => {
+    const a = sevenRequests('ads.example.test');
+    const b = sevenRequests('other.example.test', 1600);
+    const flags = [...fanOut(a), ...fanOut(b)];
+    expect(new Set(flags.map((f) => f.route!.sink.host)).size).toBe(2);
+    const { rows } = buildReportModel(records({ consentEpochs: [epoch('denied', 0, DENIED)], requests: [...a, ...b], flags: [searchFlag(), ...flags] })).routes!;
+    expect(rows.map((r) => r.host)).toEqual(['ads.example.test', 'other.example.test']);
+    for (const row of rows) {
+      for (const name of NAMES) expect(row.line).toContain(name);
+      expect(row.line).toContain('7 requests');
+    }
+    expect(rows.reduce((n, r) => n + r.flags, 0)).toBe(84);
+  });
+
+  test('a direct FAIL route and a pageUrl WARN route stay two rows', () => {
+    const q = hostRequest(1500, 'ads.example.test');
+    const { rows } = buildReportModel(
+      records({ consentEpochs: [epoch('denied', 0, DENIED)], requests: [q], flags: [searchFlag(), namedRoute(q, 'gclid'), namedRoute(q, 'gclid', { kind: 'pageUrl' })] }),
+    ).routes!;
+    expect(rows.map((r) => [r.verdict, r.flags])).toEqual([['FAIL', 1], ['WARN', 1]]);
+  });
+
+  test('a FAIL route is never shown under a PASS row', () => {
+    const first = hostRequest(1500, 'ads.example.test');
+    const second = hostRequest(1501, 'ads.example.test');
+    const evidence = [first.id];
+    expect(evidence).not.toContain(second.id);
+    const { rows } = buildReportModel(
+      records({
+        consentEpochs: [epoch('denied', 0, DENIED)],
+        requests: [first, second],
+        flags: [searchFlag(), namedRoute(first, 'gclid'), namedRoute(second, 'gclid')],
+        results: [result('builtin: identifierRoute', false, { severity: 'fail', evidence })],
+      }),
+    ).routes!;
+    expect(rows.map((r) => [r.verdict, r.flags, r.requests])).toEqual([['FAIL', 1, 1], ['PASS', 1, 1]]);
+  });
+
+  test.each([
+    ['field', { field: 'y' }],
+    ['transform', { transform: 'plain' }],
+    ['kind', { kind: 'unknown' as const }],
+    ['epoch', { later: true }],
+  ])('routes that differ only in %s are two rows', (_name, change) => {
+    const first = hostRequest(1500, 'ads.example.test');
+    const second = hostRequest('later' in change ? 2500 : 1501, 'ads.example.test');
+    const a = namedRoute(first, 'gclid', { field: 'x', transform: 'base64', kind: 'direct' });
+    const { later, ...over } = change as { later?: boolean; field?: string; transform?: string; kind?: 'unknown' };
+    const b = namedRoute(second, 'fbclid', { field: 'x', transform: 'base64', kind: 'direct', ...over });
+    const differing = [a.route!.sink.field !== b.route!.sink.field, a.route!.sink.transform !== b.route!.sink.transform, a.route!.kind !== b.route!.kind, Boolean(later)];
+    expect(differing.filter(Boolean)).toHaveLength(1);
+    const { rows } = buildReportModel(
+      records({
+        consentEpochs: [epoch('denied', 0, DENIED, 2000), epoch('undecided', 2000, state())],
+        requests: [first, second],
+        flags: [searchFlag(), a, b],
+        results: [result('builtin: identifierRoute', false, { severity: 'fail', evidence: [first.id, second.id] })],
+      }),
+    ).routes!;
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.verdict === 'FAIL')).toBe(true);
+  });
+
+  test('two routes that differ only in source name share one row', () => {
+    const q = hostRequest(1500, 'ads.example.test');
+    const { rows } = buildReportModel(records({ consentEpochs: [epoch('denied', 0, DENIED)], requests: [q], flags: [searchFlag(), namedRoute(q, 'gclid'), namedRoute(q, 'fbclid')] })).routes!;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.line).toContain('gclid');
+    expect(rows[0]!.line).toContain('fbclid');
+  });
+
+  test('a cookie hop name stays in the row', () => {
+    const q = hostRequest(1500, 'ads.example.test');
+    const flag = namedRoute(q, 'gclid', { hops: [{ kind: 'cookie', name: '_gcl_aw' }] as never });
+    const { rows } = buildReportModel(records({ consentEpochs: [epoch('denied', 0, DENIED)], requests: [q], flags: [searchFlag(), flag] })).routes!;
+    expect(rows[0]!.line).toContain('url param gclid via cookie _gcl_aw');
+  });
+
+  test('routes whose sink request is missing group into one unknown-epoch row', () => {
+    const ghost = hostRequest(1500, 'ads.example.test');
+    const flags = [namedRoute(ghost, 'gclid'), namedRoute(ghost, 'fbclid')];
+    const input = records({ consentEpochs: [epoch('denied', 0, DENIED)], requests: [], flags: [searchFlag(), ...flags] });
+    expect(input.requests.some((r) => r.id === ghost.id)).toBe(false);
+    const { rows } = buildReportModel(input).routes!;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.epoch).toBe('unknown');
+    expect(rows[0]!.line).toContain('gclid');
+    expect(rows[0]!.line).toContain('fbclid');
+    expect(rows[0]!.line).toContain('1 request');
+    expect(rows[0]!.line).not.toContain('1 requests');
   });
 
   test('a run without a canarySearch flag has no routes view', () => {

@@ -420,6 +420,26 @@ test('a consent suite with a missing record still reports, and says which state 
   }
 });
 
+test('the consent audit column lists 6 canaries in 7 requests as one item', () => {
+  const base = records('a', 'published', ['page_view'], {});
+  const runId = base.run.id;
+  const names = ['gclid', 'gbraid', 'wbraid', 'fbclid', 'msclkid', 'ttclid'];
+  const requests = Array.from({ length: 7 }, (_, i) => ({ type: 'request' as const, id: newId('request'), runId, stepId: null, t: 1500 + i, method: 'GET', url: 'https://ads.example.test/c?x=abc', resourceType: 'image', frameUrl: null, initiator: null, headers: {}, postData: null, outcome: 'stubbed' as const }));
+  const flag = (kind: string, recordIds: string[], detail: string, route?: object) => ({ type: 'flag' as const, id: newId('flag'), runId, kind, recordIds, detail, ...(route && { route }) }) as RunRecords['flags'][number];
+  const flags = [
+    flag('canarySearch', [], 'Searched 7 requests to non-first-party hosts for 6 values as plain text. Searched: URL, body and decoded fields. Not searched: headers (Referer and Cookie). Skipped: compressed or binary body 0, body cut at 64 KiB 0, net-log request with no body 0.'),
+    ...requests.flatMap((q) => names.map((name) => flag('identifierRoute', [q.id], 'd', { kind: 'direct', source: { source: 'urlParam', name }, sink: { requestId: q.id, host: 'ads.example.test', vendor: 'unknown', field: 'x', transform: 'base64' }, hops: [] }))),
+  ];
+  const reject = { ...base, requests, flags, run: { ...base.run, consentCell: 'reject' as const } };
+  const m = consentManifest({ cells: [{ scenario: 'a', variant: 'published', labels: { consent: 'reject' }, status: 'fail', exitCode: 1, record: 'r.jsonl' }], consent: ['reject'] });
+  const html = renderSuiteReport(buildSuiteModel(m, new Map([[recordKey('a', 'published', undefined, 'reject'), reject]])));
+  const start = html.indexOf('<h5>Identifier routes</h5>');
+  const part = html.slice(start, html.indexOf('<h5>Searched and skipped</h5>', start));
+  const items = part.match(/<li\b.*?<\/li>/g) ?? [];
+  expect(items).toHaveLength(1);
+  for (const text of ['ads.example.test', ...names, '7 requests', 'FAIL']) expect(items[0]).toContain(text);
+});
+
 test('a truncated record puts its line number on the page', () => {
   const cut = new Map(loaded);
   cut.set(recordKey('checkout', 'published'), { ...loaded.get(recordKey('checkout', 'published'))!, truncatedAtLine: 7 });

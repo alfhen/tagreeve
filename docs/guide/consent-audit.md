@@ -37,7 +37,7 @@ Then there is one column for each state:
 
 - **Verdict.** PASS, WARN or FAIL of the cell, as in the suite table.
 - **Rules and built-in checks.** The rules and checks that failed or warned, by name.
-- **Identifier routes.** Each planted value that reached a host other than the store, with the sink host, the consent epoch of the request and a verdict. A value seen only in the page URL field is a warning.
+- **Identifier routes.** One line for each group of planted values that reached the same host other than the store, in the same field and transform (encoding), of the same route kind, in the same consent epoch and with the same verdict. A line names the values, the request count, the sink host, the epoch and the verdict. A value seen only in the page URL field is a warning.
 - **consentModeSetup.** Whether a Google hit shows a Consent Mode signal that was never set. It is a warning by default.
 - **Searched and skipped.** The forms searched, the parts searched and not searched, and the requests that were skipped, such as compressed bodies.
 

@@ -33,6 +33,22 @@ beforeAll(async () => {
 }, 150_000);
 
 const routeFlags = (records: RunRecords): Flag[] => records.flags.filter((f) => f.kind === 'identifierRoute');
+type Verdict = 'PASS' | 'WARN' | 'FAIL';
+// Rebuilds the report's groups from the record: host, field, transform, kind, epoch at sink and verdict.
+const groupCount = (records: RunRecords, verdictOf: (flag: Flag) => Verdict): { total: number; byVerdict: Record<Verdict, number> } => {
+  const epochOf = (flag: Flag) => {
+    const t = records.requests.find((q) => q.id === flag.route!.sink.requestId)!.t;
+    return records.consentEpochs.find((e) => e.startT <= t && (e.endT === null || t < e.endT))?.label ?? 'unknown';
+  };
+  const keys = new Map<string, Verdict>();
+  for (const f of routeFlags(records)) {
+    const r = f.route!;
+    keys.set(JSON.stringify([r.sink.host, r.sink.field, r.sink.transform, r.kind, epochOf(f), verdictOf(f)]), verdictOf(f));
+  }
+  const byVerdict: Record<Verdict, number> = { PASS: 0, WARN: 0, FAIL: 0 };
+  for (const v of keys.values()) byVerdict[v] += 1;
+  return { total: keys.size, byVerdict };
+};
 const strip = (html: string) => html.replace(/<[^>]*>/g, ' ');
 const section = (html: string, from: string, to: RegExp) => {
   const start = html.indexOf(from);
@@ -100,17 +116,23 @@ test('the report holds no form of a canary value or of the identity, and keeps i
   expect(rejectHtml).not.toMatch(/<script|<link|<img|url\(|@import/i);
 });
 
-test('under reject the page-URL routes warn and the other routes fail, one row per flag', () => {
+test('under reject the page-URL routes warn and the other routes fail, one row per group', () => {
   const records = reject.records!;
   const flags = routeFlags(records);
   expect(flags.some((f) => f.route!.kind === 'pageUrl' && f.route!.sink.vendor === 'ga4')).toBe(true);
-  expect(flags.some((f) => f.route!.sink.host === 'www.googleadservices.com')).toBe(true);
+  const ads = flags.find((f) => f.route!.sink.host === 'www.googleadservices.com')!;
+  expect(ads).toBeDefined();
+  const hop = ads.route!.hops.find((h) => h.kind === 'cookie')!;
+  expect(hop).toBeDefined();
+  const groups = groupCount(records, (f) => (f.route!.kind === 'pageUrl' ? 'WARN' : 'FAIL'));
+  expect(groups.total).toBeLessThan(flags.length);
   const rows = routeRows(rejectHtml);
-  expect(rows.length).toBeGreaterThanOrEqual(1);
-  expect(rows).toHaveLength(flags.length);
-  const pageUrl = flags.filter((f) => f.route!.kind === 'pageUrl').length;
-  expect(rows.filter((r) => r.includes('WARN') && !r.includes('FAIL'))).toHaveLength(pageUrl);
-  expect(rows.filter((r) => r.includes('FAIL'))).toHaveLength(flags.length - pageUrl);
+  expect(rows).toHaveLength(groups.total);
+  expect(rows.filter((r) => r.includes('WARN') && !r.includes('FAIL'))).toHaveLength(groups.byVerdict.WARN);
+  expect(rows.filter((r) => r.includes('FAIL'))).toHaveLength(groups.byVerdict.FAIL);
+  const adsRow = rows.find((r) => r.includes('www.googleadservices.com'))!;
+  expect(adsRow).toContain('gclid');
+  expect(adsRow).toContain(hop.name);
 });
 
 test('with send=granted every route row reads PASS', async () => {
@@ -119,8 +141,10 @@ test('with send=granted every route row reads PASS', async () => {
   expect(records.results.find((r) => r.expectation === 'builtin: identifierRoute')!.pass).toBe(true);
   const flags = routeFlags(records);
   expect(flags.length).toBeGreaterThanOrEqual(1);
+  const groups = groupCount(records, () => 'PASS');
   const rows = routeRows(await htmlOf(granted));
-  expect(rows).toHaveLength(flags.length);
+  expect(groups.total).toBeLessThan(flags.length);
+  expect(rows).toHaveLength(groups.total);
   for (const row of rows) {
     expect(row).toContain('PASS');
     expect(row).not.toMatch(/FAIL|WARN/);
