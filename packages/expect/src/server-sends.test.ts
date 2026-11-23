@@ -593,6 +593,25 @@ describe('a container that rejected the browser requests', () => {
     expectOld(rs);
   });
 
+  test('a matching server hit keeps a passing must', () => {
+    const opts = { pairs: [capi(1500, undefined)] };
+    expect(serverHits(opts)).toHaveLength(1);
+    const rs = go(rules, opts);
+    expect(check(rs, 'serverContainerRejected').pass).toBe(false);
+    expect(mustOf(rs)).toMatchObject({ pass: true });
+    expect(mustOf(rs).note).toBeUndefined();
+  });
+
+  test('a matching server hit keeps a failing mustNot', () => {
+    const opts = { pairs: [capi(1500, undefined)] };
+    expect(serverHits(opts)).toHaveLength(1);
+    const rs = go(rules, opts);
+    expect(check(rs, 'serverContainerRejected').pass).toBe(false);
+    expect(mustNotOf(rs)).toMatchObject({ pass: false });
+    expect(mustNotOf(rs).severity).toBeUndefined();
+    expect(mustNotOf(rs).note).toBeUndefined();
+  });
+
   test.each([
     ['too many hits for an exact count', 'count: 1', [capi(1500, undefined), capi(1600, undefined)]],
     ['a failed identity.hashesMatch', 'identity.hashesMatch: true', [capi(1500, undefined, { params: { 'user_data.em[]': 'deadbeef' } })]],
