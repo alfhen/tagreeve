@@ -101,3 +101,14 @@ test('the result, the --json output and the text output hold no form of a canary
     expect(text.stdout).not.toContain(form);
   }
 }, 150_000);
+
+test('the relay page view comes after the consent answer, granted and denied', async () => {
+  const granted = await run(GRANTED);
+  for (const [name, records, label] of [[GRANTED, granted.records!, 'granted'], [REJECT, reject.records!, 'denied']] as const) {
+    const ga4 = records.requests.filter((q) => q.url.includes('G-PWTEST0001'));
+    const epoch = records.consentEpochs.find((e) => e.label === label);
+    expect(ga4, name).toHaveLength(1);
+    expect(epoch, name).toBeDefined();
+    expect(ga4[0]!.t, name).toBeGreaterThanOrEqual(epoch!.startT);
+  }
+}, 150_000);
