@@ -89,6 +89,38 @@ describe('rule 2: client ID and event name in flight', () => {
     expect(via).toEqual({ hitId: bHit.id, by: 'clientId', confidence: 'exact' });
   });
 
+  const linked = (pairs: Array<[Request, Hit]>, inFlight: Array<[Request, InFlightWindow]>) =>
+    linkServerHits({ hits: pairs.map(([, h]) => h), requests: pairs.map(([r]) => r), serverHosts: hosts, identity, inFlight: new Map(inFlight.map(([r, w]) => [r.id, w])) });
+  const loaderCall = (query: string, t: number) =>
+    request(`https://sgtm.example.invalid/pwloader?k=${encodeURIComponent(Buffer.from(`/g/collect?${query}`).toString('base64'))}`, { t });
+
+  test('a Stape loader browser hit in flight is read for its client ID: exact by clientId, no linkMiss', () => {
+    const b = loaderCall('v=2&tid=G-PWTEST0001&en=Purchase&cid=pw-client-0001', 100);
+    const bHit = hit(b, 'ga4', 'Purchase', 100);
+    const c = serverCall('pw-client-0001', 150);
+    const out = linkServerHits({ hits: [bHit, hit(c, 'ga4', 'Purchase', 150)], requests: [b, c], serverHosts: hosts, identity, inFlight: new Map([[b.id, { sentAt: 100, answeredAt: 200 }]]) })[1];
+    expect(out?.via).toEqual({ hitId: bHit.id, by: 'clientId', confidence: 'exact' });
+    expect(out?.linkMiss).toBeUndefined();
+  });
+
+  test('a concurrent loader request with the same client ID is concurrentRequest', () => {
+    const a = browserCall('pw-client-0001', 100);
+    const other = loaderCall('v=2&tid=G-PWTEST0001&en=PageView&cid=pw-client-0001', 120);
+    const c = serverCall('pw-client-0001', 150);
+    const out = linked([[a, hit(a, 'ga4', 'Purchase', 100)], [other, hit(other, 'ga4', 'PageView', 120)], [c, hit(c, 'ga4', 'Purchase', 150)]], [[a, { sentAt: 100, answeredAt: 200 }]])[2];
+    expect(out?.linkMiss).toEqual({ eventId: 'none', clientId: 'concurrentRequest' });
+    expect(out?.via).toMatchObject({ confidence: 'probable' });
+  });
+
+  test('a loader that wraps another client ID, or cannot be decoded, still misses', () => {
+    const c = serverCall('pw-client-0001', 150);
+    for (const b of [loaderCall('en=Purchase&cid=pw-client-0009', 100), request('https://sgtm.example.invalid/pwloader?k=%25%25not-base64%25%25', { t: 100 })]) {
+      const out = linked([[b, hit(b, 'ga4', 'Purchase', 100)], [c, hit(c, 'ga4', 'Purchase', 150)]], [[b, { sentAt: 100, answeredAt: 200 }]])[1];
+      expect(out?.via).toBeUndefined();
+      expect(out?.linkMiss).toEqual({ eventId: 'none', clientId: 'noSameKeyHit' });
+    }
+  });
+
   test('two browser hits in flight: probable, never one of them picked as exact', () => {
     const a = browserCall('pw-client-0001', 100);
     const b = browserCall('pw-client-0001', 110);

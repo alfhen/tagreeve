@@ -1,3 +1,4 @@
+import { unwrapStapeLoader } from '@tagreeve/decoders';
 import { hashEmail, isServerContainerRequest, isServerHostUrl, type Hit, type HitLinkMiss, type Identity, type Request } from '@tagreeve/core';
 
 /** A shared value shorter than this proves nothing. */
@@ -28,6 +29,15 @@ function clientIdsOf(request: Request): Set<string> {
     addQuery(new URL(request.url).searchParams);
   } catch {
     // An unparsable URL holds no client ID.
+  }
+  // A Stape loader packs the GA4 query into one encoded parameter. Used in memory only.
+  const unwrapped = unwrapStapeLoader(request);
+  if (unwrapped) {
+    try {
+      addQuery(new URL(unwrapped.url).searchParams);
+    } catch {
+      // Not a URL, no client ID.
+    }
   }
   const body = request.postData;
   if (body) {

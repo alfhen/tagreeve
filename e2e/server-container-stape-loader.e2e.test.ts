@@ -120,6 +120,21 @@ describe('two Stape loader hits', () => {
   });
 });
 
+describe('a Stape loader hit with a client ID and no event ID', () => {
+  test('links its server GA4 hit exactly by client ID, with no linkMiss', async () => {
+    const r = await runScenario(send("{ loader: 'stape', cid: 'pw-client-loader-1', copy: true, after: true }"), ['--json', '--server-container']);
+    const records = r.records!;
+    const requests = sgtmRequests(records);
+    expect(requests).toHaveLength(1);
+    expect(pathOf(requests[0]!)).toBe('/pwloader');
+    const hits = containerGa4(records);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.via?.by).toBe('clientId');
+    expect(hits[0]!.via?.confidence).toBe('exact');
+    expect(hits[0]!.linkMiss).toBeUndefined();
+  }, 300_000);
+});
+
 describe('a loader request whose decoded path is /s', () => {
   test('reaches the container at the loader path, gets 404 and is not translated', async () => {
     const r = await runScenario(loaderSteps("path: 's', "), ['--json', '--server-container']);
