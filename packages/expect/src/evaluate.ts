@@ -34,7 +34,7 @@ import { consentModeSetup, GOOGLE_VENDORS } from './consent-mode-setup.ts';
 import { identifierRoute } from './identifier-route.ts';
 import { earlyIdentityPush } from './early-identity-push.ts';
 import { idHandover } from './id-handover.ts';
-import { serverContainerRejected } from './server-container-rejected.ts';
+import { serverContainerRejected, type ServerContainerRejected } from './server-container-rejected.ts';
 import { hostMatches } from './hosts.ts';
 import { evaluatePushRule, fieldGlob } from './push-rules.ts';
 import { evaluateTagRule, expectedTagsOf, type ExpectedTags } from './tags.ts';
@@ -124,10 +124,19 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
     });
   };
 
+  const containerRan = Boolean(runRecord && (runRecord.serverContainer || runRecord.testServerContainer) && !runRecord.serverContainer?.error);
+  const rejected = containerRan ? serverContainerRejected([...ctx.requests.values()], ctx.responses, scenario.options.serverHosts ?? []) : undefined;
+
   for (const kind of ['mustNot', 'must'] as const)
     for (const rule of scenario.expect[kind]) {
       const outcome = evaluateRule(rule, ctx);
       const { pass, evidence, message } = outcome;
+      // A verdict that rests on no server hit being there says nothing when the container rejected the requests that would have made them.
+      const absence = kind === 'must' ? !pass : pass;
+      if (rejected &&!rejected.pass && absence && !outcome.note && rule.filter.sentBy !== 'browser' && !rule.tag && !rule.dataLayer && !rule.cookie) {
+        add(`${kind}: ${rule.description}`, false, evidence, REJECTED_MESSAGE, 'warn', 'serverContainerRejected');
+        continue;
+      }
       const passes = (c: Context) => evaluateRuleHits(rule, c).pass;
       const scoped = !rule.tag && !rule.dataLayer && isScoped(rule);
       const failureRests = scoped && !pass && failureRestsOnProbableLink(ctx, passes, rule);
@@ -139,10 +148,11 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
       add(`${kind}: ${rule.description}`, pass, evidence, message, countRests ? 'warn' : outcome.severity, countRests ? 'serverSendProbableLink' : note, scoped && (pass || failureRests));
     }
 
-  const containerRan = Boolean(runRecord && (runRecord.serverContainer || runRecord.testServerContainer) && !runRecord.serverContainer?.error);
-  builtInChecks(records, scenario, ctx, add, containerRan);
+  builtInChecks(records, scenario, ctx, add, rejected);
   return results;
 }
+
+const REJECTED_MESSAGE = 'cannot evaluate: the server container rejected most browser requests';
 
 type RuleOutcome = { pass: boolean; evidence: string[]; message: string; note?: ResultNote; severity?: Severity };
 
@@ -1123,7 +1133,7 @@ function builtInChecks(
   scenario: Scenario,
   ctx: Context,
   addResult: (expectation: string, pass: boolean, evidence: string[], message: string, severity?: Severity, note?: ResultNote, timeJudged?: boolean) => void,
-  containerRan: boolean,
+  rejected: ServerContainerRejected | undefined,
 ) {
   const add = (name: BuiltinName, pass: boolean, evidence: string[], message: string, note?: ResultNote, timeJudged = false) =>
     addResult(
@@ -1220,8 +1230,7 @@ function builtInChecks(
   const route = identifierRoute(records, ctx.grace, scenario.options.builtins?.identifierRoute);
   if (route) addResult('builtin: identifierRoute', route.pass, route.evidence, route.message, route.severity, route.note);
 
-  if (containerRan) {
-    const rejected = serverContainerRejected([...ctx.requests.values()], ctx.responses, scenario.options.serverHosts ?? []);
+  if (rejected) {
     add('serverContainerRejected', rejected.pass, rejected.evidence, rejected.message);
   }
 }

@@ -376,6 +376,7 @@ export type ResultNote =
   | 'nestedNameOnly'
   | 'serverSendProbableLink'
   | 'serverSendUnlinked'
+  | 'serverContainerRejected'
   | 'noTagReports'
   | 'tagNameUnknown';
 

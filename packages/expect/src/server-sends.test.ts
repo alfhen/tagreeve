@@ -516,3 +516,75 @@ describe('rules on a server hit', () => {
     expect(results[0]).toMatchObject({ note: 'serverSendUnlinked' });
   });
 });
+
+describe('a container that rejected the browser requests', () => {
+  const NOTE = 'serverContainerRejected';
+  const MESSAGE = 'cannot evaluate: the server container rejected most browser requests';
+  const container = { image: 'ok', requests: 5 };
+
+  function toContainer(n: number): Request[] {
+    return Array.from({ length: n }, (_, i) => ({
+      type: 'request', id: newId('request'), runId, stepId: null, t: i, method: 'POST', url: 'http://127.0.0.1:3100/g/collect?v=2', resourceType: 'fetch',
+      frameUrl: 'http://localhost:3000/', initiator: null, headers: {}, postData: null, outcome: 'stubbed',
+    })) as Request[];
+  }
+  const answers = (requests: Request[], statuses: number[]) =>
+    requests.map((r, i) => ({ type: 'response', id: newId('response'), requestId: r.id, status: statuses[i]!, setCookieNames: [] }));
+
+  function go(yaml: string, opts: { statuses?: number[]; serverContainer?: unknown; pairs?: Pair[]; builtins?: string } = {}): Result[] {
+    const requests = toContainer(5);
+    const runRecord = { type: 'run', id: runId, identity, ...(opts.serverContainer !== null && { serverContainer: opts.serverContainer ?? container }) };
+    return evaluate(
+      [runRecord, ...requests, ...answers(requests, opts.statuses ?? [400, 400, 400, 400, 400]), ...(opts.pairs ?? []).flatMap((p) => [p.hit, p.req]), ...epochs] as never,
+      parseScenario(`start: /\n${yaml}\noptions: { serverHosts: [127.0.0.1]${opts.builtins ?? ''} }`),
+      { identity },
+    );
+  }
+  const rules = 'expect:\n  must:\n    - { vendor: meta-capi, sentBy: server }\n  mustNot:\n    - { vendor: meta-capi }';
+  const mustOf = (rs: Result[]) => rs.find((r) => r.expectation.startsWith('must: '))!;
+  const mustNotOf = (rs: Result[]) => rs.find((r) => r.expectation.startsWith('mustNot: '))!;
+
+  test('the input rejects, and an absence verdict reads cannot evaluate', () => {
+    const rs = go(rules);
+    expect(check(rs, 'serverContainerRejected').pass).toBe(false);
+    for (const r of [mustOf(rs), mustNotOf(rs)]) expect(r).toMatchObject({ pass: false, severity: 'warn', note: NOTE, message: MESSAGE });
+  });
+
+  test('a builtins override does not change it', () => {
+    const rs = go(rules, { builtins: ', builtins: { serverContainerRejected: fail }' });
+    expect(check(rs, 'serverContainerRejected')).toMatchObject({ pass: false, severity: 'fail' });
+    for (const r of [mustOf(rs), mustNotOf(rs)]) expect(r).toMatchObject({ pass: false, severity: 'warn', note: NOTE });
+  });
+
+  test.each([
+    ['the container has an error', { serverContainer: { ...container, error: 'exited' } }],
+    ['there is no container', { serverContainer: null }],
+    ['only 1 of 5 requests is rejected', { statuses: [400, 200, 200, 200, 200] }],
+  ])('%s: the old verdicts stay', (_name, opts) => {
+    const rs = go(rules, opts);
+    expect(mustOf(rs)).toMatchObject({ pass: false });
+    expect(mustOf(rs).note).toBeUndefined();
+    expect(mustOf(rs).severity).toBeUndefined();
+    expect(mustNotOf(rs)).toMatchObject({ pass: true });
+    expect(mustNotOf(rs).note).toBeUndefined();
+  });
+
+  test('a matching server hit keeps a passing must and a failing mustNot', () => {
+    const rs = go(rules, { pairs: [capi(1500, undefined)] });
+    expect(check(rs, 'serverContainerRejected').pass).toBe(false);
+    expect(mustOf(rs)).toMatchObject({ pass: true });
+    expect(mustOf(rs).note).toBeUndefined();
+    expect(mustNotOf(rs)).toMatchObject({ pass: false });
+    expect(mustNotOf(rs).severity).toBeUndefined();
+    expect(mustNotOf(rs).note).toBeUndefined();
+  });
+
+  test('a sentBy browser rule keeps its verdict', () => {
+    const rs = go('expect:\n  must:\n    - { vendor: meta-capi, sentBy: browser }\n  mustNot:\n    - { vendor: meta-capi, sentBy: browser }');
+    expect(check(rs, 'serverContainerRejected').pass).toBe(false);
+    expect(mustOf(rs)).toMatchObject({ pass: false });
+    expect(mustOf(rs).note).toBeUndefined();
+    expect(mustNotOf(rs)).toMatchObject({ pass: true });
+    expect(mustNotOf(rs).note).toBeUndefined();
+  });
+});
