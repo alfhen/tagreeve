@@ -326,3 +326,102 @@ describe('a stored record without canaries', () => {
     expect(results.map((r) => r.pass)).toEqual([false, false, true, false, true, true, true, true, true, false]);
   });
 });
+
+describe('identifierRouteAllow', () => {
+  const denied = epoch(0, 'denied', ALL_DENIED);
+  const strip = (r: Result) => ({ pass: r.pass, severity: r.severity, note: r.note, evidence: r.evidence });
+  const direct = (host: string) => {
+    const req = request(500, host);
+    return { req, flag: route(req, 'direct') };
+  };
+
+  test('a direct route to an allowed host passes, the same route to another host fails', () => {
+    const allow = "options: { identifierRouteAllow: ['www.googleadservices.com'] }";
+    const a = direct('www.googleadservices.com');
+    const ok = got([denied, search(), a.req, a.flag], allow);
+    expect(ok.pass).toBe(true);
+    expect(ok.message).toMatch(/allowed by identifierRouteAllow: 1 routes? to www\.googleadservices\.com/);
+    expect(ok.evidence).not.toContain(a.req.id);
+    const b = direct('other.example.net');
+    expect(b.flag.route!.sink.host).toBe('other.example.net');
+    expect(['www.googleadservices.com']).not.toContain(b.flag.route!.sink.host);
+    const bad = got([denied, search(), b.req, b.flag], allow);
+    expect(bad.pass).toBe(false);
+    expect(bad.severity).toBe('fail');
+    expect(bad.evidence).toContain(b.req.id);
+  });
+
+  test('*.cmp.example allows subdomains but not the bare domain, and counts per host', () => {
+    const allow = "options: { identifierRouteAllow: ['*.cmp.example'] }";
+    const a = direct('api.cmp.example');
+    const ok = got([denied, search(), a.req, a.flag], allow);
+    expect(ok.pass).toBe(true);
+    expect(ok.message).toMatch(/allowed by identifierRouteAllow: 1 routes? to api\.cmp\.example/);
+    const bare = direct('cmp.example');
+    expect(bare.flag.route!.sink.host).toBe('cmp.example');
+    const bad = got([denied, search(), bare.req, bare.flag], allow);
+    expect(bad.pass).toBe(false);
+    expect(bad.severity).toBe('fail');
+    expect(bad.evidence).toContain(bare.req.id);
+
+    const three = [direct('api.cmp.example'), direct('api.cmp.example'), direct('cdn.cmp.example')];
+    expect(three.map((x) => x.flag.route!.sink.host)).toEqual(['api.cmp.example', 'api.cmp.example', 'cdn.cmp.example']);
+    const all = got([denied, search(), ...three.flatMap((x) => [x.req, x.flag])], allow);
+    expect(all.pass).toBe(true);
+    expect(all.message).toMatch(/2 routes to api\.cmp\.example/);
+    expect(all.message).toMatch(/1 routes? to cdn\.cmp\.example/);
+    expect(all.message).not.toContain('3 routes');
+    expect(all.message).not.toContain('*.cmp.example');
+    expect(all.evidence).toEqual([]);
+  });
+
+  test('an allowed route adds no fail, warn or request ID, and unlisted routes are judged as before', () => {
+    const allow = "options: { identifierRouteAllow: ['www.googleadservices.com'] }";
+    const page = request(400, 'www.googleadservices.com');
+    const pageRoute = route(page, 'pageUrl');
+    const alone = got([denied, search(), page, pageRoute], allow);
+    expect(alone.pass).toBe(true);
+    expect(alone.severity).toBe('fail');
+    expect(alone.message).toContain('allowed by identifierRouteAllow');
+    expect(got([denied, search(), page, pageRoute]).severity).toBe('warn');
+
+    const a = direct('www.googleadservices.com');
+    const u = request(600, 'www.google-analytics.com');
+    const warnFlag = route(u, 'pageUrl');
+    const warned = got([denied, search(), a.req, a.flag, u, warnFlag], allow);
+    expect(warned.severity).toBe('warn');
+    expect(warned.message).toContain('allowed by identifierRouteAllow: 1 route');
+    expect(warned.message).toContain('www.googleadservices.com');
+    expect(warned.evidence).not.toContain(a.req.id);
+    expect(strip(warned)).toEqual(strip(got([denied, search(), u, warnFlag])));
+
+    const f = request(700, 'other.example.net');
+    const failFlag = route(f, 'direct');
+    const failed = got([denied, search(), a.req, a.flag, f, failFlag], allow);
+    expect(failed.severity).toBe('fail');
+    expect(failed.message).toContain('allowed by identifierRouteAllow: 1 route');
+    expect(failed.evidence).toEqual([f.id]);
+    expect(strip(failed)).toEqual(strip(got([denied, search(), f, failFlag])));
+  });
+
+  test('an empty list gives the same result as no option', () => {
+    const granted = epoch(0, 'granted', ALL_GRANTED);
+    const p = direct('sink.example.net');
+    const w = request(500, 'sink.example.net');
+    const x = direct('sink.example.net');
+    const cases: [unknown[], boolean, string][] = [
+      [[granted, search(), p.req, p.flag], true, 'fail'],
+      [[denied, search(), w, route(w, 'pageUrl')], false, 'warn'],
+      [[denied, search(), x.req, x.flag], false, 'fail'],
+    ];
+    for (const [records, pass, severity] of cases) {
+      const withEmpty = got(records, 'options: { identifierRouteAllow: [] }');
+      const without = got(records);
+      expect(strip(withEmpty)).toEqual(strip(without));
+      expect(withEmpty.message).toBe(without.message);
+      expect(withEmpty.pass).toBe(pass);
+      expect(withEmpty.severity).toBe(severity);
+      expect(withEmpty.message).not.toContain('allowed by identifierRouteAllow');
+    }
+  });
+});

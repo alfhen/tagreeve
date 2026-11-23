@@ -136,6 +136,8 @@ export interface ScenarioOptions {
   /** `true` allows every unknown destination. A list allows only those hosts or `*.domain` wildcards. */
   allowUnknownDestination?: boolean | string[];
   firstPartyHosts?: string[];
+  /** Hosts or `*.domain` wildcards whose `identifierRoute` routes are counted as allowed and not judged. */
+  identifierRouteAllow?: string[];
   /** `false` makes requests to known platform hosts `unknownDestination` again. Default: true. */
   platformHosts?: boolean;
   /** Regular expression matched against request URLs: a matching request in an `addToCart` step counts as a cart change. */
@@ -203,7 +205,7 @@ const NETWORKS = ['stub', 'server'];
 const CONSENT_ANSWERS = ['accept', 'reject', 'none', 'withdraw'];
 const STEP_KINDS = ['visit', 'click', 'fill', 'select', 'consent', 'wait', 'addToCart', 'evaluate', 'checkpoint', 'handoff', 'payment'];
 const TOP_KEYS = ['start', 'vars', 'identity', 'steps', 'expect', 'options'];
-const OPTION_KEYS = ['network', 'seed', 'consentTimeout', 'graceWindow', 'optionalTimeout', 'allowUnknownDestination', 'firstPartyHosts', 'platformHosts', 'cartRequest', 'unloadGapIgnore', 'dataLayerNames', 'builtins', 'identifierFields', 'serverHosts', 'viewport', 'withdrawWith', 'canaries'];
+const OPTION_KEYS = ['network', 'seed', 'consentTimeout', 'graceWindow', 'optionalTimeout', 'allowUnknownDestination', 'firstPartyHosts', 'identifierRouteAllow', 'platformHosts', 'cartRequest', 'unloadGapIgnore', 'dataLayerNames', 'builtins', 'identifierFields', 'serverHosts', 'viewport', 'withdrawWith', 'canaries'];
 export const MAX_DATALAYER_NAMES = 8;
 export const DATALAYER_NAME_PATTERN = /^[A-Za-z_$][\w$]{0,63}$/;
 export const NEVER_TRAPPED_NAMES: readonly string[] = ['location', 'Shopify', '__proto__', 'constructor', 'prototype'];
@@ -351,6 +353,9 @@ export function parseOptions(raw: unknown, path: Path, fail: (path: Path, messag
         }
       } else if (k === 'firstPartyHosts') {
         if (isHostList(v)) options.firstPartyHosts = v;
+        else fail(p, `must be a list of hosts${HOST_HINT}`);
+      } else if (k === 'identifierRouteAllow') {
+        if (isHostList(v)) options.identifierRouteAllow = v;
         else fail(p, `must be a list of hosts${HOST_HINT}`);
       } else {
         const ms = durationAt(v, p, fail);

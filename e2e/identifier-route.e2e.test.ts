@@ -136,3 +136,29 @@ test('no cookie value is stored in a checkpoint, the record or the output', asyn
     expect(text.stdout).not.toContain(value);
   }
 }, 150_000);
+
+test('identifierRouteAllow counts routes to an allowed host and leaves the record alone', async () => {
+  const { text, result } = await runCopy('route-allow-', (t) => t.replace('  canaries: true\n', '  canaries: true\n  identifierRouteAllow: [www.googleadservices.com]\n'));
+  expect(text).toContain('identifierRouteAllow: [www.googleadservices.com]');
+  expect(reject.failed).toContain('builtin: identifierRoute');
+  expect(reject.code).toBe(1);
+  expect(result.code).toBe(0);
+  const records = result.records!;
+  const res = records.results.find((x) => x.expectation === 'builtin: identifierRoute')!;
+  expect(res.severity).toBe('warn');
+  const n = routes(records).filter((f) => f.route!.sink.host === 'www.googleadservices.com').length;
+  expect(n).toBeGreaterThanOrEqual(1);
+  expect(res.message).toMatch(new RegExp(`allowed by identifierRouteAllow: ${n} routes? to www\\.googleadservices\\.com`));
+  expect(res.message).toContain('(page URL only)');
+  expect(res.evidence).not.toContain(adsRequest(records)!.id);
+  const out = JSON.stringify(records.results) + result.stdout;
+  for (const form of canaryPool(records.run.canaries!, records.run.identity).forms.keys()) expect(out).not.toContain(form);
+  const project = (r: RunRecords) =>
+    routes(r)
+      .map((f) => JSON.stringify([f.route!.kind, f.route!.source.source, f.route!.source.name, f.route!.sink.host, f.route!.sink.vendor, f.route!.sink.field, f.route!.sink.transform, f.route!.hops.map((h) => [h.kind, 'name' in h ? h.name : ''])]))
+      .sort();
+  expect(project(records)).toEqual(project(reject.records!));
+  expect(routes(records).some((f) => f.route!.kind === 'cookie' && f.route!.sink.vendor === 'google-ads' && f.route!.sink.host === 'www.googleadservices.com')).toBe(true);
+  expect(records.flags.filter((f) => f.kind === 'canarySearch')).toHaveLength(1);
+  expect(reject.records!.flags.filter((f) => f.kind === 'canarySearch')).toHaveLength(1);
+}, 150_000);

@@ -617,3 +617,14 @@ describe('dataLayer rules', () => {
     }
   });
 });
+
+describe('identifierRouteAllow', () => {
+  test('a host list is kept', () => {
+    const list = ['www.googleadservices.com', '*.cmp.example'];
+    const s = parseScenario(`start: /\noptions:\n  identifierRouteAllow: ${JSON.stringify(list)}\n`);
+    expect(s.options.identifierRouteAllow).toEqual(list);
+  });
+  test.each(['5', '[""]', '["http://x"]'])('%s is a scenario error', (value) => {
+    expect(errorOf(`start: /\noptions:\n  identifierRouteAllow: ${value}\n`)).toMatch(/identifierRouteAllow: must be a list of hosts, each a host such as/);
+  });
+});
