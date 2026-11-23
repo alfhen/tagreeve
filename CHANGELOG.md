@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.8.0-rc.1
+
+The first release candidate of 0.8.0. Install it with `npm i -g tagreeve@next`. 0.8.0-rc.1 adds a consent audit and fixes after 0.7.0. It has no new command. The record stays at schema version 5. To go back to the final release, run `npm i -g tagreeve`.
+
+### What 0.8.0-rc.1 adds
+
+- A consent matrix. `suite --consent accept,reject,none,withdraw` runs each scenario once per consent state as a cell, with its own record and table column, and prints what each vendor got in each state. `withdrawWith` is a scenario option, and `suite.json` gets an optional `consentMatrix` (#1391).
+- Canaries. `options.canaries: true` plants six fake click IDs on the start URL (gclid, gbraid, wbraid, fbclid, msclkid, ttclid). A start URL that already holds one of them exits 2. The summaries name the canaries and never print a value (#1391).
+- Identifier routes. A run follows a canary or the run's own identity to the vendor requests it reaches: direct, through the page URL, through a first-party cookie or through the local server container. The `identifierRoute` and `canarySearch` flags say what was found and what was searched or skipped (#1391).
+- The `identifierRoute` built-in check. It fails when a canary reaches a vendor that the consent in force did not allow, and warns on a page URL route alone. Runs without canaries keep their results and exit codes. Set it with `builtins: { identifierRoute: warn }` (#1391).
+- The consent audit report. The HTML report of a consent suite has a Consent audit section, and the run report an Identifier routes section (#1391).
+- Server container: a Stape loader request for `/g/collect` or `/data` goes to the local container at its real path, where it got a 404 before. The Server container line adds the count (#1622).
+- Server container: a request with a replaced secret lists the secret names in `secretsRedacted`, never a value (#1585).
+- Install docs give `npm i -g tagreeve`, and `@next` for the newest release candidate (#1587).
+- Docs name the earlier fixes, the `platformHost` flag, the Server container counts and the consent command forms (#1583, #1533, #1532).
+
+### Fixes in 0.8.0-rc.1
+
+- Server-side rules read cannot evaluate, with the `serverContainerRejected` note, when the container rejects most browser requests. They failed or passed on missing data before (#1579).
+- The identity matcher counts an email or phone as the run's own only when the whole value matches, so foreign values that merely contain it are reported (#1519).
+- `idHandover` compares session IDs per client ID, so another client's session cannot hide a difference (#1531).
+- `dataLayer` rules: a `dataLayerNotHooked` loader survives an aborted navigation and a popup or other frame, an unknown key that looks like a value is masked in the error, and a `__proto__` type path is checked (#1530).
+- Consent commands read a nested array and ignore `gtm.` keys, such as the `gtm.uniqueEventId` stamp, in an indexed consent default (#1532, #1513).
+- `diff` shows a `dataLayer` path that moved to a neighbouring consent epoch as one moved path, not a missing path plus a new path (#1584).
+- A baseline compare gives one warning, not drift, when a gcd letter changes between `p` and `q`, or between `t` and `v` (#1569).
+- `addToCart` failures name the store's status and the cart path, and a 429 is named as rate limited (#1576).
+- The fixture site sends the relay page view after the consent step (#1618).
+
+### Upgrading from 0.7.0
+
+- **A new built-in check can fail.** `identifierRoute` fails by default, but only for a run with `options.canaries: true`. A run without canaries is not affected.
+- **Server-side rules can read cannot evaluate.** When the local container rejects most browser requests, a `sentBy: server` rule or a rule with no `sentBy` now warns where 0.7.0 failed or passed.
+- **The identity matcher is stricter.** It counts only a whole email or phone value, so a run can show a foreign value that 0.7.0 hid.
+- **A moved `dataLayer` path is one line in `diff`.** `diff --json` gets `dataLayer.pathsMoved`.
+- **The record stays at version 5.** A 0.7.0 record reads as before.
+
+### Known in 0.8.0-rc.1
+
+Issues still open that you can meet, in addition to those in 0.7.0:
+
+- The canary search reads only the forms it lists. It skips gzip and binary bodies, bodies cut at 64 KiB and net-log requests with no body, and it does not search headers. A pass means no planted value was found in the searched forms.
+- Observed runtime IDs are not searched. Only the planted click IDs and the run's identity are (#1391, slice 3).
+- The consent audit is not field-tested on a real store.
+- The Stape loader unwrap covers `/g/collect` and `/data`. Stape's hosting layer may act on a loader request in other ways, and the record says so in fixed text.
+
 ## 0.7.0
 
 `npm i -g tagreeve` installs this release. 0.7.0 adds everything in the 0.7.0 release candidates (below), with no code change after rc.4. It has no new command. The record stays at schema version 5. To upgrade from 0.6.2, read the next section.
