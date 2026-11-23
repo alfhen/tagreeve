@@ -110,10 +110,11 @@ export function linkServerHits({ hits, requests, serverHosts, identity, inFlight
     };
   });
   const hitRequestIds = new Set(hits.map((h) => h.requestId));
+  const sentAtOf = (requestId: string, t: number) => inFlight?.get(requestId)?.sentAt ?? t;
   const hasConcurrentRequest = (only: Facts, from: number, to: number, callClientIds: ReadonlySet<string>) =>
     requests.some((r) => {
       if (r.captured === 'serverContainer' || r.id === only.hit.requestId || r.initiator === 'unload' || !isServerContainerRequest(r, serverHosts)) return false;
-      const sentAt = inFlight?.get(r.id)?.sentAt ?? r.t;
+      const sentAt = sentAtOf(r.id, r.t);
       if (sentAt < from || sentAt > to) return false;
       if (!hitRequestIds.has(r.id)) return true;
       return [...clientIdsOf(r)].some((id) => callClientIds.has(id));
@@ -128,7 +129,7 @@ export function linkServerHits({ hits, requests, serverHosts, identity, inFlight
         ? []
         : browser.filter((b) => {
             if (b.eventId !== f.eventId || b.hit.event !== f.hit.event) return false;
-            return callAt === undefined || (inFlight?.get(b.hit.requestId)?.sentAt ?? b.hit.t) <= callAt;
+            return callAt === undefined || sentAtOf(b.hit.requestId, b.hit.t) <= callAt;
           });
     if (exact.length === 1) return { ...f.hit, via: { hitId: exact[0]!.hit.id, by: 'eventId', confidence: 'exact' } };
     const eventIdMiss: HitLinkMiss['eventId'] = f.eventId === undefined || f.hit.event === null ? 'none' : exact.length === 0 ? 'noMatch' : 'several';
@@ -137,7 +138,7 @@ export function linkServerHits({ hits, requests, serverHosts, identity, inFlight
         ? []
         : browser.filter((b) => {
             if (!b.onServerHost || b.hit.event !== f.hit.event) return false;
-            const sentAt = inFlight?.get(b.hit.requestId)?.sentAt ?? b.hit.t;
+            const sentAt = sentAtOf(b.hit.requestId, b.hit.t);
             if (sentAt > callAt) return false;
             for (const id of f.clientIds) if (b.clientIds.has(id)) return true;
             return false;
