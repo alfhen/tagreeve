@@ -632,6 +632,22 @@ describe('a container that rejected the browser requests', () => {
     for (const r of [mustOf(rs), mustNotOf(rs)]) expect(r).toMatchObject({ pass: false, severity: 'warn', note: NOTE, message: MESSAGE });
   });
 
+  test('a body.has ph[] must with sentBy server reads cannot evaluate', () => {
+    const rs = go("expect:\n  must:\n    - { vendor: meta-capi, sentBy: server, body: { has: ['ph[]'] } }", { pairs: [capi(1500, undefined)] });
+    expect(check(rs, 'serverContainerRejected').pass).toBe(false);
+    expect(mustOf(rs)).toMatchObject({ pass: false, severity: 'warn', note: NOTE, message: MESSAGE });
+  });
+
+  test('a body rule that reads cannotEvaluateBody keeps its note and verdict', () => {
+    const sent = capi(1500, undefined, { fieldsComplete: false });
+    expect(sent.hit.fieldsComplete).toBe(false);
+    const rs = go("expect:\n  must:\n    - { vendor: meta-capi, sentBy: server, body: { has: ['ph[]'] } }", { pairs: [sent] });
+    expect(check(rs, 'serverContainerRejected').pass).toBe(false);
+    expect(mustOf(rs)).toMatchObject({ pass: false, note: 'cannotEvaluateBody' });
+    expect(mustOf(rs).severity).toBeUndefined();
+    expect(mustOf(rs).message).toMatch(/^cannot evaluate: body not fully recorded/);
+  });
+
   test('a nestedNameOnly hint keeps its verdict when little was rejected', () => {
     const opts = { pairs: [capi(1500, undefined)], statuses: [400, 200, 200, 200, 200] };
     const rs = go(nestedRules, opts);
