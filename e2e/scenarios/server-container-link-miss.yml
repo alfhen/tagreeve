@@ -4,7 +4,7 @@ steps:
   - wait: 2s
   - evaluate: "window.pwSendLinkHits({ en: 'link_nomatch' })"
   - wait: 2s
-  - evaluate: "window.pwSendLinkHits({ n: 2, en: 'link_several', eid: 'pw-eid-several-1' })"
+  - evaluate: "window.pwSendLinkHits({ n: 2, en: 'link_several', eid: 'pw-eid-several-1', delayMs: 300 })"
   - wait: 2s
   - evaluate: "window.pwSendLinkHits({ n: 2, en: 'link_samekey', cid: 'pw-client-same-1', copy: true, after: true, gap: 1000 })"
   - wait: 2s
