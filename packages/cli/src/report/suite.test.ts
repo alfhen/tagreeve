@@ -404,7 +404,7 @@ test('a consent suite with a missing record still reports, and says which state 
   try {
     const present = io();
     expect(await main(['report', folder, '--html', html], present.io)).toBe(0);
-    expect(await readFile(html, 'utf8')).not.toContain('consent reject');
+    expect(await readFile(html, 'utf8')).not.toContain('Warning: a (published, consent reject)');
     await rm(join(folder, 'r.jsonl'));
     await expect(access(join(folder, 'r.jsonl'))).rejects.toThrow();
     const missing = io();

@@ -230,3 +230,10 @@ test('a rule that fails in its own state is named in that column and skipped in 
     expect(items(col).some((li) => li.includes('mustNot') && li.includes('FAIL'))).toBe(false);
   }
 });
+
+test('the report keeps the run sections of each cell next to the Consent audit', () => {
+  const { runs, html } = relay;
+  expect(html).toContain('Consent audit');
+  expect(html).toContain('Timeline per vendor');
+  for (const state of STATES) expect(html).toContain(runs[state].run.id);
+});

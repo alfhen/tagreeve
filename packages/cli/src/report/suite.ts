@@ -392,6 +392,22 @@ function consentAudit(model: SuiteReportModel): string {
   return `<section class="consent-audit"><h2>Consent audit</h2><p class="verdict">${escapeHtml(AUDIT_INTRO)}</p>${groups.join('')}</section>`;
 }
 
+function consentRuns(model: SuiteReportModel): string {
+  return model.scenarios
+    .map((s) => {
+      const cells = s.cells
+        .map((c) => {
+          const where = `${s.name}${c.store === undefined ? '' : ` on ${c.store}`}, ${c.variant}, consent ${c.consent ?? ''}`;
+          const title = `<h3>${escapeHtml(where)}: ${escapeHtml(cellVerdict(c.status))}</h3>`;
+          if (!c.model) return `${title}<p class="empty">${c.status === 'skipped' ? 'Skipped.' : 'No record to show.'}</p>`;
+          return `${title}${definitionList(runHeader(c.model.header))}${runSections(c.model, 'h4')}`;
+        })
+        .join('');
+      return `<section><h2>Runs: ${escapeHtml(s.name)}</h2>${cells}</section>`;
+    })
+    .join('');
+}
+
 export function renderSuiteReport(model: SuiteReportModel): string {
   const h = model.header;
   const title = suiteTitle(h);
@@ -409,7 +425,8 @@ ${definitionList([
   ['Exit code', String(Number(h.exitCode))],
 ])}
 ${warnings}
-${consentAudit(model)}`, title);
+${consentAudit(model)}
+${consentRuns(model)}`, title);
   }
   const scenarios = model.scenarios
     .map((s) => {
