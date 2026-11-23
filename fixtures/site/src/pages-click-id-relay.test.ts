@@ -31,3 +31,10 @@ test('the relay page sets the two cookies and the send page sends the cookie val
   expect(send).toContain('btoa(');
   expect(send).toContain("'send') === 'granted'");
 });
+
+test('the relay page sends its page view once, after the consent answer', async () => {
+  const relay = await (await fetch(`${site.url}/click-id-relay`)).text();
+  expect(relay).toContain('window.pwConsent.choice()');
+  expect(relay).toContain('window.pwConsent.onAnswer(send)');
+  expect(relay).toContain('if (sent) return;');
+});

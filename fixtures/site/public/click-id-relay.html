@@ -7,15 +7,22 @@
 </head>
 <body>
 <h1>Click ID relay</h1>
-<p>Reads <code>gclid</code> from the URL, keeps it in the first-party cookie <code>_pw_click</code> and sends a GA4 page view whose <code>dl</code> is this page URL. It also sets <code>_pw_other</code>, whose value is not a canary. <a id="to-send" href="/click-id-relay-send">Send</a></p>
+<p>Reads <code>gclid</code> from the URL, keeps it in the first-party cookie <code>_pw_click</code> and sends a GA4 page view whose <code>dl</code> is this page URL, once the visitor has accepted or rejected. It also sets <code>_pw_other</code>, whose value is not a canary. <a id="to-send" href="/click-id-relay-send">Send</a></p>
 <script>
 (function () {
   var gclid = new URLSearchParams(location.search).get('gclid');
   if (gclid) document.cookie = '_pw_click=' + encodeURIComponent(gclid) + '; path=/; SameSite=Lax';
   document.cookie = '_pw_other=TEST-NOCANARY-0001; path=/; SameSite=Lax';
-  new Image().src = 'https://www.google-analytics.com/g/collect?' + new URLSearchParams({
-    v: '2', tid: 'G-PWTEST0001', cid: '1111111111.2222222222', en: 'page_view', dl: location.href
-  }).toString();
+  var sent = false;
+  function send() {
+    if (sent) return;
+    sent = true;
+    new Image().src = 'https://www.google-analytics.com/g/collect?' + new URLSearchParams({
+      v: '2', tid: 'G-PWTEST0001', cid: '1111111111.2222222222', en: 'page_view', dl: location.href
+    }).toString();
+  }
+  if (window.pwConsent.choice()) send();
+  window.pwConsent.onAnswer(send);
 })();
 </script>
 </body>
