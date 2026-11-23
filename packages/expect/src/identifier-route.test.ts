@@ -205,7 +205,6 @@ describe('the consent a sink takes', () => {
 });
 
 describe('a server container call', () => {
-  const via = (to: Hit): HitVia => ({ hitId: to.id, by: 'eventId', confidence: 'exact' });
   const call = (extra: Partial<Request> = {}) => request(1500, 'collect.example.net', { captured: 'serverContainer', ...extra });
   const denied = [epoch(0, 'undecided', ALL_DENIED), epoch(1000, 'denied', ALL_DENIED)];
   const withGrant = [epoch(0, 'undecided', ALL_DENIED), epoch(500, 'granted', ALL_GRANTED), epoch(1000, 'denied', ALL_DENIED)];
@@ -224,20 +223,39 @@ describe('a server container call', () => {
     expect(warn.note).toBe('serverSendUnlinked');
   });
 
-  test('linked: the link does not change the verdict', () => {
-    const browserReq = request(1400, 'www.google-analytics.com');
-    const browserHit = hit(browserReq, 'ga4', state());
-    const req = call();
-    const server = hit(req, 'ga4', state(), { via: via(browserHit) });
-    expect(server.via?.hitId).toBe(browserHit.id);
-    const records = [search(), browserReq, browserHit, req, server, route(req, 'unknown')];
-    const fail = got([...denied, ...records]);
-    expect(fail.severity).toBe('fail');
-    expect(fail.note).toBeUndefined();
-    const warn = got([...withGrant, ...records]);
-    expect(warn.pass).toBe(false);
-    expect(warn.severity).toBe('warn');
-    expect(warn.note).toBe('serverSendUnlinked');
+  const meta = (browserT: number, serverT: number, confidence: HitVia['confidence'], epochs: ReturnType<typeof epoch>[]) => {
+    const browserReq = request(browserT, 'www.facebook.com');
+    const browserHit = hit(browserReq, 'meta', state(), { event: 'Purchase' });
+    const req = request(serverT, 'graph.facebook.com', { captured: 'serverContainer' });
+    const server = hit(req, 'meta-capi', state(), { via: { hitId: browserHit.id, by: 'eventId', confidence } });
+    expect(server.via?.confidence).toBe(confidence);
+    return got([...epochs, search(), browserReq, browserHit, req, server, route(req, 'direct', { vendor: 'meta-capi' })]);
+  };
+  const grant = [epoch(0, 'undecided', ALL_DENIED), epoch(500, 'granted', ALL_GRANTED)];
+
+  test('with a grant, an exact link passes and a probable link warns with serverSendProbableLink', () => {
+    const exact = meta(700, 800, 'exact', grant);
+    expect(exact.pass).toBe(true);
+    const probable = meta(700, 800, 'probable', grant);
+    expect(probable.pass).toBe(false);
+    expect(probable.severity).toBe('warn');
+    expect(probable.note).toBe('serverSendProbableLink');
+  });
+
+  test('with a grant, an exact link decides by the linked browser hit', () => {
+    const epochs = [epoch(0, 'undecided', ALL_DENIED), epoch(500, 'granted', ALL_GRANTED), epoch(1000, 'denied', ALL_DENIED)];
+    expect(meta(700, 1500, 'exact', epochs).pass).toBe(true);
+    const late = meta(1400, 1500, 'exact', epochs);
+    expect(late.pass).toBe(false);
+    expect(late.severity).toBe('fail');
+    expect(late.note).toBeUndefined();
+  });
+
+  test('a probable link in a run whose epochs only deny fails and does not warn', () => {
+    const result = meta(700, 1500, 'probable', denied);
+    expect(result.pass).toBe(false);
+    expect(result.severity).toBe('fail');
+    expect(result.note).toBeUndefined();
   });
 
   test('the same request captured by the browser is judged as an ordinary sink', () => {
