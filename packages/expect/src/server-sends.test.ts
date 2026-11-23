@@ -531,18 +531,31 @@ describe('a container that rejected the browser requests', () => {
   const answers = (requests: Request[], statuses: number[]) =>
     requests.map((r, i) => ({ type: 'response', id: newId('response'), requestId: r.id, status: statuses[i]!, setCookieNames: [] }));
 
-  function go(yaml: string, opts: { statuses?: number[]; serverContainer?: unknown; pairs?: Pair[]; builtins?: string } = {}): Result[] {
+  type Rec = { type: string; id: string; requestId?: string; vendor?: string; captured?: string; status?: number; serverContainer?: { error?: string } };
+  type Opts = { statuses?: number[]; serverContainer?: unknown; pairs?: Pair[]; builtins?: string };
+  function records(opts: Opts = {}): Rec[] {
     const requests = toContainer(5);
     const runRecord = { type: 'run', id: runId, identity, ...(opts.serverContainer !== null && { serverContainer: opts.serverContainer ?? container }) };
-    return evaluate(
-      [runRecord, ...requests, ...answers(requests, opts.statuses ?? [400, 400, 400, 400, 400]), ...(opts.pairs ?? []).flatMap((p) => [p.hit, p.req]), ...epochs] as never,
-      parseScenario(`start: /\n${yaml}\noptions: { serverHosts: [127.0.0.1]${opts.builtins ?? ''} }`),
-      { identity },
-    );
+    return [runRecord, ...requests, ...answers(requests, opts.statuses ?? [400, 400, 400, 400, 400]), ...(opts.pairs ?? []).flatMap((p) => [p.hit, p.req]), ...epochs];
   }
+  function go(yaml: string, opts: Opts = {}): Result[] {
+    return evaluate(records(opts) as never, parseScenario(`start: /\n${yaml}\noptions: { serverHosts: [127.0.0.1]${opts.builtins ?? ''} }`), { identity });
+  }
+  const serverHits = (opts: Opts) => {
+    const rs = records(opts);
+    const hits = rs.filter((r) => r.type === 'hit' && r.vendor === 'meta-capi');
+    return hits.filter((h) => rs.some((r) => r.id === h.requestId && r.captured === 'serverContainer'));
+  };
   const rules = 'expect:\n  must:\n    - { vendor: meta-capi, sentBy: server }\n  mustNot:\n    - { vendor: meta-capi }';
   const mustOf = (rs: Result[]) => rs.find((r) => r.expectation.startsWith('must: '))!;
   const mustNotOf = (rs: Result[]) => rs.find((r) => r.expectation.startsWith('mustNot: '))!;
+  const expectOld = (rs: Result[]) => {
+    expect(mustOf(rs)).toMatchObject({ pass: false });
+    expect(mustOf(rs).note).toBeUndefined();
+    expect(mustOf(rs).severity).toBeUndefined();
+    expect(mustNotOf(rs)).toMatchObject({ pass: true });
+    expect(mustNotOf(rs).note).toBeUndefined();
+  };
 
   test('the input rejects, and an absence verdict reads cannot evaluate', () => {
     const rs = go(rules);
@@ -556,33 +569,35 @@ describe('a container that rejected the browser requests', () => {
     for (const r of [mustOf(rs), mustNotOf(rs)]) expect(r).toMatchObject({ pass: false, severity: 'warn', note: NOTE });
   });
 
-  test.each([
-    ['the container has an error', { serverContainer: { ...container, error: 'exited' } }],
-    ['there is no container', { serverContainer: null }],
-    ['only 1 of 5 requests is rejected', { statuses: [400, 200, 200, 200, 200] }],
-  ])('%s: the old verdicts stay', (_name, opts) => {
+  test('the container has an error: the old verdicts stay', () => {
+    const opts = { serverContainer: { ...container, error: 'exited' } };
+    expect(records(opts).find((r) => r.type === 'run')?.serverContainer?.error).toBe('exited');
     const rs = go(rules, opts);
-    expect(mustOf(rs)).toMatchObject({ pass: false });
-    expect(mustOf(rs).note).toBeUndefined();
-    expect(mustOf(rs).severity).toBeUndefined();
-    expect(mustNotOf(rs)).toMatchObject({ pass: true });
-    expect(mustNotOf(rs).note).toBeUndefined();
+    expect(rs.find((r) => r.expectation === 'builtin: serverContainerRejected')).toBeUndefined();
+    expectOld(rs);
   });
 
-  test('a matching server hit keeps a passing must and a failing mustNot', () => {
-    const rs = go(rules, { pairs: [capi(1500, undefined)] });
-    expect(check(rs, 'serverContainerRejected').pass).toBe(false);
-    expect(mustOf(rs)).toMatchObject({ pass: true });
-    expect(mustOf(rs).note).toBeUndefined();
-    expect(mustNotOf(rs)).toMatchObject({ pass: false });
-    expect(mustNotOf(rs).severity).toBeUndefined();
-    expect(mustNotOf(rs).note).toBeUndefined();
+  test('there is no container: the old verdicts stay', () => {
+    const opts = { serverContainer: null };
+    expect(records(opts).find((r) => r.type === 'run')?.serverContainer).toBeUndefined();
+    const rs = go(rules, opts);
+    expect(rs.find((r) => r.expectation === 'builtin: serverContainerRejected')).toBeUndefined();
+    expectOld(rs);
+  });
+
+  test('only 1 of 5 requests is rejected: the old verdicts stay', () => {
+    const opts = { statuses: [400, 200, 200, 200, 200] };
+    expect(records(opts).filter((r) => r.type === 'response' && r.status === 400)).toHaveLength(1);
+    const rs = go(rules, opts);
+    expect(check(rs, 'serverContainerRejected').pass).toBe(true);
+    expectOld(rs);
   });
 
   test.each([
     ['too many hits for an exact count', 'count: 1', [capi(1500, undefined), capi(1600, undefined)]],
     ['a failed identity.hashesMatch', 'identity.hashesMatch: true', [capi(1500, undefined, { params: { 'user_data.em[]': 'deadbeef' } })]],
   ])('a must that fails with its hits present keeps FAIL: %s', (_name, extra, pairs) => {
+    expect(serverHits({ pairs }).length).toBe(pairs.length);
     const rs = go(`expect:\n  must:\n    - { vendor: meta-capi, sentBy: server, ${extra} }`, { pairs });
     expect(check(rs, 'serverContainerRejected').pass).toBe(false);
     expect(mustOf(rs).pass).toBe(false);
