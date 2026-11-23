@@ -92,7 +92,9 @@ test('the report holds no form of a canary value or of the identity, and keeps i
   const ads = records.requests.find((q) => q.url.includes('AW-000000001'))!;
   expect(new URL(ads.url).searchParams.get('x')).toBe(Buffer.from(gclid).toString('base64'));
   expect(rejectHtml).toContain('Identifier routes');
-  for (const form of [email!, ...Object.keys(canaryPool(records.run.canaries!, records.run.identity!).forms)]) expect(rejectHtml).not.toContain(form);
+  const canaryForms = [...canaryPool(records.run.canaries!, records.run.identity!).forms.keys()];
+  expect(canaryForms.length).toBeGreaterThan(1);
+  for (const form of [email!, gclid, ...canaryForms]) expect(rejectHtml).not.toContain(form);
   expect(rejectHtml).toContain('Content-Security-Policy');
   expect(rejectHtml).toContain("default-src 'none'");
   expect(rejectHtml).not.toMatch(/<script|<link|<img|url\(|@import/i);
