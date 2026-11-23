@@ -56,6 +56,19 @@ test('the gclid route row shows the route, the sink host, the epoch and the verd
   expect(row).toContain('FAIL');
 });
 
+test('builtins identifierRoute: warn leaves no FAIL row in the report', async () => {
+  const dir = await tempDir('report-routes-warn-');
+  const file = join(dir, 's.yml');
+  const text = (await readFile(scenario('identifier-route-reject'), 'utf8')).replace('  canaries: true\n', '  canaries: true\n  builtins: { identifierRoute: warn }\n');
+  expect(text).toContain('identifierRoute: warn');
+  await writeFile(file, text);
+  const result = await runCli(['run', file, '--site', site.url, '--out', outDir, '--json']);
+  const rows = routeRows(await htmlOf(result));
+  expect(rows.length).toBeGreaterThan(0);
+  expect(rows.some((row) => row.includes('FAIL'))).toBe(false);
+  expect(rows.find((row) => row.includes('www.googleadservices.com'))).toContain('WARN');
+}, 150_000);
+
 test('Searched and skipped names the forms, the parts, the request count and the skipped count', () => {
   const records = reject.records!;
   const flag = records.flags.find((f) => f.kind === 'canarySearch')!;

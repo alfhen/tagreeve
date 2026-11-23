@@ -587,6 +587,32 @@ describe('identifier routes', () => {
     expect(model.routes!.search).toMatchObject({ requests: 1, skipped: 0, reasons: [] });
   });
 
+  test('a stored warn severity turns a failing row into WARN', () => {
+    const denied = sinkRequest(1500);
+    const model = buildReportModel(
+      records({
+        consentEpochs: [epoch('denied', 0, DENIED)],
+        requests: [denied],
+        flags: [searchFlag(), routeFlag(denied, 'direct')],
+        results: [result('builtin: identifierRoute', false, { severity: 'warn', evidence: [denied.id] })],
+      }),
+    );
+    expect(model.routes!.rows.map((r) => r.verdict)).toEqual(['WARN']);
+  });
+
+  test('a row whose request is not in the stored evidence reads PASS', () => {
+    const denied = sinkRequest(1500);
+    const model = buildReportModel(
+      records({
+        consentEpochs: [epoch('denied', 0, DENIED)],
+        requests: [denied],
+        flags: [searchFlag(), routeFlag(denied, 'direct')],
+        results: [result('builtin: identifierRoute', true, { severity: 'fail' })],
+      }),
+    );
+    expect(model.routes!.rows.map((r) => r.verdict)).toEqual(['PASS']);
+  });
+
   test('a run without a canarySearch flag has no routes view', () => {
     expect(buildReportModel(records())).not.toHaveProperty('routes');
   });

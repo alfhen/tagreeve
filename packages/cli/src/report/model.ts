@@ -337,10 +337,11 @@ function routesView(records: RunRecords, epochs: ConsentEpoch[], graceMs: number
     if (flag.kind !== 'identifierRoute' || !route) return [];
     const request = records.requests.find((r) => r.id === route.sink.requestId);
     const epoch = request ? epochForHit(epochs, request.t, graceMs) : undefined;
-    const own = [search, flag, ...epochs, ...(request ? [request] : []), ...records.hits.filter((h) => h.requestId === route.sink.requestId)];
-    // The check judges one route at a time, so each row gets its own verdict.
-    const judged = identifierRoute(own, graceMs);
-    const verdict = !judged || judged.pass ? 'PASS' : judged.severity === 'warn' ? 'WARN' : 'FAIL';
+    // The check gets the whole run and only this route, so a hit on another request that the route depends on still counts.
+    const judged = identifierRoute([search, flag, ...epochs, ...records.requests, ...records.hits], graceMs);
+    const stored = records.results.find((r) => r.expectation === 'builtin: identifierRoute');
+    const failing = judged !== undefined && !judged.pass && (!stored || (!stored.pass && stored.evidence.includes(route.sink.requestId)));
+    const verdict = !failing ? 'PASS' : judged.severity === 'warn' || stored?.severity === 'warn' ? 'WARN' : 'FAIL';
     return [{ line: routeLine(route), host: route.sink.host, epoch: request ? (epoch?.label ?? 'undecided') : 'unknown', verdict }];
   });
   return { rows, search: searchView(search) };
