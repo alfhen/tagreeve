@@ -131,17 +131,17 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
     for (const rule of scenario.expect[kind]) {
       const outcome = evaluateRule(rule, ctx);
       const { pass, evidence, message } = outcome;
+      // A nested-name note is only a hint, so it must not hide that a placement of the probable hits would flip the verdict.
+      const ownNote = outcome.note === 'nestedNameOnly' ? undefined : outcome.note;
       // A verdict that rests on no server hit being there says nothing when the container rejected the requests that would have made them.
       const absence = kind === 'must' ? !pass : pass;
-      if (rejected &&!rejected.pass && absence && (kind === 'mustNot' || outcome.absent) && !outcome.note && rule.filter.sentBy !== 'browser' && !rule.tag && !rule.dataLayer && !rule.cookie) {
+      if (rejected &&!rejected.pass && absence && (kind === 'mustNot' || outcome.absent) && !ownNote && rule.filter.sentBy !== 'browser' && !rule.tag && !rule.dataLayer && !rule.cookie) {
         add(`${kind}: ${rule.description}`, false, evidence, REJECTED_MESSAGE, 'warn', 'serverContainerRejected');
         continue;
       }
       const passes = (c: Context) => evaluateRuleHits(rule, c).pass;
       const scoped = !rule.tag && !rule.dataLayer && isScoped(rule);
       const failureRests = scoped && !pass && failureRestsOnProbableLink(ctx, passes, rule);
-      // A nested-name note is only a hint, so it must not hide that a placement of the probable hits would flip the verdict.
-      const ownNote = outcome.note === 'nestedNameOnly' ? undefined : outcome.note;
       const note = ownNote ?? (pass && scoped && passRestsOnProbableLink(ctx, passes, rule) ? 'serverSendProbableLink' : outcome.note);
       // A count rule's evidence can hold exact browser hits next to the probable ones, so the leak gate in settleServerSends must not turn it into a hard FAIL.
       const countRests = kind === 'must' && failureRests && !ownNote;

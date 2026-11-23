@@ -624,6 +624,22 @@ describe('a container that rejected the browser requests', () => {
     expect(mustOf(rs).severity).toBeUndefined();
   });
 
+  const nestedRules = "expect:\n  must:\n    - { vendor: meta-capi, sentBy: server, body: { has: ['em[]'] } }\n  mustNot:\n    - { vendor: meta-capi, body: { has: ['em[]'] } }";
+
+  test('a nestedNameOnly hint reads cannot evaluate', () => {
+    const rs = go(nestedRules, { pairs: [capi(1500, undefined)] });
+    expect(check(rs, 'serverContainerRejected').pass).toBe(false);
+    for (const r of [mustOf(rs), mustNotOf(rs)]) expect(r).toMatchObject({ pass: false, severity: 'warn', note: NOTE, message: MESSAGE });
+  });
+
+  test('a nestedNameOnly hint keeps its verdict when little was rejected', () => {
+    const opts = { pairs: [capi(1500, undefined)], statuses: [400, 200, 200, 200, 200] };
+    const rs = go(nestedRules, opts);
+    expect(check(rs, 'serverContainerRejected').pass).toBe(true);
+    expect(mustOf(rs)).toMatchObject({ pass: false, note: 'nestedNameOnly' });
+    expect(mustOf(rs).severity).not.toBe('warn');
+  });
+
   test('a sentBy browser rule keeps its verdict', () => {
     const rs = go('expect:\n  must:\n    - { vendor: meta-capi, sentBy: browser }\n  mustNot:\n    - { vendor: meta-capi, sentBy: browser }');
     expect(check(rs, 'serverContainerRejected').pass).toBe(false);
