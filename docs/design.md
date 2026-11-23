@@ -581,7 +581,6 @@ Where the code in 0.7 differs from the design above. Sections 15.1 to 15.6 still
 - **Consent Mode setup reads a plain object.** A `consent default` pushed as a plain object with index keys now counts for `consentModeSetup`. An object-form consent update does not change the consent epochs.
 - **`diff` keeps a cross-epoch join.** A join of a renamed event across epochs is binding, so a second search cannot move it. The greedy order of same-name moves with no join is a known limit.
 - **A plain GTM demo shop.** The fixture site has `/plain/*` pages with no Shopify code, and new checks get a test case on it. The docs mark `sandboxPageUrl`, `platformHost` and `options.platformHosts` as Shopify-specific.
-- **Fixes in 0.8.0-rc.2.** A server call links to a browser hit by event ID only when the browser hit was sent at or before the call. A server GA4 hit behind a Stape loader links by client ID, read from the loader request's real query. `options.identifierRouteAllow` lists hosts the `identifierRoute` check does not judge, with the `*.domain` rule of `firstPartyHosts`. The report groups identifier routes by host, field, transform, route kind, epoch and verdict, one row per group. No record field is added.
 - **Not built:** the server tag reporter, the Shopify bridge, a full `microsoft-uet` decoder, the collector origin bridge and a `mobile` preset.
 
 ### 15.8 Differences in 0.8
@@ -594,6 +593,7 @@ Where the code in 0.8 differs from the design above. Sections 15.1 to 15.7 still
 - **The consent audit report.** A consent suite report has a Consent audit section, and a run report an Identifier routes section.
 - **Server container.** Server-side rules read cannot evaluate when the container rejects most requests. A Stape loader request reaches the local container at its real path. A request with a replaced secret lists the secret names.
 - **Fixes.** The identity matcher counts a whole value only. `idHandover` compares session IDs per client ID. `dataLayer` rules handle aborted navigations and frames. Consent commands read a nested array and ignore `gtm.` keys in an indexed default. `diff` shows a moved `dataLayer` path as one line. A gcd letter change between `p` and `q`, or `t` and `v`, is not baseline drift.
+- **Fixes in 0.8.0-rc.2.** A server call links to a browser hit by event ID only when the browser hit was sent at or before the call. A server GA4 hit behind a Stape loader links by client ID, read from the loader request's real query. `options.identifierRouteAllow` lists hosts the `identifierRoute` check does not judge, with the `*.domain` rule of `firstPartyHosts`. The report groups identifier routes by host, field, transform, route kind, epoch and verdict, one row per group. No record field is added.
 - **Not built:** the server tag reporter, the Shopify bridge, a full `microsoft-uet` decoder, the collector origin bridge, a `mobile` preset and observed runtime IDs (#1391, slice 3).
 
 ## 16. Related tools
