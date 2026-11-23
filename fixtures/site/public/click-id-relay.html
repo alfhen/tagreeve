@@ -7,7 +7,7 @@
 </head>
 <body>
 <h1>Click ID relay</h1>
-<p>Reads <code>gclid</code> from the URL, keeps it in the first-party cookie <code>_pw_click</code> and sends a GA4 page view whose <code>dl</code> is this page URL, once the visitor has accepted or rejected. It also sets <code>_pw_other</code>, whose value is not a canary. <a id="to-send" href="/click-id-relay-send">Send</a></p>
+<p>Reads <code>gclid</code> from the URL, keeps it in the first-party cookie <code>_pw_click</code> and sends a GA4 page view whose <code>dl</code> is this page URL. It also sets <code>_pw_other</code>, whose value is not a canary. <a id="to-send" href="/click-id-relay-send">Send</a></p>
 <script>
 (function () {
   var gclid = new URLSearchParams(location.search).get('gclid');
