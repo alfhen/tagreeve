@@ -4,7 +4,7 @@
 
 The third release candidate, after the rc.2 field test. Install it with `npm i -g tagreeve@next`. It has no new command. The record stays at schema version 5. To go back to the final release, run `npm i -g tagreeve`.
 
-- Server container: a Meta Conversions API call links by event ID to a pixel hit sent up to 5 s after the call, when no consent epoch starts between the call and the hit. A hit across a consent change still does not link (#1641, #1639).
+- Server container: a Meta Conversions API call links by event ID (of at least 8 characters) to a pixel hit sent up to 5 s after the call, when no consent epoch starts between the call and the hit. A hit across a consent change still does not link (#1641, #1639).
 - On arm64 (Apple silicon), run `tagreeve server-container build` after `npm i -g tagreeve@next`. A run with `--server-container` exits 2 with "The image tagreeve-sgtm:<version> is not available" until the image for that version exists. On amd64 the command builds nothing.
 
 ### Known in 0.8.0-rc.3
