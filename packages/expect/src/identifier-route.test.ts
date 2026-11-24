@@ -423,5 +423,82 @@ describe('identifierRouteAllow', () => {
       expect(withEmpty.severity).toBe(severity);
       expect(withEmpty.message).not.toContain('allowed by identifierRouteAllow');
     }
+  });});
+
+describe('E81 the pass head when routes were allowed', () => {
+  const allow = "options: { identifierRouteAllow: ['*.cmp.example'] }";
+  const TAIL =
+    'searched forms (plain text, URL-encoded, base64, base64url and SHA-256 (hex, base64, base64url), and with the GCL. and fb.1. cookie prefixes) in the URL, body and decoded fields of 41 requests; headers, including Referer and Cookie, not searched; skipped 0 (1 compressed or binary body).';
+  const denied = epoch(0, 'denied', ALL_DENIED);
+  const granted = epoch(0, 'granted', ALL_GRANTED);
+
+  test('E81-1 every route allowed gives the judged-sink head', () => {
+    const req = request(500, 'api.cmp.example');
+    const flag = route(req, 'direct');
+    expect(flag.route!.sink.host).toBe('api.cmp.example');
+    const r = got([denied, search(), req, flag], allow);
+    expect(r.pass).toBe(true);
+    expect(r.message).toBe(`No planted value reached a judged sink; ${TAIL} (allowed by identifierRouteAllow: 1 route to api.cmp.example)`);
+    expect(r.message).not.toContain('No planted value found');
+    expect(r.message).not.toMatch(/nothing leaked|no leaks?\b/i);
+    const three = [request(500, 'api.cmp.example'), request(510, 'api.cmp.example'), request(520, 'cdn.cmp.example')];
+    const m = got([denied, search(), ...three.flatMap((q) => [q, route(q, 'direct')])], allow).message ?? '';
+    expect(m.startsWith('No planted value reached a judged sink; ')).toBe(true);
+    expect(m).toContain('2 routes to api.cmp.example');
+    expect(m).toContain('1 route to cdn.cmp.example');
+    expect(m).not.toContain('No planted value found');
+  });
+
+  test('E81-2 no routes keeps the old message', () => {
+    for (const options of ['', allow]) {
+      const records = [denied, search()];
+      expect(records.some((x) => (x as Flag).kind === 'identifierRoute')).toBe(false);
+      const r = got(records, options);
+      expect(r.pass).toBe(true);
+      expect(r.severity).toBe('fail');
+      expect(r.evidence).toEqual([]);
+      expect(r.message).toBe(`No planted value found in the ${TAIL}`);
+    }
+  });
+
+  test('E81-3 only a host in the list counts as allowed', () => {
+    const ok = request(500, 'api.cmp.example');
+    const pos = got([granted, search(), ok, route(ok, 'direct')], allow);
+    expect(pos.message!.startsWith('No planted value reached a judged sink; ')).toBe(true);
+    expect(pos.message).toContain('allowed by identifierRouteAllow: 1 route to api.cmp.example');
+    const bare = request(500, 'cmp.example');
+    const bf = route(bare, 'direct');
+    expect(bf.route!.sink.host).toBe('cmp.example');
+    const neg = got([granted, search(), bare, bf], allow);
+    expect(neg.message!.startsWith('No planted value reached a sink while consent forbade it (1 route allowed by consent); ')).toBe(true);
+    expect(neg.message).not.toContain('reached a judged sink');
+    expect(neg.message).not.toContain('allowed by identifierRouteAllow');
+    for (const r of [pos, neg]) {
+      expect(r.pass).toBe(true);
+      expect(r.severity).toBe('fail');
+      expect(r.evidence).toEqual([]);
+    }
+  });
+
+  test('E81-4 a judged route keeps its head, with or without allowed routes', () => {
+    const g = request(600, 'sink.example.net');
+    const head = `No planted value reached a sink while consent forbade it (1 route allowed by consent); ${TAIL}`;
+    expect(got([granted, search(), g, route(g, 'direct')]).message).toBe(head);
+    const a = request(500, 'api.cmp.example');
+    expect(got([granted, search(), a, route(a, 'direct'), g, route(g, 'direct')], allow).message).toBe(`${head} (allowed by identifierRouteAllow: 1 route to api.cmp.example)`);
+  });
+
+  test('E81-5 pass, severity, evidence and failing messages are unchanged', () => {
+    const a = request(500, 'api.cmp.example');
+    const allowed = got([denied, search(), a, route(a, 'direct')], allow);
+    expect([allowed.pass, allowed.severity, allowed.evidence]).toEqual([true, 'fail', []]);
+    const g = request(600, 'sink.example.net');
+    const failed = got([denied, search(), a, route(a, 'direct'), g, route(g, 'direct')], allow);
+    expect([failed.pass, failed.severity, failed.evidence]).toEqual([false, 'fail', [g.id]]);
+    expect(failed.message).toBe('Expected no planted value to reach a sink while consent forbids it, found 1: url param gclid -> request to sink.example.net, param x, base64. Headers, including Referer and Cookie, were not searched. (allowed by identifierRouteAllow: 1 route to api.cmp.example)');
+    const w = request(600, 'sink.example.net');
+    const warned = got([denied, search(), a, route(a, 'direct'), w, route(w, 'pageUrl')], allow);
+    expect([warned.pass, warned.severity, warned.evidence]).toEqual([false, 'warn', [w.id]]);
+    expect(warned.message).toBe('Expected no planted value to reach a sink while consent forbids it, found 1: url param gclid -> request to sink.example.net, param x, base64 (page URL only). Headers, including Referer and Cookie, were not searched. (allowed by identifierRouteAllow: 1 route to api.cmp.example)');
   });
 });
