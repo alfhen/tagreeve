@@ -42,7 +42,7 @@ Issues still open that you can meet, in addition to those in 0.7.0:
 
 - A server GA4 hit behind a container that answers before its call stays `probable` (#1640), so its identifier routes warn with `serverSendProbableLink`.
 - A Pinterest Conversions API call to api.pinterest.com gets no link to a browser hit, so its identifier routes warn under accept (#1648).
-- Observed runtime IDs are not searched. Only the planted click IDs and the run's identity are (#1606).
+- `diff --by-page` can print the fake `TEST-` canary values from a canary run's page URL (#1606).
 - The canary search reads only the forms it lists. It skips gzip and binary bodies, bodies cut at 64 KiB and net-log requests with no body, and it does not search headers. A pass means no planted value was found in the searched forms.
 - The Stape loader unwrap covers `/g/collect` and `/data`. Stape's hosting layer may act on a loader request in other ways, and the record says so in fixed text.
 
