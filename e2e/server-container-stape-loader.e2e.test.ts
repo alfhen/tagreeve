@@ -1,4 +1,4 @@
-import { readFile, writeFile, chmod } from 'node:fs/promises';
+import { readFile, writeFile, chmod, rm, access } from 'node:fs/promises';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -191,7 +191,23 @@ describe('what the container receives', () => {
 describe('a container that ends during the run', () => {
   test('a loader request whose fetch fails is counted and recorded as failed', async () => {
     const exiting = join(outDir, 'exiting-loader-stand-in');
-    await writeFile(exiting, `#!${process.execPath}\nimport http from 'node:http';\nhttp.createServer((req, res) => res.end('ok')).listen(Number(process.env.PORT), '127.0.0.1');\nsetTimeout(() => process.exit(0), 800);\n`);
+    const marker = join(outDir, 'exiting-loader-stand-in.healthz');
+    await rm(marker, { force: true });
+    const source = [
+      `#!${process.execPath}`,
+      "import http from 'node:http';",
+      "import { writeFileSync } from 'node:fs';",
+      'let scheduled = false;',
+      'http.createServer((req, res) => {',
+      "  res.end('ok');",
+      "  if (scheduled || !req.url.startsWith('/healthz')) return;",
+      '  scheduled = true;',
+      `  writeFileSync(${JSON.stringify(marker)}, 'ok');`,
+      '  setTimeout(() => process.exit(0), 300);',
+      "}).listen(Number(process.env.PORT), '127.0.0.1');",
+      '',
+    ].join('\n');
+    await writeFile(exiting, source);
     await chmod(exiting, 0o755);
     const r = await runScenario('  - wait: 2s\n' + send("{ loader: 'stape', eid: 'pw-eid-loader-fail-1' }"), ['--json', '--server-container'], { TAGREEVE_TEST_SERVER_CONTAINER_CMD: exiting });
     expect(r.code).toBe(2);
@@ -203,6 +219,7 @@ describe('a container that ends during the run', () => {
     expect(loaderRequest.outcome).toBe('failed');
     expect(records.run.serverContainer!.error).toBe('exited');
     expect(records.run.serverContainer!.loaderUnwrapped!.requests).toBe(1);
+    await expect(access(marker)).resolves.toBeUndefined();
   }, 120_000);
 });
 
