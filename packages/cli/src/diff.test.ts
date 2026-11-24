@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { newId, type RunRecords } from '@tagreeve/core';
-import { diffPushes, type DiffResult, type PushGroup } from '@tagreeve/expect';
+import { diffPushes, diffRuns, type DiffResult, type PushGroup } from '@tagreeve/expect';
 import { describe, expect, test } from 'vitest';
 import { parseCli, UsageError } from './args.ts';
 import { buildBaseline, compareBaseline } from './baseline.ts';
@@ -117,7 +117,10 @@ describe('changed lines', () => {
     const a = 'https://shop.example.com/web-pixels@aaa/custom/web-pixel-1/sandbox/modern/checkout';
     const b = 'https://shop.example.com/web-pixels@bbb/custom/web-pixel-1/sandbox/modern/checkout';
     const changed = [{ key, a: hit('hit_1', 'pay', a), b: hit('hit_2', 'pay', b), consent: [change], ids: [] }];
-    expect(formatDiff({ ...base, changed }, 'a', 'b')).toContain(`recorded as ${a} -> ${b}:`);
+    expect(formatDiff({ ...base, changed }, 'a', 'b')).toContain(
+      'recorded as /web-pixels@aaa/custom/web-pixel-1/sandbox/modern/checkout -> /web-pixels@bbb/custom/web-pixel-1/sandbox/modern/checkout:',
+    );
+    expect(formatDiff({ ...base, changed }, 'a', 'b')).not.toContain('https://shop.example.com');
   });
 });
 
@@ -263,3 +266,70 @@ function makeBaselineRun(): RunRecords {
     tagReports: [], consentEpochs: [epoch(0, 'undecided'), epoch(100, 'granted')], checkpoints: [], results: [], flags: [], collectorReports: [], invalidReports: [],
   } as unknown as RunRecords;
 }
+
+describe('page shown by diff', () => {
+  const state = { analytics: 'denied', ads: 'denied', adUserData: 'denied', adPersonalization: 'denied' } as const;
+  const makeRun = (pages: string[]): RunRecords => {
+    const runId = newId('run');
+    return {
+      run: { type: 'run', id: runId, recordSchemaVersion: 1, scenario: 's.yml', site: 'https://shop.test', startedAt: 0 },
+      steps: [], requests: [], responses: [], dataLayerEvents: [], tagReports: [], checkpoints: [], results: [], flags: [], collectorReports: [], invalidReports: [],
+      consentEpochs: [{ type: 'consentEpoch', id: newId('consentEpoch'), runId, startT: 0, endT: null, source: 'test', label: 'undecided', state }],
+      hits: pages.map((page, i) => ({
+        type: 'hit', id: newId('hit'), runId, stepId: null, requestId: newId('request'), t: i, vendor: 'ga4', event: 'page_view',
+        consent: { ...state, raw: { gcs: 'G100' } }, ids: {}, page, transport: 'GET', params: {},
+      })),
+    } as unknown as RunRecords;
+  };
+  const canary = 'gclid=TEST-GCLID&fbclid=TEST-FBCLID&msclkid=TEST-MSCLKID&wbraid=TEST-WBRAID&gbraid=TEST-GBRAID&dclid=TEST-DCLID';
+
+  test('a start page with six canary params is shown as its path', () => {
+    const page = `https://shop.test/products/123456?${canary}`;
+    const a = makeRun([page]);
+    expect(JSON.stringify(a.hits)).toContain('TEST-');
+    const text = formatDiff(diffRuns(a, makeRun([]), { byPage: true }), 'a', 'b');
+    expect(text).toContain('recorded as /products/123456');
+    expect(text).not.toContain('TEST-');
+  });
+
+  test.each([
+    ['a URL with a query and a fragment', 'https://shop.test/products/1?gclid=TEST-x#TEST-y', '/products/1'],
+    ['a non-URL page with a query', '/products/1?gclid=TEST-x', '/products/1'],
+  ])('%s leaks no query', (_n, page, shown) => {
+    const a = makeRun([page]);
+    const b = makeRun([]);
+    const c = makeRun([page, page]);
+    expect(a.hits[0]!.page).toContain('TEST-');
+    for (const byPage of [true, false]) {
+      const removed = diffRuns(a, b, { byPage });
+      expect(removed.removed.map((e) => e.page)).toEqual([shown]);
+      expect(formatDiff(removed, 'a', 'b')).not.toContain('TEST-');
+      const added = diffRuns(b, a, { byPage });
+      expect(added.added.map((e) => e.page)).toEqual([shown]);
+    }
+    expect(formatDiff(diffRuns(a, c, { byPage: true }), 'a', 'b')).not.toContain('TEST-');
+    const text = formatDiff(diffRuns(a, b, { byPage: true }), 'a', 'b');
+    if (page.startsWith('/')) expect(text).not.toContain('recorded as');
+  });
+
+  test.each([
+    ['without byPage', false, '/products/1?gclid=TEST-x'],
+    ['with byPage', true, 'https://shop.test/products/1?gclid=TEST-x#TEST-y'],
+  ])('a changed entry holds paths in a and b %s', (_n, byPage, other) => {
+    const a = makeRun(['https://shop.test/products/1?gclid=TEST-x#TEST-y']);
+    const b = makeRun([other]);
+    b.hits[0]!.consent.raw.gcs = 'G111';
+    const d = diffRuns(a, b, { byPage });
+    expect(d.changed.map((c) => [c.a.page, c.b.page])).toEqual([['/products/1', '/products/1']]);
+    expect(formatDiff(d, 'a', 'b')).not.toContain('TEST-');
+  });
+
+  test('a page that does not start with / reads (other)', () => {
+    const d = diffRuns(makeRun(['products/1?gclid=TEST-x']), makeRun([]), { byPage: true });
+    expect(d.removed.map((e) => e.page)).toEqual(['(other)']);
+    const text = formatDiff(d, 'a', 'b');
+    expect(text).toContain('page (other)');
+    expect(text).not.toContain('TEST-');
+    expect(text).not.toContain('recorded as');
+  });
+});

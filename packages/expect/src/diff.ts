@@ -651,8 +651,18 @@ export function diffShapes(a: ShapeKey[], b: ShapeKey[], options: ShapeDiffOptio
   return result;
 }
 
+/** The page diff prints: a URL as its path, any other value cut at the first ? or #, or (other) when that does not start with /. */
+export function shownPage(page: string): string {
+  try {
+    return new URL(page).pathname;
+  } catch {
+    const cut = page.split(/[?#]/, 1)[0] ?? '';
+    return cut.startsWith('/') ? cut : '(other)';
+  }
+}
+
 function ref(h: Hit, steps: Map<string, string>): DiffHit {
-  return { hitId: h.id, t: h.t, step: h.stepId ? (steps.get(h.stepId) ?? '') : '', page: h.page };
+  return { hitId: h.id, t: h.t, step: h.stepId ? (steps.get(h.stepId) ?? '') : '', page: h.page === null ? null : shownPage(h.page) };
 }
 
 function stepLabels(run: RunRecords): Map<string, string> {

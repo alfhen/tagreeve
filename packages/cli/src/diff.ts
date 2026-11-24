@@ -1,29 +1,24 @@
 import { readRun, type RunRecords } from '@tagreeve/core';
 import { readFile } from 'node:fs/promises';
-import { diffRuns, parseEventMap, type ChangedHit, type DiffKey, type DiffResult, type PushDiff } from '@tagreeve/expect';
+import { diffRuns, parseEventMap, shownPage, type ChangedHit, type DiffKey, type DiffResult, type PushDiff } from '@tagreeve/expect';
 import type { DiffArgs } from './args.ts';
 import type { Io } from './run.ts';
 
 type Tree = Map<string, Map<string, Map<string, string[]>>>;
 
-function pathOf(page: string): string {
-  try {
-    return new URL(page).pathname;
-  } catch {
-    return page;
-  }
-}
-
 function where(key: DiffKey, step: string, rawPage?: string | null): string {
-  const raw = rawPage && key.page && pathOf(rawPage) !== key.page ? `, recorded as ${rawPage}` : '';
-  const parts = [step && `step "${step}"`, key.page && `page ${key.page}${raw}`].filter(Boolean);
+  const page = key.page ? shownPage(key.page) : '';
+  const raw = rawPage && page && shownPage(rawPage) !== page ? `, recorded as ${shownPage(rawPage)}` : '';
+  const parts = [step && `step "${step}"`, page && `page ${page}${raw}`].filter(Boolean);
   return parts.length ? ` (${parts.join(', ')})` : '';
 }
 
 function recordedPages(c: ChangedHit): string {
   if (!c.key.page || (c.a.page === null && c.b.page === null)) return '';
-  const differs = [c.a.page, c.b.page].some((p) => p !== null && pathOf(p) !== c.key.page);
-  return differs ? `, recorded as ${c.a.page ?? '(none)'} -> ${c.b.page ?? '(none)'}` : '';
+  const page = shownPage(c.key.page);
+  const differs = [c.a.page, c.b.page].some((p) => p !== null && shownPage(p) !== page);
+  const show = (p: string | null) => (p === null ? '(none)' : shownPage(p));
+  return differs ? `, recorded as ${show(c.a.page)} -> ${show(c.b.page)}` : '';
 }
 
 function add(tree: Tree, key: DiffKey, line: string): void {

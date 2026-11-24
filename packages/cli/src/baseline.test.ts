@@ -640,3 +640,13 @@ test('a gcd change from p to t is still drift and gives no gcd-letters warning',
   expect(result).toMatchObject({ drift: true, added: 1, removed: 1 });
   expect(result.warnings.filter((w) => w.startsWith('gcd letters changed'))).toEqual([]);
 });
+
+test('a --by-page baseline key keeps the raw non-URL page, query included', () => {
+  const withPage = (page: string) => {
+    const run = makeRun(['page_view']);
+    run.hits[0]!.page = page;
+    return buildBaseline(run, true).keys[0]!.key.page;
+  };
+  expect(withPage('/products/1?gclid=TEST-x')).toBe('/products/1?gclid=TEST-x');
+  expect(withPage('products/1?gclid=TEST-x')).toBe('products/1?gclid=TEST-x');
+});
