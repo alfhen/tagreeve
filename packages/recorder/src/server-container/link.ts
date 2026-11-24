@@ -87,7 +87,12 @@ export interface LinkInput {
   identity: Identity | null;
   /** By request ID. A request with no answer time is not here, so it never counts as in flight. */
   inFlight?: ReadonlyMap<string, InFlightWindow>;
+  /** Start times of the run's consent epochs, on the request clock, in any order. Only rule (1) reads them: without them a browser hit sent after the call never counts. */
+  epochStarts?: readonly number[];
 }
+
+/** How long after a call a browser hit with the call's event ID may still be its source. */
+const LATER_HIT_WINDOW_MS = 5000;
 
 function sharedKind(server: Facts, browser: Facts): 'eventId' | 'clientId' | 'identity' | undefined {
   if (server.eventId && server.eventId.length >= MIN_VALUE_LENGTH && server.eventId === browser.eventId) return 'eventId';
@@ -98,14 +103,14 @@ function sharedKind(server: Facts, browser: Facts): 'eventId' | 'clientId' | 'id
 
 /**
  * Adds `via` to each hit decoded from a server container call. The proxy cannot see which browser hit led to a call,
- * so the first rule that fits decides: (1) the event ID and event name match exactly one browser hit sent before the call (at or before its request time, when that is known), `exact`;
+ * so the first rule that fits decides: (1) the event ID and event name match exactly one browser hit sent at or before the call (at its request time, when that is known), or sent after the call, at most 5000 ms after it, with an event ID of at least 8 characters and no consent epoch starting after the call and at or before that hit (needs `epochStarts`), `exact`; two or more such hits give no exact link;
  * (2) the client ID and event name match exactly one browser hit to a `serverHosts` host sent before the call, and its request to the
  * container was still in flight when the call arrived, `exact`; two or more such hits, in flight or answered, give no exact link, and neither does another
  * container-routed request that shares a client ID or has no decoded hit and was sent in between (`concurrentRequest`);
  * (3) a shared value, `probable`: the latest earlier hit to a `serverHosts` host, else the latest earlier browser hit.
  * No match leaves the hit unlinked. Browser hits are returned as they are.
  */
-export function linkServerHits({ hits, requests, serverHosts, identity, inFlight }: LinkInput): Hit[] {
+export function linkServerHits({ hits, requests, serverHosts, identity, inFlight, epochStarts }: LinkInput): Hit[] {
   const byId = new Map(requests.map((r) => [r.id, r]));
   const facts: Facts[] = hits.map((hit) => {
     const request = byId.get(hit.requestId);
@@ -131,15 +136,30 @@ export function linkServerHits({ hits, requests, serverHosts, identity, inFlight
     });
   const isServer = (f: Facts) => f.request?.captured === 'serverContainer';
   const browser = facts.filter((f) => !isServer(f));
+  const sortedStarts = epochStarts ? [...epochStarts].sort((a, b) => a - b) : undefined;
+  // The first epoch start after the call. A later hit before it is in the call's epoch.
+  const nextEpochStart = (callAt: number) => {
+    let lo = 0;
+    let hi = sortedStarts!.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (sortedStarts![mid]! > callAt) hi = mid;
+      else lo = mid + 1;
+    }
+    return sortedStarts![lo] ?? Infinity;
+  };
   return facts.map((f): Hit => {
     if (!isServer(f)) return f.hit;
     const callAt = f.request?.t;
+    const epochEnd = callAt !== undefined && sortedStarts ? nextEpochStart(callAt) : undefined;
     const exact =
       f.eventId === undefined
         ? []
         : browser.filter((b) => {
             if (b.eventId !== f.eventId || b.hit.event !== f.hit.event) return false;
-            return callAt === undefined || sentAtOf(b.hit.requestId, b.hit.t) <= callAt;
+            if (callAt === undefined) return true;
+            const sentAt = sentAtOf(b.hit.requestId, b.hit.t);
+            return sentAt <= callAt || (epochEnd !== undefined && f.eventId!.length >= MIN_VALUE_LENGTH && sentAt - callAt <= LATER_HIT_WINDOW_MS && sentAt < epochEnd);
           });
     if (exact.length === 1) return { ...f.hit, via: { hitId: exact[0]!.hit.id, by: 'eventId', confidence: 'exact' } };
     const eventIdMiss: HitLinkMiss['eventId'] = f.eventId === undefined || f.hit.event === null ? 'none' : exact.length === 0 ? 'noMatch' : 'several';
