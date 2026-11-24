@@ -1,6 +1,6 @@
 # Plan for 0.8.1
 
-0.8.1 is a patch release after the 0.8.0 field test. It has one privacy fix: `tagreeve diff --by-page` no longer prints a canary value (#1606). Three small review fixes go with it: the `identifierRoute` pass message (#1634), event names with spaces in the consent matrix (#1611) and a flaky e2e stand-in (#1625). No new command, no record schema change, no new decoded hit or vendor, and nothing turns a pass or a warning into a failure. Each item is one PR. A PR is done when its acceptance test passes in CI, an adversarial review reports no blockers or majors, and it is squash-merged.
+0.8.1 is a patch release after the 0.8.0 field test. It has one privacy fix: `tagreeve diff --by-page` no longer prints a canary value (#1606). Two small review fixes go with it: the `identifierRoute` pass message (#1634) and a flaky e2e stand-in (#1625). No new command, no record schema change, no new decoded hit or vendor, and nothing turns a pass or a warning into a failure. Each item is one PR. A PR is done when its acceptance test passes in CI, an adversarial review reports no blockers or majors, and it is squash-merged.
 
 0.8.1 starts from `main` at `89308ea` ("Release prep for 0.8.0 (#1650)").
 
@@ -9,7 +9,7 @@
 From `docs/goals.md`:
 
 - **Record what a site sends to each tracking vendor, for a scripted visitor, at each consent state.** D81 keeps `diff` from printing what the canaries planted.
-- **Express expected behaviour as data, and report pass or fail with evidence.** E81 makes the pass message true. F81 keeps distinct custom events apart in the matrix, so the list of events that only a non-accept state sent is complete.
+- **Express expected behaviour as data, and report pass or fail with evidence.** E81 makes the pass message true.
 
 Non-goals this release comes close to:
 
@@ -24,7 +24,7 @@ Each issue was read on 2026-11-24 against `main` at `89308ea`. The maintainer se
 | --- | --- | --- | --- | --- |
 | #1606 | bug (privacy) | Open. `where()` and `recordedPages()` print the recorded page with its query. | D81 | `packages/cli/src/diff.ts` |
 | #1634 | bug (wrong message) | Open. `judged` is 0 when every route went to an allowed host, so the head says "No planted value found". | E81 | `packages/expect/src/identifier-route.ts` |
-| #1611 | bug | Open. `guardName` lets a name with a space pass `EVENT_NAME`, then `guardFieldName` turns it into `(other)`. | F81 | `guardName` in `packages/expect/src/state-table.ts` |
+| #1611 | bug | Left out. A spaced event name always reads `(other)`, which leaks nothing. A looser rule needs a value check that holds for any spaced split, which is not patch work. | Stays in Backlog | `guardName` in `packages/expect/src/state-table.ts` |
 | #1625 | flaky test | Open. The stand-in exits after a fixed 800 ms. | G81 | `e2e/server-container-stape-loader.e2e.test.ts` |
 | #1612 | review follow-up | Left out. Its own text says none of its three edge cases is a path real runs take, and item 3 changes what `canaryPool.match` matches. | Stays in Backlog | `packages/cli/src/run.ts`, `packages/core/src/canary.ts` |
 | #1609 | docs | Left out. Already fixed on `main`: `docs/design.md` says `withdrawWith` is a scenario option only. The issue can be closed. | none | `docs/design.md` |
@@ -40,13 +40,12 @@ The other open issues in Backlog are not patch-size bug fixes and stay there.
 Decided by the maintainer (2026-11-24):
 
 1. **0.8.1 is a patch release.** No new command, no record schema change, no new decoded hit or vendor, and no change that turns a pass or a warning into a failure.
-2. **In:** #1606. **Out:** #1640 and #1648 (the 0.9.0 milestone; the maintainer moved them) and #1651 (its own quick fix).
+2. **In:** #1606. **Out:** #1640 and #1648 (the 0.9.0 milestone; the maintainer moved them), #1651 (its own quick fix) and #1611 (a spaced event name keeps reading `(other)`; Backlog).
 
 Decided in this plan:
 
 - **#1606: the diff prints a path, never a query** (choice: maintainer may change). One rule gives the page of a hit: a URL becomes its path (no query, no fragment). A value that is not a URL is cut at the first `?` or `#`, and is kept only when what is left starts with `/`, otherwise it is `(other)`. `pagePath()` in `packages/expect/src/diff.ts` (the key page, with the existing value mask on top), `ref()` in the same file (the `page` of each added, removed and changed entry) and `where()` and `recordedPages()` in `packages/cli/src/diff.ts` (`recorded as`) all use it. So the key page, `moved[].page`, `diff --json` and the text hold no query. `recorded as` still appears only when that path differs from the key's masked page. The `page` string changes from a URL to a path. The JSON shape does not change. Real runs record absolute pages, so the non-URL branch matters for hand-built records only. It is cut anyway so the rule has no gap.
 - **#1634: the head follows what was judged** (choice: maintainer may change). With routes allowed by `identifierRouteAllow` and none judged, the head is `No planted value reached a judged sink; `. "No planted value found in the" stays only when there are no routes at all. Design §11: the pass message never claims that nothing leaked.
-- **#1611: a name is stored only when it reads as itself under the same check as a tag name** (choice: maintainer may change). For an event, `guardName` keeps `EVENT_NAME` and the 64 character limit. A name with no space and no colon keeps today's check, `guardFieldName(name) === name && !isValueSegment(name)`. A name that holds a space or a colon is checked as a tag name: it requires `maskTagName(name) === name` (imported from `./tags.ts`, which does not change: it checks a name that holds spaces and colons part by part, with the whole-name email and phone check) and `!isValueSegment(name.replace(/\s+/g, ''))`. The second check catches a number or hash split by spaces wherever it sits in the name, such as `Callback 46 70 123 45 67`. So a name without spaces or colons gives the same result as before, including `purchase_a1b2c3d4e5f6`, which stays as it is today. Only a name with a space or a colon is judged by the new check. It no longer sends such a name through `guardFieldName`. A name that fails any check still reads `(other)`.
 - **#1625: the stand-in exits a short time after it answered its first `/healthz` request** (choice: maintainer may change). Test only. The 800 ms timer starts at launch and can fire before the runner's `/healthz` poll succeeds, so the run ends before the server container was ready. That is the flake. The test needs the stand-in gone before the loader request: the scenario waits 2 s, sends it, and asserts outcome `failed`, `serverContainer.error` `exited` and exit code 2. So the exit cannot wait for the loader request. It is 300 ms after the first `/healthz` answer, well under the 2 s wait. The test must not pass for another reason: the stand-in writes a marker file when it answers `/healthz`, and the test asserts the marker exists. `error: exited` is only set for a container that was ready and then ended, so a container that never became ready fails the test.
 - **Docs owners.** No entry edits `docs/design.md`. R81 writes the release docs.
 - **CHANGELOG.** No entry edits `CHANGELOG.md`. Each PR body ends with `CHANGELOG: <one line>`, and R81 writes the `## 0.8.1` section from them.
@@ -55,18 +54,18 @@ Decided in this plan:
 
 ```mermaid
 flowchart LR
-  W1["Wave 1: D81, E81, F81, G81"] --> R["R81: release prep for 0.8.1"]
+  W1["Wave 1: D81, E81, G81"] --> R["R81: release prep for 0.8.1"]
 ```
 
-All four entries run in one wave, then the release prep.
+All three entries run in one wave, then the release prep.
 
 No two entries of the wave touch the same file:
 
 - **D81:** `packages/cli/src/diff.ts` and its test, `pagePath` and `ref` in `packages/expect/src/diff.ts` and its test, and `e2e/diff.e2e.test.ts`.
 - **E81:** `packages/expect/src/identifier-route.ts` and its test.
-- **F81:** `packages/expect/src/state-table.ts` and its test.
 - **G81:** `e2e/server-container-stape-loader.e2e.test.ts`.
-- **`docs/design.md` and `docs/cli.md`.** R81 only, after every entry has merged.
+- **`docs/cli.md`.** D81 edits the `--by-page` row and the diff text paragraph. R81 edits only its version lines.
+- **`docs/design.md`.** R81 only, after every entry has merged.
 
 ## Rules for every PR
 
@@ -85,12 +84,13 @@ More for 0.8.1:
 
 ### Wave 1
 
-**D81 `diff --by-page` prints only the path of the recorded page (#1606).** Round cap 3. Touches: `where` and `recordedPages` in `packages/cli/src/diff.ts`; `packages/cli/src/diff.test.ts`; `pagePath` and `ref` in `packages/expect/src/diff.ts`; `packages/expect/src/diff.test.ts`; `e2e/diff.e2e.test.ts` (one new case).
+**D81 `diff --by-page` prints only the path of the recorded page (#1606).** Round cap 3. Touches: `where` and `recordedPages` in `packages/cli/src/diff.ts`; `packages/cli/src/diff.test.ts`; `pagePath` and `ref` in `packages/expect/src/diff.ts`; `packages/expect/src/diff.test.ts`; `e2e/diff.e2e.test.ts` (one new case); the `--by-page` row of the diff options table and the diff text paragraph in `docs/cli.md`.
 Closes #1606
 - `recorded as` is followed by the path of the recorded page, never the query or the fragment. A recorded page that is not a URL is cut at the first `?` or `#`, and kept only when what is left starts with `/`, otherwise it is `(other)`. The rule is one function in `packages/expect/src/diff.ts`, and `where()` and `recordedPages()` apply the same rule to what they print.
 - `ref()` stores that path in `page` of each added, removed and changed entry, so `diff --json` holds no canary value. `pagePath()` applies the cut before the sandbox prefix and the value mask, so `key.page`, `moved[].page` and the `page` in the text hold no query either, for a URL and for a page that is not a URL. Without the cut in `pagePath`, `/products/1?gclid=TEST-x` keeps its query in the key page.
+- `docs/cli.md` says the JSON result has the raw page as `page` and that the text shows `recorded as <page>`. D81 rewrites both to say path, with no query or fragment.
 - The text still appears only when the recorded path differs from the key's masked page.
-Invariants: The JSON shape is unchanged. Only the `page` string is shorter. A line with no `recorded as` is unchanged. `recorded as` shows the path where it showed the URL. The test `shows both raw pages when they differ from the key` in `packages/cli/src/diff.test.ts` expects full URLs, so its expected text changes to paths. No other existing test line is known to change. The builder runs the whole unit suite and lists in the commit message any other test whose expected result D81 alters.
+Invariants: The JSON shape is unchanged. A URL page becomes its path. A non-URL page with a query or fragment loses it, which is the fix, and one whose cut value does not start with `/` becomes `(other)`. A line for a URL page with no `recorded as` is unchanged. `recorded as` shows the path where it showed the URL. The test `shows both raw pages when they differ from the key` in `packages/cli/src/diff.test.ts` expects full URLs, so its expected text changes to paths. No other existing test line is known to change. The builder runs the whole unit suite and lists in the commit message any other test whose expected result D81 alters.
 Evals:
 
 | Id | Kind | What must be true | How to check |
@@ -98,7 +98,7 @@ Evals:
 | D81-1 | behaviour | Two canary runs with the start `/products/123456`, compared with `--by-page`, print `recorded as /products/123456` and none of the six `TEST-` values, after the test checks the values are in the records. | `pnpm exec vitest run --project unit packages/cli/src/diff.test.ts`. |
 | D81-2 | behaviour | A changed hit whose two recorded pages differ prints both paths with ` -> `. The old two-page test expects paths. | The same file. |
 | D81-3 | behaviour | Hand-built records whose hits have the page `https://shop.test/products/1?gclid=TEST-x#TEST-y` give `diffRuns(a, b, { byPage: true })` and `formatDiff` output with no `TEST-`, after the test checks the value is in the records. The same for the page `/products/1?gclid=TEST-x`, which is not a URL: its key page and entry page read `/products/1`. A page that does not start with `/` after the cut reads `(other)`. | `pnpm exec vitest run --project unit packages/expect/src/diff.test.ts packages/cli/src/diff.test.ts`. It fails while `pagePath` keeps the query of a non-URL page and while `ref()` stores `h.page`. |
-| D81-4 | behaviour | The e2e case compares a run of `e2e/scenarios/canaries.yml` with a run that differs (a run of another scenario, or one with a hit removed), so that `added`, `removed` or `changed` has an entry. It asserts exit 0, asserts that an entry has a non-empty `page`, asserts that a raw record holds a `TEST-` value, then that `diff a b --by-page --json` has no `TEST-` in stdout. | `pnpm build`, then `pnpm exec vitest run --project e2e e2e/diff.e2e.test.ts`. It fails while `ref()` stores the raw page. Two identical runs have no entry, so they would pass on `main`: the case does not use them. |
+| D81-4 | behaviour | The e2e case compares a run of `e2e/scenarios/canaries.yml` with a run that differs (a run of another scenario, or one with a hit removed), so that `added`, `removed` or `changed` has an entry. It takes a `hitId` from an entry (`a` or `b` for a changed one) and reads that hit's line in the raw `.jsonl` record. It asserts that the `page` of that line contains `TEST-`, and that the entry's `page` starts with `/` and holds no `?` or `#`. Only then it asserts that `diff a b --by-page --json` stdout, and the text form, have no `TEST-`. | `pnpm build`, then `pnpm exec vitest run --project e2e e2e/diff.e2e.test.ts`. It fails while `ref()` stores the raw page. It fails on the first assertion when no listed entry has a canary page, so a run pair whose entries are only on a page with no query cannot pass. Two identical runs have no entry: the case does not use them. |
 
 The e2e case covers JSON only. `fixtures/site` has no start path that makes `recorded as` print, so the unit tests D81-1 and D81-3 cover the text.
 
@@ -117,22 +117,6 @@ Evals:
 | E81-2 | regression | No routes: the message is the old text. | The same file. |
 
 Acceptance: E81-1 passes, and fails on `main`.
-
-**F81 Event names with spaces or colons keep their names in the consent matrix (#1611).** Round cap 3. Touches: `guardName` in `packages/expect/src/state-table.ts` (it imports `maskTagName` from `./tags.ts`); `packages/expect/src/state-table.test.ts`.
-Closes #1611
-- `Add To Wishlist` and `Start Trial` are two event names in a cell, and `gtm:foo` is kept. `EVENT_NAME` and the 64 character limit stay the character rule.
-- An email, a phone number (also one split by spaces, such as `555 123 4567` or `46 70 123 45 67`, and one that follows a word, such as `Callback 46 70 123 45 67`), a long ID or a hash used as an event name (also one split into words), or a name with a part that `maskTagName` or `isValueSegment` takes as a value, still reads `(other)`.
-- Field and ID names keep `guardFieldName`. `tags.ts` is not edited: `maskTagName` is only imported.
-Invariants: `suite.json` holds names and counts, never a value. A name with no space and no colon gives the same result as before. A name with spaces or a colon that read `(other)` before may read as itself now, only when no check above takes it as a value.
-Evals:
-
-| Id | Kind | What must be true | How to check |
-| --- | --- | --- | --- |
-| F81-1 | behaviour | Reject sends `Add To Wishlist`, accept sends `Start Trial`: the reject entry lists `Add To Wishlist` in `notInAccept`. | `pnpm exec vitest run --project unit packages/expect/src/state-table.test.ts`. |
-| F81-2 | behaviour | An event named by an email, by a phone number (`5551234567`, `555 123 4567`, `46 70 123 45 67`), by a number after a word (`Callback 46 70 123 45 67`, `Call 070 123 45 67 now`), by a 32-character hash and by a 32-hex hash split into 8-character words reads `(other)`, after the test checks each is in the records. `Add To Wishlist` and `gtm:foo` read as themselves. | The same file. It fails while a name is judged word by word. |
-| F81-3 | regression | Events with no space and no colon read as they do on `main`: `purchase_a1b2c3d4e5f6`, `add_to_cart`, `view_item_list`, `Black-Friday-2024` and `promo.summer.2024` are stored as sent. | The same file. It passes on `main` and must keep passing. |
-
-Acceptance: F81-1 passes, and fails on `main`.
 
 **G81 The Stape loader e2e stand-in exits after it served the loader request (#1625).** Round cap 3. Touches: `e2e/server-container-stape-loader.e2e.test.ts` only. A test-only change.
 Closes #1625
@@ -163,7 +147,6 @@ After CI publishes 0.8.1, run `node scripts/check-npm-dist-tag.ts 0.8.1` and the
 ## Flagged concerns
 
 - **D81 changes diff text.** A script that reads the `recorded as` text of a diff sees a path where it saw a URL.
-- **F81 widens the event names stored in `suite.json`.** A name with spaces or a colon that read `(other)` before can now read as itself (`gtm:foo`, `Add To Wishlist`). The checks for such a name are `EVENT_NAME`, the length limit, `maskTagName` and a spaces-removed `isValueSegment`. A name with no space and no colon keeps today's check, so it does not narrow. A name that holds a value, split by spaces or not, still reads `(other)`.
 - **Two other e2e files hold the same 800 ms timer.** `e2e/server-container-rejected.e2e.test.ts` and `e2e/server-container.e2e.test.ts` have the same stand-in line and the same flake risk. G81 does not touch them: a flaky test is reported, not patched. A follow-up can apply the same fix.
 - **D81 shortens the `page` string in `diff --json`.** A script that reads it sees a path where it saw a URL. The canary values were in that string.
 - **No field test of its own.** Every change is small and has a unit test. D81-4 is the only e2e test of a change here.
@@ -175,6 +158,7 @@ After CI publishes 0.8.1, run `node scripts/check-npm-dist-tag.ts 0.8.1` and the
 | #1640 | Exact client-ID link when the container answers before its call. In the 0.9.0 milestone; the maintainer moved it. |
 | #1648 | Pinterest Conversions API linking. In the 0.9.0 milestone; the maintainer moved it. A new decoder adds decoded hits, so baseline runs drift. A patch adds none. |
 | #1651 | The home page version badge. Its own quick fix in this wave. |
+| #1611 | A spaced event name keeps reading `(other)`, which leaks nothing. A looser rule needs a value check that holds for any spaced split, which is not patch work. Backlog. |
 | #1612 | None of its three edge cases is a path real runs take. Backlog. |
 | #1609 | Already fixed on `main`. The issue can be closed. |
 | #1591 | Needs a record change (a page number or detach time on `Request.frame`). Backlog. |
