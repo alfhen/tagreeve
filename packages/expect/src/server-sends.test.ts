@@ -200,6 +200,17 @@ describe('deniedIdentifiers on a server hit', () => {
       expect(check(results, 'earlyIdentifiers').message).not.toContain('send time');
     });
 
+    test('a granted label whose state denies a field stays cannot evaluate', () => {
+      const mixed = timeline.map((e) => (e.label === 'granted' ? { ...e, state: { ...granted, adUserData: 'denied' as const } } : e));
+      const sent = capi(6720, undefined);
+      const results = evaluate([sent.hit, sent.req, ...mixed] as never, parseScenario('start: /\n'), { identity });
+      for (const name of names) {
+        const r = check(results, name);
+        expect(r).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked', evidence: [sent.hit.id] });
+        expect(r.message).not.toContain('send time');
+      }
+    });
+
     test('a Google hit with its own consent is held to it, any other vendor is not', () => {
       const own = { ...granted, ads: 'denied' } as const;
       const google = capi(6720, undefined, { vendor: 'ga4', consent: own });

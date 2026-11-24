@@ -1245,9 +1245,12 @@ function unlinkedWithIdentifiers(ctx: Context): Hit[] {
   return ctx.hits.filter((h) => isUnlinkedServerHit(h, ctx.index) && (!h.idFields || !h.fields || h.idFields.length > 0 || h.fieldsComplete === false));
 }
 
-/** An unlinked hit sent in a granted epoch is judged by its own send time. A Google hit that states its own consent must not state a field that is not granted. */
+/** An unlinked hit sent in a granted epoch whose state denies no field is judged by its own send time. A Google hit that states its own consent must not state a field that is not granted. */
 function judgedBySendTime(hit: Hit, ctx: Context): boolean {
   if (epochForHit(ctx.epochs, hit.t, ctx.grace)?.label !== 'granted') return false;
+  // The label comes from the banner action, the state from the last Consent Mode update: a granted label can hold a denied field.
+  const state = effectiveConsentAt(hit, ctx.epochs, ctx.grace);
+  if (consentFields.some((f) => state[f] === 'denied')) return false;
   const own = GOOGLE_VENDORS.has(hit.vendor) && consentFields.some((f) => hit.consent[f] !== 'unknown');
   return !own || consentFields.every((f) => hit.consent[f] === 'granted');
 }
