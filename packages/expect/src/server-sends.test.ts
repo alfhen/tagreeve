@@ -197,6 +197,9 @@ describe('deniedIdentifiers on a server hit', () => {
       const sent = capi(6720, link(via, 'exact'));
       const results = runTimeline([via, sent]);
       expect(check(results, 'deniedIdentifiers')).toMatchObject({ pass: false, severity: 'fail', evidence: [sent.hit.id] });
+      expect(check(results, 'deniedIdentifiers').note).toBeUndefined();
+      expect(check(results, 'earlyIdentifiers')).toMatchObject({ pass: true, evidence: [] });
+      expect(check(results, 'earlyIdentifiers').note).toBeUndefined();
       expect(check(results, 'earlyIdentifiers').message).not.toContain('send time');
     });
 
