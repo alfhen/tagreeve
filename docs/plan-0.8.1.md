@@ -50,11 +50,13 @@ Decided in this plan:
 - **The vendor key is `pinterest-capi`,** like `meta-capi` beside `meta` (choice: maintainer may change). A rule for `vendor: pinterest` does not match the server call, as a `meta` rule does not match a `meta-capi` call. `vendorKeys` and `names.ts` get the key, with the label `Pinterest Conversions API`.
 - **Event names are made equal in the decoder** (choice: maintainer may change). Rule (1) needs both hits to have the same `event`. The tag sends `pagevisit`, `addtocart` and `checkout`. The Conversions API sends `event_name` as `page_visit`, `add_to_cart` and `checkout` (the enum in the same schema). The decoder lowercases `event_name` and removes `_`. That gives the tag names for `page_visit`, `add_to_cart`, `checkout`, `signup`, `watch_video`, `lead`, `search` and `view_category`. `custom` stays `custom`: the tag sends the custom name itself, so a custom event does not link by name and stays unlinked, as today.
 - **What the decoder reads** (choice: maintainer may change). The names are those of `ConversionEventsDataItems` and its `user_data` in the OpenAPI description: `event_name`, `event_id`, `event_source_url` (the hit's page, with its own entry in `page-fields.ts`) and `user_data.em` (a list of hashed emails: the first is `hashedEmail`, the others are indexed, as `meta-capi` does). No other field is stored, and `client_ip_address` is not read. The `Authorization` header and any `access_token` are never read.
-- **The stub follows `meta-capi`.** The Conversions API path on `api.pinterest.com` is a collection endpoint, so a browser request to it is stubbed. Only a server container sends it in a real run.
-- **#1606: the diff prints a path, never a query** (choice: maintainer may change). `where()` and `recordedPages()` print the path of the recorded page. `recorded as` still appears only when that path differs from the key's masked page.
+- **The stub follows `meta-capi`.** The Conversions API path on `api.pinterest.com` is a collection endpoint, so a browser request to it is stubbed. `stubResponse` in `packages/recorder/src/stub.ts` answers it `200` with `content-type: application/json` and a body in Pinterest's response shape (`num_events_received`, `num_events_processed`, `failed_events`, `events`, from the `events/create` response in the OpenAPI description). Without this the request gets the default `204`. The same function is what the recording proxy answers to the user's own container, so a real container's Pinterest call now gets `200` and JSON instead of `204`. That is the kind of answer the real API gives. The decoder exports the endpoint check, as `isMetaCapiEndpoint` is exported for Meta.
+- **Further hashes are judged one by one.** `identity.hashesMatch` judges every `user_data.em` value of a `pinterest-capi` hit, as it does for `meta-capi`: `identityParamName` in `packages/expect/src/evaluate.ts` strips the `.<n>` index for both vendors. Pinterest's own example sends two `em` values. `VENDOR_IGNORE` and `capiMatchesIdentity` in the same file stay keyed on `meta-capi`: a Pinterest call is not exempted from any check, which is the safe direction.
+- **The stand-in sends the Pinterest call only when asked.** `sendVendorCalls` in `fixtures/site/src/stand-in-container.ts` adds a Pinterest call to `https://api.pinterest.com/v5/ad_accounts/549755885175/events` only when the trigger URL has `pin=1`. Without it the default calls are the same as today, so `e2e/server-container.e2e.test.ts` (which pins the vendors to `ga4`, `google-ads`, `meta-capi`) and every other e2e file that uses the stand-in see no new call. The call reuses the trigger's `event_id` and sends the event name in the CAPI form (`pagevisit` as `page_visit`).
+- **#1606: the diff prints a path, never a query** (choice: maintainer may change). `where()` and `recordedPages()` print the path of the recorded page. `recorded as` still appears only when that path differs from the key's masked page. `diff --json` is cut too: `ref()` in `packages/expect/src/diff.ts` puts the raw `Hit.page` in every added, removed and changed entry, and that page holds the start URL with all six canary values. It stores the path only, with no query and no fragment. A recorded page that is not a URL is cut at the first `?` or `#`. The `page` string in `diff --json` and the `recorded as` text change from a URL to a path. The JSON shape does not change.
 - **#1634: the head follows what was judged** (choice: maintainer may change). With routes allowed by `identifierRouteAllow` and none judged, the head is `No planted value reached a judged sink; `. "No planted value found in the" stays only when there are no routes at all. Design §11: the pass message never claims that nothing leaked.
-- **#1611: `EVENT_NAME` is the character rule for events** (choice: maintainer may change). `guardName` for an event keeps `EVENT_NAME` and the length limit, and runs the value-like checks (`isValueSegment`, email and phone) on each word. It no longer sends an event name through `guardFieldName`. A name that fails any check still reads `(other)`.
-- **#1625: the stand-in exits after it served the request** (choice: maintainer may change). Test only. No timer.
+- **#1611: `EVENT_NAME` is the character rule for events** (choice: maintainer may change). `guardName` for an event keeps `EVENT_NAME` and the length limit. It runs `isValueSegment` and `valueKinds` (email, phone, ID, hash) on the whole name, and `isValueSegment` on each space word and each dot segment. The whole-name check is needed because a number split by spaces is a phone only as a whole (`555 123 4567`), and the dot-segment check keeps what `guardFieldName` did. It no longer sends an event name through `guardFieldName`. A name that fails any check still reads `(other)`.
+- **#1625: the stand-in exits a short time after it answered its first `/healthz` request** (choice: maintainer may change). Test only. The 800 ms timer starts at launch and can fire before the runner's `/healthz` poll succeeds, so the run ends before the loader request exists. That is the flake. The test needs the stand-in gone before the loader request: the scenario waits 2 s, sends it, and asserts outcome `failed`, `serverContainer.error` `exited` and exit code 2. So the exit cannot wait for the loader request. It is 300 ms after the first `/healthz` answer, well under the 2 s wait.
 - **Docs owners.** M81 documents itself in `docs/design.md` (§6 decoder table and the "Still open" text in §15). The other entries say nothing new in the docs. R81 writes the release docs.
 - **CHANGELOG.** No entry edits `CHANGELOG.md`. Each PR body ends with `CHANGELOG: <one line>`, and R81 writes the `## 0.8.1` section from them.
 
@@ -69,8 +71,8 @@ All five entries run in one wave, then the release prep.
 
 No two entries of the wave touch the same file:
 
-- **M81:** `packages/decoders/` (a new decoder and its tests, `registry.ts`, `page-fields.ts`, `decoder.ts`, `index.ts`), `packages/cli/src/report/names.ts`, `packages/recorder/src/server-container/link.test.ts`, a new e2e file and `docs/design.md`.
-- **D81:** `packages/cli/src/diff.ts` and its test.
+- **M81:** `packages/decoders/` (a new decoder and its tests, `registry.ts`, `registry.test.ts`, `page-fields.ts`, `decoder.ts`, `index.ts`), `packages/cli/src/report/names.ts`, `packages/recorder/src/stub.ts` and `stub.test.ts`, `packages/expect/src/evaluate.ts` (`identityParamName`) and `evaluate.test.ts`, `packages/recorder/src/server-container/link.test.ts`, `fixtures/site/` (the stand-in, one page, its route, the README), a new scenario, a new e2e file and `docs/design.md`.
+- **D81:** `packages/cli/src/diff.ts` and its test, `ref` in `packages/expect/src/diff.ts` and its test, and `e2e/diff.e2e.test.ts`.
 - **E81:** `packages/expect/src/identifier-route.ts` and its test.
 - **F81:** `packages/expect/src/state-table.ts` and its test.
 - **G81:** `e2e/server-container-stape-loader.e2e.test.ts`.
@@ -95,14 +97,16 @@ More for 0.8.1:
 
 ### Wave 1
 
-**M81 Pinterest Conversions API calls link to their browser hits (#1648).** Round cap 4. Touches: `packages/decoders/src/pinterest-capi.ts` (new); `packages/decoders/src/pinterest-capi.test.ts` (new); `packages/decoders/fixtures/pinterest-capi/` (new, a made-up call); `packages/decoders/src/registry.ts` (`direct`); `packages/decoders/src/index.ts` (export); `packages/decoders/src/decoder.ts` (`vendorKeys`); `packages/decoders/src/page-fields.ts` and `page-fields.test.ts` (the `event_source_url` entry); `packages/cli/src/report/names.ts` (the label); `packages/recorder/src/server-container/link.test.ts` (Pinterest cases for rule (1)); `e2e/server-container-pinterest-link.e2e.test.ts` (new); `docs/design.md` (§6 decoder table row, §15 "Still open" text of rc.4 and 0.8.0).
+**M81 Pinterest Conversions API calls link to their browser hits (#1648).** Round cap 4. Touches: `packages/decoders/src/pinterest-capi.ts` (new); `packages/decoders/src/pinterest-capi.test.ts` (new); `packages/decoders/fixtures/pinterest-capi/` (new, a made-up call); `packages/decoders/src/registry.ts` (`direct`); `packages/decoders/src/registry.test.ts` (a `pinterest-capi` sample); `packages/decoders/src/index.ts` (export); `packages/decoders/src/decoder.ts` (`vendorKeys`); `packages/decoders/src/page-fields.ts` and `page-fields.test.ts` (the `event_source_url` entry); `packages/cli/src/report/names.ts` (the label); `packages/recorder/src/server-container/link.test.ts` (Pinterest cases for rule (1)); `packages/recorder/src/stub.ts` (`stubResponse`) and `stub.test.ts`; `packages/expect/src/evaluate.ts` (`identityParamName`) and `evaluate.test.ts`; `fixtures/site/src/stand-in-container.ts` (the opt-in Pinterest call) and `stand-in-container.test.ts`; `fixtures/site/public/pinterest-link.html` (new, no network) with its route `/pinterest-link` in `fixtures/site/src/index.ts`; `fixtures/site/README.md` (the page and the `pin=1` flag); `e2e/scenarios/pinterest-link.yml` (new); `e2e/server-container-pinterest-link.e2e.test.ts` (new); `docs/design.md` (§6 decoder table row, §15 "Still open" text of rc.4 and 0.8.0).
 Closes #1648
 - A request to `api.pinterest.com` on `/v5/ad_accounts/<id>/events` with a JSON body `{ "data": [ ... ] }` decodes to one `pinterest-capi` hit for each item. The hit has `event` (the name lowercased with `_` removed), `params.eventId` from `event_id`, `page` from `event_source_url`, and the `user_data.em` hashes as `hashedEmail`, with further values indexed. `Hit.fields` lists names only, through the same guard as `meta-capi`. The `Authorization` header and an `access_token` are never a field or a param.
 - A body that is not JSON, has no `data` list or has an item that is not an object gives no hit for that item and does not throw, as `meta-capi` does for the same input.
 - `linkServerHits` is unchanged. A server call with an `event_id` of at least 8 characters and the same event name as exactly one browser Pinterest hit links `exact` by `eventId`, with the same later-hit window as Meta.
 - A `custom` call, a call with no `event_id` and a call that matches two browser hits stay unlinked, with the `linkMiss` rule (1) gives today.
-- In `stub` mode a browser request to the Conversions API path is recorded and answered locally with `200` and a JSON body, as `meta-capi` is.
-Invariants: A Pinterest tag hit decodes as before. No other decoder's output changes. `ct.pinterest.com` is still stubbed by host. A request to another path on `api.pinterest.com` gets no hit.
+- In `stub` mode a browser request to the Conversions API path is recorded and answered locally with `200`, `content-type: application/json` and a body in Pinterest's response shape (`stubResponse`). The default for any other fetch stays `204`.
+- `identity.hashesMatch` judges every `user_data.em` value: `hashedEmail.1` and later count as `hashedEmail` for a `pinterest-capi` hit, so a second value sent plain or with the wrong hash fails, with the message naming the hit.
+- `pinterest-link.html` makes no network call. It sends a `pagevisit` hit to `https://ct.pinterest.com/` (stubbed by host) with `ed` holding `event_id` `pw-pin-event-1` (at least 8 characters), then posts to the stand-in's trigger path with `pin=1&event_id=pw-pin-event-1&event_name=pagevisit`. The stand-in sends its default calls and also the Pinterest call, with that `event_id` and the event name `page_visit`. The scenario `pinterest-link.yml` runs the page in `server` mode.
+Invariants: A Pinterest tag hit decodes as before. No other decoder's output changes. The stand-in's default calls are unchanged, so `e2e/server-container.e2e.test.ts` passes with its vendor list as is. The existing `pinterest.html` page is untouched. `ct.pinterest.com` is still stubbed by host. A request to another path on `api.pinterest.com` gets no hit.
 Evals:
 
 | Id | Kind | What must be true | How to check |
@@ -113,23 +117,28 @@ Evals:
 | M81-4 | behaviour | A Pinterest server hit and a browser hit with the same event ID and name link `exact` by `eventId`. | `pnpm exec vitest run --project unit packages/recorder/src/server-container/link.test.ts`. |
 | M81-5 | behaviour | A `custom` server hit does not link by event ID. | The same file. |
 | M81-6 | end to end | On the fixture site with the stand-in container, a Pinterest Conversions API call that the container sends links to the page's `pagevisit` hit, and a canary route on that call is judged by the browser hit's epoch, with no `serverSendUnlinked`. | `pnpm exec vitest run --project e2e e2e/server-container-pinterest-link.e2e.test.ts`. |
-| M81-7 | regression | The existing decoder tests pass unchanged. | `pnpm exec vitest run --project unit packages/decoders`. |
+| M81-7 | regression | The decoder tests pass, with the `pinterest-capi` sample added to `registry.test.ts` (an `api.pinterest.com/v5/ad_accounts/` request). Every other test that the new vendor key alters passes too. | `pnpm exec vitest run --project unit packages/decoders packages/cli/src/report/names.test.ts packages/recorder/src/canary-routes.test.ts`. The builder runs the whole unit suite, finds each test whose expected result the new key (`vendorKeys`, `PAGE_FIELDS`) alters, and lists them in the message of the commit that applies the change. |
+| M81-8 | behaviour | A stubbed POST to `https://api.pinterest.com/v5/ad_accounts/549755885175/events` is answered `200` with `content-type: application/json`. A fetch to another path on `api.pinterest.com` is still `204`. | `pnpm exec vitest run --project unit packages/recorder/src/stub.test.ts`. It fails while `stub.ts` knows only the Meta endpoint. |
+| M81-9 | behaviour | A `pinterest-capi` hit with `hashedEmail` right and `hashedEmail.1` the plain run email fails `identity.hashesMatch`, and the message names the hit. | `pnpm exec vitest run --project unit packages/expect/src/evaluate.test.ts`. It passes (pass true) while `identityParamName` strips the index only for `meta-capi`. |
+| M81-10 | regression | The stand-in sends only `ga4`, `google-ads` and `meta-capi` by default, and the Pinterest call only with `pin=1`. | `pnpm exec vitest run --project e2e e2e/server-container.e2e.test.ts e2e/server-container-pinterest-link.e2e.test.ts` and `pnpm exec vitest run --project unit fixtures/site/src/stand-in-container.test.ts`. `grep -n "api.pinterest.com" fixtures/site/src/stand-in-container.ts` finds the opt-in call. |
 
-Acceptance: M81-6 passes, and fails on `main`, where the call has no hit.
+Acceptance: M81-6 passes, and fails on `main`, where the call has no hit. The PR changes only files named in the Touches line.
 
-**D81 `diff --by-page` prints only the path of the recorded page (#1606).** Round cap 3. Touches: `where` and `recordedPages` in `packages/cli/src/diff.ts`; `packages/cli/src/diff.test.ts`.
+**D81 `diff --by-page` prints only the path of the recorded page (#1606).** Round cap 3. Touches: `where` and `recordedPages` in `packages/cli/src/diff.ts`; `packages/cli/src/diff.test.ts`; `ref` in `packages/expect/src/diff.ts`; `packages/expect/src/diff.test.ts`; `e2e/diff.e2e.test.ts` (one new case).
 Closes #1606
-- `recorded as` is followed by the path of the recorded page, never the query or the fragment. A recorded page that is not a URL is printed only when it starts with `/`, and otherwise as `(other)`.
+- `recorded as` is followed by the path of the recorded page, never the query or the fragment. A recorded page that is not a URL is cut at the first `?` or `#`, and printed only when what is left starts with `/`, and otherwise as `(other)`.
+- `ref()` in `packages/expect/src/diff.ts` stores the same path in `page` of each added, removed and changed entry, so `diff --json` holds no canary value either.
 - The text still appears only when the recorded path differs from the key's masked page.
-Invariants: `--json` output is unchanged. A diff of runs whose recorded pages have no query prints the same lines as before.
+Invariants: The JSON shape is unchanged. Only the `page` string is shorter. A line with no `recorded as` is unchanged. `recorded as` shows the path where it showed the URL. The test `shows both raw pages when they differ from the key` in `packages/cli/src/diff.test.ts` expects full URLs and changes to expect paths. The builder finds by a run every other test whose expected result D81 alters and lists them in the commit message.
 Evals:
 
 | Id | Kind | What must be true | How to check |
 | --- | --- | --- | --- |
 | D81-1 | privacy | Two canary runs with the start `/products/123456`, compared with `--by-page`, print `recorded as /products/123456` and none of the six `TEST-` values, after the test checks the values are in the records. | `pnpm exec vitest run --project unit packages/cli/src/diff.test.ts`. |
-| D81-2 | behaviour | A changed hit whose two recorded pages differ prints both paths with ` -> `. | The same file. |
+| D81-2 | behaviour | A changed hit whose two recorded pages differ prints both paths with ` -> `. The old two-page test expects paths. | The same file. |
+| D81-3 | privacy | `diff a b --by-page --json` and `diff a b --by-page` on two canary runs print no `TEST-` in stdout, after the test checks the values are in the records. A non-URL page `/products/1?gclid=TEST-x` reads `/products/1`. | `pnpm exec vitest run --project unit packages/expect/src/diff.test.ts` and `pnpm exec vitest run --project e2e e2e/diff.e2e.test.ts`. The JSON run fails while `ref()` stores the raw page. |
 
-Acceptance: D81-1 passes, and fails on `main`.
+Acceptance: D81-1 and D81-3 pass, and fail on `main`.
 
 **E81 The `identifierRoute` pass message is true when every route went to an allowed host (#1634).** Round cap 3. Touches: the pass message in `packages/expect/src/identifier-route.ts`; `packages/expect/src/identifier-route.test.ts`.
 Closes #1634
@@ -148,7 +157,7 @@ Acceptance: E81-1 passes, and fails on `main`.
 **F81 Event names with spaces or colons keep their names in the consent matrix (#1611).** Round cap 3. Touches: `guardName` in `packages/expect/src/state-table.ts`; `packages/expect/src/state-table.test.ts`.
 Closes #1611
 - `Add To Wishlist` and `Start Trial` are two event names in a cell, and `gtm:foo` is kept. `EVENT_NAME` and the 64 character limit stay the character rule.
-- An email, a phone number, a long ID or a hash used as an event name, or a name with a segment `isValueSegment` takes as a value, still reads `(other)`.
+- An email, a phone number (also one split by spaces, such as `555 123 4567` or `46 70 123 45 67`), a long ID or a hash used as an event name, or a name with a word or a dot segment that `isValueSegment` takes as a value, still reads `(other)`.
 - Field and ID names keep `guardFieldName`.
 Invariants: `suite.json` holds names and counts, never a value. A name that read as itself before still does.
 Evals:
@@ -156,20 +165,20 @@ Evals:
 | Id | Kind | What must be true | How to check |
 | --- | --- | --- | --- |
 | F81-1 | behaviour | Reject sends `Add To Wishlist`, accept sends `Start Trial`: the reject entry lists `Add To Wishlist` in `notInAccept`. | `pnpm exec vitest run --project unit packages/expect/src/state-table.test.ts`. |
-| F81-2 | privacy | An event named by an email, by a phone number and by a 32-character hash reads `(other)`, after the test checks each is in the records. | The same file. |
+| F81-2 | privacy | An event named by an email, by a phone number (`5551234567`, `555 123 4567`, `46 70 123 45 67`) and by a 32-character hash reads `(other)`, after the test checks each is in the records. The spaced numbers fail under a per-word rule. | The same file. |
 
 Acceptance: F81-1 passes, and fails on `main`.
 
 **G81 The Stape loader e2e stand-in exits after it served the loader request (#1625).** Round cap 3. Touches: `e2e/server-container-stape-loader.e2e.test.ts` only. A test-only change.
 Closes #1625
-- The stand-in exits when it has answered the loader request, not after 800 ms. A test that never sends the request still ends by the test's own timeout.
-Invariants: The test checks what it checked before.
+- The stand-in exits 300 ms after it answered its first `/healthz` request, not 800 ms after launch. It is gone before the loader request, which is sent after the scenario's `wait: 2s`.
+Invariants: The test checks what it checked before: the loader request is `failed`, `serverContainer.error` is `exited` and the exit code is 2. The `wait: 2s` stays.
 Evals:
 
 | Id | Kind | What must be true | How to check |
 | --- | --- | --- | --- |
 | G81-1 | regression | The file passes. | `pnpm exec vitest run --project e2e e2e/server-container-stape-loader.e2e.test.ts`. |
-| G81-2 | behaviour | No fixed exit timer is left in the stand-in source. | `git grep -n "process.exit(0), 800" e2e` finds nothing. |
+| G81-2 | behaviour | No fixed 800 ms exit timer is left in this file, and the stand-in reads `/healthz` before it schedules the exit. | `git grep -n "process.exit(0), 800" -- e2e/server-container-stape-loader.e2e.test.ts` prints nothing. The unscoped grep still finds the two files in Flagged concerns, so it is not the check. |
 
 Acceptance: G81-1 passes. The failure it removes is a timing one, so no test is made to fail without the change. The PR body says so.
 
@@ -193,6 +202,9 @@ After CI publishes 0.8.1, run `node scripts/check-npm-dist-tag.ts 0.8.1` and the
 - **M81 adds a decoder for a call a browser does not make.** The stub rule is for symmetry with `meta-capi`, and a test pins it.
 - **D81 changes diff text.** A script that reads the `recorded as` text of a diff sees a path where it saw a URL.
 - **F81 widens the event names stored in `suite.json`.** They are still guarded: no value-like name is kept.
+- **Two other e2e files hold the same 800 ms timer.** `e2e/server-container-rejected.e2e.test.ts` and `e2e/server-container.e2e.test.ts` have the same stand-in line and the same flake risk. G81 does not touch them: a flaky test is reported, not patched. A follow-up can apply the same fix.
+- **M81 changes the proxy answer to a real container.** A Pinterest call from the user's own container gets `200` and JSON, not `204`, because `stubResponse` serves both the browser stub and the recording proxy.
+- **D81 shortens the `page` string in `diff --json`.** A script that reads it sees a path where it saw a URL. The canary values were in that string.
 - **No field test of its own.** Every change is small and has a unit test. M81-6 is the only e2e test of the link.
 
 ## Out of scope
