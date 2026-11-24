@@ -124,6 +124,40 @@ describe('CHANGELOG.md', () => {
     expect(markerProblems(text, pkg.version)).toEqual([]);
   });
 
+  describe('0.8.0-rc.2 and 0.8.0-rc.1', () => {
+    const sectionOf = (version: string) => {
+      const start = text.indexOf(`## ${version}\n`);
+      const next = text.indexOf('\n## ', start + 1);
+      return start === -1 ? '' : text.slice(start, next === -1 ? undefined : next);
+    };
+    const rc2 = sectionOf('0.8.0-rc.2');
+    const rc1 = sectionOf('0.8.0-rc.1');
+
+    it('has the rc.2 section above rc.1 with the install line', () => {
+      expect(rc2).not.toBe('');
+      expect(rc1).not.toBe('');
+      expect(text.indexOf('## 0.8.0-rc.2\n')).toBeLessThan(text.indexOf('## 0.8.0-rc.1\n'));
+      expect(rc2).toContain('Install it with `npm i -g tagreeve@next`.');
+    });
+
+    it('names #1632, #1633, #1635 and #1636 in rc.2', () => {
+      for (const pr of ['#1632', '#1633', '#1635', '#1636']) expect(rc2).toContain(pr);
+    });
+
+    it('has the sentBy browser upgrade note in rc.1', () => {
+      const note = rc1.split('\n').find((l) => l.startsWith('- ') && l.includes('region1.google-analytics.com'));
+      expect(note).toBeDefined();
+      expect(note).toContain('sentBy: browser');
+    });
+
+    it('says nothing about a missing field test in either section', () => {
+      expect(rc2).not.toBe('');
+      expect(rc1).not.toBe('');
+      expect(rc2).not.toContain('not field-tested on a real store');
+      expect(rc1).not.toContain('not field-tested on a real store');
+    });
+  });
+
   describe('released section 0.7.0', () => {
     const section = (() => {
       const start = text.indexOf('## 0.7.0\n');

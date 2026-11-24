@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0-rc.2
+
+The second release candidate, after the rc.1 field test. Install it with `npm i -g tagreeve@next`. It has no new command. The record stays at schema version 5. To go back to the final release, run `npm i -g tagreeve`.
+
+- Server container: a server call links to a browser hit by event ID only when the browser hit was sent at or before the call, so a late hit no longer takes a false link after a consent withdrawal (#1632, #1628, #1629).
+- Server container: a server GA4 hit behind a Stape loader links to its browser hit by client ID, read from the loader request's real query (#1633, #1627).
+- A new scenario option, `options.identifierRouteAllow`, lists hosts the `identifierRoute` check does not judge, such as a consent tool's own hosts. It takes the same `*.domain` form as `firstPartyHosts`. The result message counts the allowed routes per host (#1635, #1631).
+- The run report and the consent audit column show one row per group of identifier routes, not one row per flag. A group shares the host, field, transform, route kind, epoch and verdict (#1636, #1630).
+
 ## 0.8.0-rc.1
 
 The first release candidate of 0.8.0. Install it with `npm i -g tagreeve@next`. 0.8.0-rc.1 adds a consent audit and fixes after 0.7.0. It has no new command. The record stays at schema version 5. To go back to the final release, run `npm i -g tagreeve`.
@@ -34,6 +43,7 @@ The first release candidate of 0.8.0. Install it with `npm i -g tagreeve@next`. 
 - **Server-side rules can read cannot evaluate.** When the local container rejects most browser requests, a `sentBy: server` rule or a rule with no `sentBy` now warns where 0.7.0 failed or passed.
 - **The identity matcher is stricter.** It counts only a whole email or phone value, so a run can show a foreign value that 0.7.0 hid.
 - **A moved `dataLayer` path is one line in `diff`.** `diff --json` gets `dataLayer.pathsMoved`.
+- **Server hits are recorded for `*.google-analytics.com`.** Since #1622 the local container's own GA4 calls to `*.google-analytics.com` are recorded, so a rule such as `mustNot: { vendor: ga4, host: region1.google-analytics.com }` now matches server hits too. Add `sentBy: browser` to keep it to browser hits.
 - **The record stays at version 5.** A 0.7.0 record reads as before.
 
 ### Known in 0.8.0-rc.1
@@ -42,7 +52,6 @@ Issues still open that you can meet, in addition to those in 0.7.0:
 
 - The canary search reads only the forms it lists. It skips gzip and binary bodies, bodies cut at 64 KiB and net-log requests with no body, and it does not search headers. A pass means no planted value was found in the searched forms.
 - Observed runtime IDs are not searched. Only the planted click IDs and the run's identity are (#1391, slice 3).
-- The consent audit is not field-tested on a real store.
 - The Stape loader unwrap covers `/g/collect` and `/data`. Stape's hosting layer may act on a loader request in other ways, and the record says so in fixed text.
 
 ## 0.7.0
