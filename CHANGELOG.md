@@ -18,7 +18,7 @@
 - Server-side rules read `cannot evaluate`, with the `serverContainerRejected` note, when the container rejects most browser requests. They failed or passed on missing data before.
 - The identity matcher counts an email or phone as the run's own only when the whole value matches.
 - `idHandover` compares session IDs per client ID.
-- `dataLayer` rules: a `dataLayerNotHooked` loader survives an aborted navigation and a popup or other frame, and a `__proto__` type path is checked.
+- `dataLayer` rules: a `dataLayerNotHooked` loader survives an aborted navigation and a popup or other frame, an unknown key that looks like a value is masked in the error, and a `__proto__` type path is checked.
 - Consent commands read a nested array and ignore `gtm.` keys in an indexed consent default.
 - `diff` shows a `dataLayer` path that moved to a neighbouring consent epoch as one moved path.
 - A baseline compare gives one warning, not drift, when a gcd letter changes between `p` and `q`, or between `t` and `v`.
@@ -38,7 +38,7 @@
 
 ### Known in 0.8.0
 
-Issues still open that you can meet, in addition to those in 0.7.0:
+Issues still open that you can meet, in addition to those in 0.7.0 that 0.8.0 does not fix (#1569 and #1576 are fixed):
 
 - A server GA4 hit behind a container that answers before its call stays `probable` (#1640), so its identifier routes warn with `serverSendProbableLink`.
 - A Pinterest Conversions API call to api.pinterest.com gets no link to a browser hit, so its identifier routes warn under accept (#1648).
