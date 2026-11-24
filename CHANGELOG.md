@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.8.0
+
+`npm i -g tagreeve` installs this release. 0.8.0 adds everything in the 0.8.0 release candidates (below), with no code change after rc.4. It has no new command. The record stays at schema version 5. To upgrade from 0.7.0, read the next section.
+
+### What 0.8.0 adds
+
+- A consent audit. `suite --consent accept,reject,none,withdraw` runs each scenario once per consent state and prints what each vendor got in each state. `options.canaries: true` plants six fake click IDs on the start URL, and the run follows each canary, and the run's own identity, to the vendor requests it reaches: through the page URL, a first-party cookie or the local server container. The `identifierRoute` built-in check fails when a canary reaches a vendor that the consent in force did not allow. `options.identifierRouteAllow` lists hosts it does not judge, such as a consent tool's own hosts. The HTML report of a consent suite has a Consent audit section, and the run report an Identifier routes section with one row per group of routes.
+- Server container: a Stape loader request for `/g/collect` or `/data` goes to the local container at its real path, and a server GA4 hit behind a Stape loader links to its browser hit by client ID. A request with a replaced secret lists the secret names, never a value.
+- Server container links: a server call links to a browser hit by event ID only when the hit was sent at or before the call. A Meta Conversions API call also links by event ID to a pixel hit sent up to 5 s after it, when no consent epoch starts in between.
+- Server container: for `deniedIdentifiers` and `earlyIdentifiers`, an unlinked server call is judged by its own send time when its epoch is granted. A call sent in a denied, undecided, mixed or withdrawn epoch, or in none, stays `cannot evaluate` with `serverSendUnlinked`.
+- Install docs give `npm i -g tagreeve` for the final release and name the tag for release candidates.
+- 0.8.0 was field-tested on a real Shopify store with a first-party server container, through rc.1 to rc.4.
+
+### Fixes in 0.8.0
+
+- Server-side rules read `cannot evaluate`, with the `serverContainerRejected` note, when the container rejects most browser requests. They failed or passed on missing data before.
+- The identity matcher counts an email or phone as the run's own only when the whole value matches.
+- `idHandover` compares session IDs per client ID.
+- `dataLayer` rules: a `dataLayerNotHooked` loader survives an aborted navigation and a popup or other frame, and a `__proto__` type path is checked.
+- Consent commands read a nested array and ignore `gtm.` keys in an indexed consent default.
+- `diff` shows a `dataLayer` path that moved to a neighbouring consent epoch as one moved path.
+- A baseline compare gives one warning, not drift, when a gcd letter changes between `p` and `q`, or between `t` and `v`.
+- `addToCart` failures name the store's status and the cart path, and a 429 is named as rate limited.
+- A late browser hit no longer takes a false event ID link after a consent withdrawal.
+- The fixture site sends the relay page view after the consent step.
+
+### Upgrading from 0.7.0
+
+- **A new built-in check can fail.** `identifierRoute` fails by default, but only for a run with `options.canaries: true`. A run without canaries is not affected.
+- **Server-side rules can read cannot evaluate.** When the local container rejects most browser requests, a `sentBy: server` rule or a rule with no `sentBy` now warns where 0.7.0 failed or passed.
+- **The identity matcher is stricter.** It counts only a whole email or phone value, so a run can show a foreign value that 0.7.0 hid.
+- **A moved `dataLayer` path is one line in `diff`.** `diff --json` gets `dataLayer.pathsMoved`.
+- **Server hits are recorded for `*.google-analytics.com`.** The local container's own GA4 calls to `*.google-analytics.com` are recorded, so a rule such as `mustNot: { vendor: ga4, host: region1.google-analytics.com }` now matches server hits too. Add `sentBy: browser` to keep it to browser hits.
+- **A new release needs a new server image.** On arm64 (Apple silicon), run `tagreeve server-container build` after `npm i -g tagreeve`. A run with `--server-container` exits 2 with "The image tagreeve-sgtm:<version> is not available" until the image for that version exists. On amd64 the command builds nothing.
+- **The record stays at version 5.** A 0.7.0 record reads as before.
+
+### Known in 0.8.0
+
+Issues still open that you can meet, in addition to those in 0.7.0:
+
+- A server GA4 hit behind a container that answers before its call stays `probable` (#1640), so its identifier routes warn with `serverSendProbableLink`.
+- A Pinterest Conversions API call to api.pinterest.com gets no link to a browser hit, so its identifier routes warn under accept (#1648).
+- Observed runtime IDs are not searched. Only the planted click IDs and the run's identity are (#1606).
+- The canary search reads only the forms it lists. It skips gzip and binary bodies, bodies cut at 64 KiB and net-log requests with no body, and it does not search headers. A pass means no planted value was found in the searched forms.
+- The Stape loader unwrap covers `/g/collect` and `/data`. Stape's hosting layer may act on a loader request in other ways, and the record says so in fixed text.
+
 ## 0.8.0-rc.4
 
 The fourth release candidate, after the rc.3 field test. Install it with `npm i -g tagreeve@next`. It has no new command. The record stays at schema version 5. To go back to the final release, run `npm i -g tagreeve`.
