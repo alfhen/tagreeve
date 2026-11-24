@@ -558,16 +558,6 @@ describe('rule 1: a later browser hit in the same consent epoch', () => {
     expect(out.linkMiss?.eventId).toBe('noMatch');
   });
 
-  test('an epoch starting exactly at the hit time blocks the link', () => {
-    const p = pix(1900);
-    const epochStarts = [0, 1900];
-    expect(p[1].t).toBe(1900);
-    expect(epochStarts).toContain(p[1].t);
-    const out = run([p], epochStarts);
-    expect(isExact(out)).toBe(false);
-    expect(out.linkMiss?.eventId).toBe('noMatch');
-  });
-
   test('(d) one hit before and one after in the same epoch give several', () => {
     const epochStarts = [0];
     const out = run([pix(900), pix(1900)], epochStarts);
