@@ -158,6 +158,53 @@ describe('CHANGELOG.md', () => {
     });
   });
 
+  describe('0.8.0-rc.3', () => {
+    const sectionOf = (version: string) => {
+      const start = text.indexOf(`## ${version}\n`);
+      const next = text.indexOf('\n## ', start + 1);
+      return start === -1 ? '' : text.slice(start, next === -1 ? undefined : next);
+    };
+    const rc3 = sectionOf('0.8.0-rc.3');
+    const rc1 = sectionOf('0.8.0-rc.1');
+    const buildNote = (part: string) =>
+      part.split('\n').find((l) => l.includes('`tagreeve server-container build`') && l.includes('is not available'));
+
+    it('has the rc.3 section above rc.2 with the install line', () => {
+      expect(rc3).not.toBe('');
+      expect(text.indexOf('## 0.8.0-rc.3\n')).toBeLessThan(text.indexOf('## 0.8.0-rc.2\n'));
+      expect(rc3).toContain('Install it with `npm i -g tagreeve@next`.');
+    });
+
+    it('names #1641 and #1639 in rc.3', () => {
+      expect(rc3).not.toBe('');
+      for (const pr of ['#1641', '#1639']) expect(rc3).toContain(pr);
+    });
+
+    it('has a Known in 0.8.0-rc.3 part that names #1640 and serverSendProbableLink', () => {
+      const at = rc3.indexOf('Known in 0.8.0-rc.3');
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(rc3.slice(at)).toContain('#1640');
+      expect(rc3.slice(at)).toContain('`serverSendProbableLink`');
+    });
+
+    it('has the server image note in rc.3 and in the rc.1 upgrade list', () => {
+      const start = rc1.indexOf('### Upgrading from 0.7.0\n');
+      expect(start).toBeGreaterThanOrEqual(0);
+      const end = rc1.indexOf('\n### ', start + 1);
+      const upgrade = rc1.slice(start, end === -1 ? undefined : end);
+      const bullet = buildNote(upgrade);
+      expect(buildNote(rc3)).toBeDefined();
+      expect(bullet).toBeDefined();
+      expect(bullet?.startsWith('- ')).toBe(true);
+      expect(buildNote(rc3)).toContain('arm64');
+      expect(bullet).toContain('arm64');
+    });
+
+    it('passes the marker check at 0.8.0-rc.3', () => {
+      expect(markerProblems(text, '0.8.0-rc.3')).toEqual([]);
+    });
+  });
+
   describe('released section 0.7.0', () => {
     const section = (() => {
       const start = text.indexOf('## 0.7.0\n');

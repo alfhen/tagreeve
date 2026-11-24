@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.0-rc.3
+
+The third release candidate, after the rc.2 field test. Install it with `npm i -g tagreeve@next`. It has no new command. The record stays at schema version 5. To go back to the final release, run `npm i -g tagreeve`.
+
+- Server container: a Meta Conversions API call links by event ID (of at least 8 characters) to a pixel hit sent up to 5 s after the call, when no consent epoch starts between the call and the hit. A hit across a consent change still does not link (#1641, #1639).
+- On arm64 (Apple silicon), run `tagreeve server-container build` after `npm i -g tagreeve@next`. A run with `--server-container` exits 2 with "The image tagreeve-sgtm:<version> is not available" until the image for that version exists. On amd64 the command builds nothing.
+
+### Known in 0.8.0-rc.3
+
+- A server GA4 hit behind a container that answers before its call stays `probable` (#1640), so its identifier routes warn with `serverSendProbableLink`.
+
 ## 0.8.0-rc.2
 
 The second release candidate, after the rc.1 field test. Install it with `npm i -g tagreeve@next`. It has no new command. The record stays at schema version 5. To go back to the final release, run `npm i -g tagreeve`.
@@ -44,6 +55,7 @@ The first release candidate of 0.8.0. Install it with `npm i -g tagreeve@next`. 
 - **The identity matcher is stricter.** It counts only a whole email or phone value, so a run can show a foreign value that 0.7.0 hid.
 - **A moved `dataLayer` path is one line in `diff`.** `diff --json` gets `dataLayer.pathsMoved`.
 - **Server hits are recorded for `*.google-analytics.com`.** Since #1622 the local container's own GA4 calls to `*.google-analytics.com` are recorded, so a rule such as `mustNot: { vendor: ga4, host: region1.google-analytics.com }` now matches server hits too. Add `sentBy: browser` to keep it to browser hits.
+- **A new release needs a new server image.** On arm64 (Apple silicon), run `tagreeve server-container build` after `npm i -g tagreeve@next`. A run with `--server-container` exits 2 with "The image tagreeve-sgtm:<version> is not available" until the image for that version exists. On amd64 the command builds nothing.
 - **The record stays at version 5.** A 0.7.0 record reads as before.
 
 ### Known in 0.8.0-rc.1
