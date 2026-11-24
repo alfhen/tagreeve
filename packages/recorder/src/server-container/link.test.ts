@@ -535,15 +535,16 @@ describe('rule 1: a later browser hit in the same consent epoch', () => {
   test('(a) a hit 900 ms after the call, in the same epoch, links exact', () => {
     const p = pix(1900);
     expect(p[1].t).toBe(1900);
-    expect(run([p], [0]).via).toEqual({ hitId: p[1].id, by: 'eventId', confidence: 'exact' });
+    const epochStarts = [0];
+    expect(run([p], epochStarts).via).toEqual({ hitId: p[1].id, by: 'eventId', confidence: 'exact' });
   });
 
   test('(b) an epoch starting between the call and the hit blocks the link', () => {
     const p = pix(1900);
-    const starts = [0, 1500];
+    const epochStarts = [0, 1500];
     expect(p[1].t).toBe(1900);
-    expect(starts).toContain(1500);
-    const out = run([p], starts);
+    expect(epochStarts).toContain(1500);
+    const out = run([p], epochStarts);
     expect(isExact(out)).toBe(false);
     expect(out.linkMiss?.eventId).toBe('noMatch');
   });
@@ -551,13 +552,15 @@ describe('rule 1: a later browser hit in the same consent epoch', () => {
   test('(c) a hit 6000 ms after the call does not link', () => {
     const p = pix(7000);
     expect(p[1].t).toBe(7000);
-    const out = run([p], [0]);
+    const epochStarts = [0];
+    const out = run([p], epochStarts);
     expect(isExact(out)).toBe(false);
     expect(out.linkMiss?.eventId).toBe('noMatch');
   });
 
   test('(d) one hit before and one after in the same epoch give several', () => {
-    const out = run([pix(900), pix(1900)], [0]);
+    const epochStarts = [0];
+    const out = run([pix(900), pix(1900)], epochStarts);
     expect(isExact(out)).toBe(false);
     expect(out.linkMiss?.eventId).toBe('several');
   });
@@ -566,6 +569,19 @@ describe('rule 1: a later browser hit in the same consent epoch', () => {
     const p = pix(1900);
     expect(p[1].t).toBe(1900);
     const out = run([p]);
+    expect(isExact(out)).toBe(false);
+    expect(out.linkMiss?.eventId).toBe('noMatch');
+  });
+
+  test('a later hit with an event ID shorter than 8 characters does not link', () => {
+    const id = 'evt1234';
+    const r = request(`https://www.facebook.com/tr/?id=1&ev=Purchase&eid=${id}`, { t: 1900, method: 'GET' });
+    const h = hit(r, 'meta', 'Purchase', 1900, { eid: id });
+    const req = serverRequest('https://graph.facebook.com/v21.0/1/events', { t: 1000 });
+    const c = hit(req, 'meta-capi', 'Purchase', 1000, { eventId: id });
+    expect(id.length).toBeLessThan(8);
+    const epochStarts = [0];
+    const out = linkServerHits({ hits: [h, c], requests: [r, req], serverHosts: hosts, identity, epochStarts })[1]!;
     expect(isExact(out)).toBe(false);
     expect(out.linkMiss?.eventId).toBe('noMatch');
   });

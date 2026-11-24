@@ -103,7 +103,7 @@ function sharedKind(server: Facts, browser: Facts): 'eventId' | 'clientId' | 'id
 
 /**
  * Adds `via` to each hit decoded from a server container call. The proxy cannot see which browser hit led to a call,
- * so the first rule that fits decides: (1) the event ID and event name match exactly one browser hit sent at or before the call (at its request time, when that is known), or sent after the call, at most 5000 ms after it, with no consent epoch starting after the call and at or before that hit (needs `epochStarts`), `exact`; two or more such hits give no exact link;
+ * so the first rule that fits decides: (1) the event ID and event name match exactly one browser hit sent at or before the call (at its request time, when that is known), or sent after the call, at most 5000 ms after it, with an event ID of at least 8 characters and no consent epoch starting after the call and at or before that hit (needs `epochStarts`), `exact`; two or more such hits give no exact link;
  * (2) the client ID and event name match exactly one browser hit to a `serverHosts` host sent before the call, and its request to the
  * container was still in flight when the call arrived, `exact`; two or more such hits, in flight or answered, give no exact link, and neither does another
  * container-routed request that shares a client ID or has no decoded hit and was sent in between (`concurrentRequest`);
@@ -159,7 +159,7 @@ export function linkServerHits({ hits, requests, serverHosts, identity, inFlight
             if (b.eventId !== f.eventId || b.hit.event !== f.hit.event) return false;
             if (callAt === undefined) return true;
             const sentAt = sentAtOf(b.hit.requestId, b.hit.t);
-            return sentAt <= callAt || (epochEnd !== undefined && sentAt - callAt <= LATER_HIT_WINDOW_MS && sentAt < epochEnd);
+            return sentAt <= callAt || (epochEnd !== undefined && f.eventId!.length >= MIN_VALUE_LENGTH && sentAt - callAt <= LATER_HIT_WINDOW_MS && sentAt < epochEnd);
           });
     if (exact.length === 1) return { ...f.hit, via: { hitId: exact[0]!.hit.id, by: 'eventId', confidence: 'exact' } };
     const eventIdMiss: HitLinkMiss['eventId'] = f.eventId === undefined || f.hit.event === null ? 'none' : exact.length === 0 ? 'noMatch' : 'several';
