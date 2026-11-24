@@ -1240,9 +1240,27 @@ function builtInChecks(
 
 const DENIABLE = ['analytics', 'ads', 'adUserData'] as const;
 
-/** Unlinked server hits that carry identifiers, or whose identifiers cannot be read. No consent state applies to them. */
-function unjudgedIdentifiers(ctx: Context): Hit[] {
+/** Unlinked server hits that carry identifiers, or whose identifiers cannot be read. */
+function unlinkedWithIdentifiers(ctx: Context): Hit[] {
   return ctx.hits.filter((h) => isUnlinkedServerHit(h, ctx.index) && (!h.idFields || !h.fields || h.idFields.length > 0 || h.fieldsComplete === false));
+}
+
+/** An unlinked hit sent in a granted epoch is judged by its own send time. A Google hit that states its own consent must not state a field that is not granted. */
+function judgedBySendTime(hit: Hit, ctx: Context): boolean {
+  if (epochForHit(ctx.epochs, hit.t, ctx.grace)?.label !== 'granted') return false;
+  const own = GOOGLE_VENDORS.has(hit.vendor) && consentFields.some((f) => hit.consent[f] !== 'unknown');
+  return !own || consentFields.every((f) => hit.consent[f] === 'granted');
+}
+
+/** Unlinked server hits that carry identifiers and have no consent state to be judged by. No consent state applies to them. */
+function unjudgedIdentifiers(ctx: Context): Hit[] {
+  return unlinkedWithIdentifiers(ctx).filter((h) => !judgedBySendTime(h, ctx));
+}
+
+function sendTimeNote(ctx: Context): string {
+  const n = unlinkedWithIdentifiers(ctx).filter((h) => judgedBySendTime(h, ctx)).length;
+  if (n === 0) return '';
+  return ` ${n} unlinked server hit${n === 1 ? '' : 's'} judged by ${n === 1 ? 'its' : 'their'} send time (granted).`;
 }
 
 function cannotJudgeUnlinked(hits: readonly Hit[], when: string): { evidence: string[]; message: string } {
@@ -1317,7 +1335,7 @@ function deniedIdentifiersCheck(
     const { evidence, message } = cannotJudgeUnlinked(unjudged, 'for denied consent');
     add('deniedIdentifiers', false, evidence, message, 'serverSendUnlinked');
   } else {
-    add('deniedIdentifiers', true, [], 'Expected no identifiers on hits sent while consent is denied, found none.');
+    add('deniedIdentifiers', true, [], `Expected no identifiers on hits sent while consent is denied, found none.${sendTimeNote(ctx)}`);
   }
 }
 
@@ -1380,7 +1398,7 @@ function earlyIdentifiersCheck(
     const { evidence, message } = cannotJudgeUnlinked(unjudged, 'before the consent answer');
     add('earlyIdentifiers', false, evidence, message, 'serverSendUnlinked');
   } else {
-    add('earlyIdentifiers', true, [], 'Expected no identifiers on hits sent before the consent answer, found none.');
+    add('earlyIdentifiers', true, [], `Expected no identifiers on hits sent before the consent answer, found none.${sendTimeNote(ctx)}`);
   }
 }
 

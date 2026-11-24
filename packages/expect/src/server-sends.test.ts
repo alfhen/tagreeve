@@ -111,7 +111,7 @@ describe('deniedIdentifiers on a server hit', () => {
   test('a probable leak next to an unlinked hit with identifiers warns with serverSendUnlinked', () => {
     const via = browser(500);
     const probable = capi(1200, link(via, 'probable'));
-    const unlinked = capi(1300, undefined);
+    const unlinked = capi(900, undefined);
     const result = check(run('', [via, probable, unlinked]), 'deniedIdentifiers');
     expect(result).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked' });
     expect(result.evidence).toEqual(expect.arrayContaining([probable.hit.id, unlinked.hit.id]));
@@ -139,6 +139,76 @@ describe('deniedIdentifiers on a server hit', () => {
     for (const name of ['deniedIdentifiers', 'earlyIdentifiers']) {
       expect(check(results, name)).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked', evidence: [sent.hit.id] });
     }
+  });
+
+  describe('an unlinked hit judged by its send time', () => {
+    const states = { granted, denied };
+    const timeline: EvalEpoch[] = [
+      { type: 'consentEpoch', id: newId('consentEpoch'), runId, startT: 0, endT: 6540, source: 'test', label: 'undecided', state: { ...unknown, analytics: 'unknown' } },
+      { type: 'consentEpoch', id: newId('consentEpoch'), runId, startT: 6540, endT: 7680, source: 'test', label: 'granted', state: states.granted },
+      { type: 'consentEpoch', id: newId('consentEpoch'), runId, startT: 7680, endT: null, source: 'test', label: 'withdrawn', state: states.denied },
+    ];
+    const runTimeline = (pairs: Pair[]) =>
+      evaluate([...pairs.flatMap((p) => [p.hit, p.req]), ...timeline] as never, parseScenario('start: /\n'), { identity });
+    const names = ['deniedIdentifiers', 'earlyIdentifiers'];
+
+    test('sent in the granted epoch it passes with no note and the message counts it', () => {
+      for (const t of [6720, 6500, 7650]) {
+        const results = runTimeline([capi(t, undefined)]);
+        for (const name of names) {
+          const r = check(results, name);
+          expect(r).toMatchObject({ pass: true, evidence: [] });
+          expect(r.note).toBeUndefined();
+          expect(r.message).toContain('1 unlinked server hit judged by its send time (granted)');
+        }
+      }
+    });
+
+    test('sent after the withdrawal it stays cannot evaluate', () => {
+      for (const t of [7900, 7680]) {
+        const sent = capi(t, undefined);
+        for (const name of names) {
+          expect(check(runTimeline([sent]), name)).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked', evidence: [sent.hit.id] });
+        }
+      }
+    });
+
+    test('sent before the grant, outside the grace window, it stays cannot evaluate', () => {
+      for (const t of [6000, 6480]) {
+        const sent = capi(t, undefined);
+        for (const name of names) {
+          expect(check(runTimeline([sent]), name)).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked', evidence: [sent.hit.id] });
+        }
+      }
+    });
+
+    test('one hit in the granted epoch and one after the withdrawal: only the second is unjudged', () => {
+      const late = capi(7900, undefined);
+      const results = runTimeline([capi(6720, undefined), late]);
+      for (const name of names) {
+        const r = check(results, name);
+        expect(r).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked', evidence: [late.hit.id] });
+        expect(r.message).toContain('Cannot evaluate: 1 server container hit has no link');
+      }
+    });
+
+    test('a linked hit is judged by its via hit, not its send time', () => {
+      const via = browser(7900);
+      const sent = capi(6720, link(via, 'exact'));
+      const results = runTimeline([via, sent]);
+      expect(check(results, 'deniedIdentifiers')).toMatchObject({ pass: false, severity: 'fail', evidence: [sent.hit.id] });
+      expect(check(results, 'earlyIdentifiers').message).not.toContain('send time');
+    });
+
+    test('a Google hit with its own consent is held to it, any other vendor is not', () => {
+      const own = { ...granted, ads: 'denied' } as const;
+      const google = capi(6720, undefined, { vendor: 'ga4', consent: own });
+      for (const name of names) expect(check(runTimeline([google]), name)).toMatchObject({ pass: false, note: 'serverSendUnlinked' });
+      const meta = capi(6720, undefined, { consent: own });
+      for (const name of names) expect(check(runTimeline([meta]), name)).toMatchObject({ pass: true });
+      const clean = capi(6720, undefined, { vendor: 'ga4', consent: granted });
+      for (const name of names) expect(check(runTimeline([clean]), name)).toMatchObject({ pass: true });
+    });
   });
 
   test('an unreadable browser hit keeps its result and severity next to an unlinked server hit', () => {
