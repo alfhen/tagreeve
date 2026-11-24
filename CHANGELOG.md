@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0-rc.4
+
+The fourth release candidate, after the rc.3 field test. Install it with `npm i -g tagreeve@next`. It has no new command. The record stays at schema version 5. To go back to the final release, run `npm i -g tagreeve`.
+
+- Server container: for `deniedIdentifiers` and `earlyIdentifiers`, an unlinked server call is judged by its own send time when its epoch is granted in both the label and the consent state. A Google hit that states its own consent must state every field granted. The pass message counts it as judged by its send time (granted). A call sent in a denied, undecided, mixed or withdrawn epoch, or in none, stays `cannot evaluate` with `serverSendUnlinked` (#1645, #1644).
+- On arm64 (Apple silicon), run `tagreeve server-container build` after `npm i -g tagreeve@next`. A run with `--server-container` exits 2 with "The image tagreeve-sgtm:<version> is not available" until the image for that version exists. On amd64 the command builds nothing.
+
+### Known in 0.8.0-rc.4
+
+- A server GA4 hit behind a container that answers before its call stays `probable` (#1640), so its identifier routes warn with `serverSendProbableLink`.
+- A Pinterest Conversions API call to api.pinterest.com gets no link to a browser hit, so its identifier routes warn under accept.
+
 ## 0.8.0-rc.3
 
 The third release candidate, after the rc.2 field test. Install it with `npm i -g tagreeve@next`. It has no new command. The record stays at schema version 5. To go back to the final release, run `npm i -g tagreeve`.

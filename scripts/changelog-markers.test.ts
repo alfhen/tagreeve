@@ -158,6 +158,42 @@ describe('CHANGELOG.md', () => {
     });
   });
 
+  describe('0.8.0-rc.4', () => {
+    const sectionOf = (version: string) => {
+      const start = text.indexOf(`## ${version}\n`);
+      const next = text.indexOf('\n## ', start + 1);
+      return start === -1 ? '' : text.slice(start, next === -1 ? undefined : next);
+    };
+    const rc4 = sectionOf('0.8.0-rc.4');
+
+    it('has the rc.4 section above rc.3 with the install line', () => {
+      expect(rc4).not.toBe('');
+      expect(text.indexOf('## 0.8.0-rc.4\n')).toBeLessThan(text.indexOf('## 0.8.0-rc.3\n'));
+      expect(rc4).toContain('Install it with `npm i -g tagreeve@next`.');
+    });
+
+    it('names #1645, #1644 and serverSendUnlinked in rc.4', () => {
+      for (const word of ['#1645', '#1644', '`serverSendUnlinked`']) expect(rc4).toContain(word);
+    });
+
+    it('has a Known in 0.8.0-rc.4 part that names #1640 and api.pinterest.com', () => {
+      const at = rc4.indexOf('Known in 0.8.0-rc.4');
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(rc4.slice(at)).toContain('#1640');
+      expect(rc4.slice(at)).toContain('api.pinterest.com');
+    });
+
+    it('has the arm64 server image note in rc.4', () => {
+      const note = rc4.split('\n').find((l) => l.includes('`tagreeve server-container build`') && l.includes('is not available'));
+      expect(note).toBeDefined();
+      expect(note).toContain('arm64');
+    });
+
+    it('passes the marker check at 0.8.0-rc.4', () => {
+      expect(markerProblems(text, '0.8.0-rc.4')).toEqual([]);
+    });
+  });
+
   describe('0.8.0-rc.3', () => {
     const sectionOf = (version: string) => {
       const start = text.indexOf(`## ${version}\n`);
