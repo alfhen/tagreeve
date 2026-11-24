@@ -158,6 +158,51 @@ describe('CHANGELOG.md', () => {
     });
   });
 
+  describe('0.8.0', () => {
+    const sectionOf = (version: string) => {
+      const start = text.indexOf(`## ${version}\n`);
+      const next = text.indexOf('\n## ', start + 1);
+      return start === -1 ? '' : text.slice(start, next === -1 ? undefined : next);
+    };
+    const final = sectionOf('0.8.0');
+    const partOf = (heading: string) => {
+      const start = final.indexOf(`### ${heading}\n`);
+      const end = final.indexOf('\n### ', start + 1);
+      return start === -1 ? '' : final.slice(start, end === -1 ? undefined : end);
+    };
+
+    it('has the 0.8.0 section above rc.4 with the final install line', () => {
+      expect(final).not.toBe('');
+      expect(text.indexOf('## 0.8.0\n')).toBeLessThan(text.indexOf('## 0.8.0-rc.4\n'));
+      expect(final).toContain('`npm i -g tagreeve`');
+      expect(final).not.toContain('@next');
+    });
+
+    it('has an Upgrading from 0.7.0 part with the sentBy browser and server image notes', () => {
+      const upgrade = partOf('Upgrading from 0.7.0');
+      expect(upgrade).not.toBe('');
+      const note = upgrade.split('\n').find((l) => l.includes('sentBy: browser'));
+      expect(note).toContain('google-analytics.com');
+      expect(upgrade).toContain('`tagreeve server-container build`');
+    });
+
+    it('has a Known in 0.8.0 part that names #1640, #1648 and #1606', () => {
+      const known = partOf('Known in 0.8.0');
+      expect(known).not.toBe('');
+      for (const issue of ['#1640', '#1648', '#1606']) expect(known).toContain(issue);
+    });
+
+    it('is not older than the package version and passes the marker check', () => {
+      const final080 = parseVersion(versionHeading.exec('## 0.8.0')!);
+      expect(isOlder(final080, parseVersion(versionHeading.exec(`## ${pkg.version}`)!))).toBe(false);
+      expect(markerProblems(text, '0.8.0')).toEqual([]);
+    });
+
+    it('has a package version of at least 0.8.0', () => {
+      expect(isOlder(parseVersion(versionHeading.exec(`## ${pkg.version}`)!), parseVersion(versionHeading.exec('## 0.8.0')!))).toBe(false);
+    });
+  });
+
   describe('0.8.0-rc.4', () => {
     const sectionOf = (version: string) => {
       const start = text.indexOf(`## ${version}\n`);
