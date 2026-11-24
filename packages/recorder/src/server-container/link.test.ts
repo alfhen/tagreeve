@@ -507,3 +507,66 @@ describe('linkMiss', () => {
     expect(text).not.toContain('evt-');
   });
 });
+
+describe('rule 1: a later browser hit in the same consent epoch', () => {
+  const pix = (t: number) => {
+    const r = request('https://www.facebook.com/tr/?id=1&ev=Purchase&eid=evt-12345678', { t, method: 'GET' });
+    return [r, hit(r, 'meta', 'Purchase', t, { eid: 'evt-12345678' })] as const;
+  };
+  const run = (pixels: Array<readonly [Request, Hit]>, epochStarts?: number[]) => {
+    const req = serverRequest('https://graph.facebook.com/v21.0/1/events', { t: 1000 });
+    const c = hit(req, 'meta-capi', 'Purchase', 1000, { eventId: 'evt-12345678' });
+    expect(req.t).toBe(1000);
+    for (const [, h] of pixels) {
+      expect(h.params.eid).toBe(c.params.eventId);
+      expect(h.event).toBe(c.event);
+    }
+    const out = linkServerHits({
+      hits: [...pixels.map(([, h]) => h), c],
+      requests: [...pixels.map(([r]) => r), req],
+      serverHosts: hosts,
+      identity,
+      ...(epochStarts ? { epochStarts } : {}),
+    });
+    return out[out.length - 1]!;
+  };
+  const isExact = (h: Hit) => h.via?.by === 'eventId' && h.via.confidence === 'exact';
+
+  test('(a) a hit 900 ms after the call, in the same epoch, links exact', () => {
+    const p = pix(1900);
+    expect(p[1].t).toBe(1900);
+    expect(run([p], [0]).via).toEqual({ hitId: p[1].id, by: 'eventId', confidence: 'exact' });
+  });
+
+  test('(b) an epoch starting between the call and the hit blocks the link', () => {
+    const p = pix(1900);
+    const starts = [0, 1500];
+    expect(p[1].t).toBe(1900);
+    expect(starts).toContain(1500);
+    const out = run([p], starts);
+    expect(isExact(out)).toBe(false);
+    expect(out.linkMiss?.eventId).toBe('noMatch');
+  });
+
+  test('(c) a hit 6000 ms after the call does not link', () => {
+    const p = pix(7000);
+    expect(p[1].t).toBe(7000);
+    const out = run([p], [0]);
+    expect(isExact(out)).toBe(false);
+    expect(out.linkMiss?.eventId).toBe('noMatch');
+  });
+
+  test('(d) one hit before and one after in the same epoch give several', () => {
+    const out = run([pix(900), pix(1900)], [0]);
+    expect(isExact(out)).toBe(false);
+    expect(out.linkMiss?.eventId).toBe('several');
+  });
+
+  test('(e) without epoch starts a later hit does not link', () => {
+    const p = pix(1900);
+    expect(p[1].t).toBe(1900);
+    const out = run([p]);
+    expect(isExact(out)).toBe(false);
+    expect(out.linkMiss?.eventId).toBe('noMatch');
+  });
+});

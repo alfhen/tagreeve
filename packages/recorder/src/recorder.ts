@@ -1141,7 +1141,8 @@ export class Recorder {
     }
     const requests = [...this.requests.values(), ...this.extraRequests];
     let hits: Hit[] = requests.flatMap((r) => decodeRequest(r, undefined, this.trackers));
-    if (this.session) hits = linkServerHits({ hits, requests, serverHosts: this.options.serverHosts ?? [], identity: this.run.identity, inFlight: this.containerFlights });
+    const consentEpochs = this.buildConsentEpochs();
+    if (this.session) hits = linkServerHits({ hits, requests, serverHosts: this.options.serverHosts ?? [], identity: this.run.identity, inFlight: this.containerFlights, epochStarts: consentEpochs.map((e) => e.startT) });
     const flags = buildFlags({
       runId: this.runId,
       networkMode: this.options.networkMode,
@@ -1172,7 +1173,6 @@ export class Recorder {
     if (notHooked) flags.push(notHooked);
     flags.push(...tallyFlags);
     this.recordServerContainer(requests, hits, containerCounts, flags);
-    const consentEpochs = this.buildConsentEpochs();
     let records: RunRecords = {
       run: this.run,
       steps: this.steps,
