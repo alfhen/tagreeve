@@ -114,3 +114,14 @@ test('the agent demo island gets only the story host, the prompt and the scenari
   }
   await context.close();
 });
+
+test('the hero badge shows the major.minor of the root package.json version', async () => {
+  const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string };
+  const [major, minor] = version.split('.');
+  const context = await newDocsContext(browser!);
+  const page = await context.newPage();
+  await page.goto(`${docsUrl}/`);
+  const badge = page.locator('section span', { hasText: ' · Chromium · MIT' }).first();
+  expect((await badge.textContent())?.trim()).toBe(`${major}.${minor} · Chromium · MIT`);
+  await context.close();
+});

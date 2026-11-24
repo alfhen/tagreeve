@@ -6,6 +6,8 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { PROMPT } from '../site/src/lib/prompt.ts';
 import { buildDocs, dist, docsUrl, newDocsContext, root } from './docs-test-helpers.ts';
 
+const releaseLine = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string }).version.split('.').slice(0, 2).join('.');
+
 let browser: Browser | undefined;
 
 beforeAll(async () => {
@@ -139,7 +141,7 @@ test('the home page has the hero and the footer, and the replay link dispatches 
   const page = await context.newPage();
   await page.goto(`${docsUrl}/`);
   await expect.poll(() => page.locator('h1').textContent()).toContain('"Should only take 5 minutes." Now it does.');
-  expect(await page.getByText('0.7 · Chromium · MIT').count()).toBe(1);
+  expect(await page.getByText(`${releaseLine} · Chromium · MIT`).count()).toBe(1);
   expect(await page.getByText('tagreeve · MIT · runs on infrastructure you control').count()).toBe(1);
   await page.evaluate(() => {
     (window as unknown as { replays: number }).replays = 0;
