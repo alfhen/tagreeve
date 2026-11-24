@@ -131,7 +131,7 @@ A Stape loader request packs the GA4 query into one encoded parameter. Tagreeve 
 | --- | --- | --- | --- |
 | Event ID | `eventId` | `none` | The call has no event ID or no event name. The container may not pass `event_id` on. |
 | | | `noMatch` | No browser hit sent at or before the call, or after it within 5000 ms with no consent epoch starting in between, has that event ID and event name. |
-| | | `several` | More than one browser hit sent before the call has them. |
+| | | `several` | More than one browser hit that counts for the link (see above) has them. |
 | Client ID | `clientId` | `noClientId` | The call has no event name or no client ID of at least 8 characters. |
 | | | `noSameKeyHit` | No earlier browser hit to a `serverHosts` host has that client ID and event name. |
 | | | `severalSameKeyHits` | Two or more do. |
