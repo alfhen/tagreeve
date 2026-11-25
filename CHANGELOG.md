@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.9.0-rc.1
+
+The first release candidate of 0.9.0. Install it with `npm i -g tagreeve@next`. It has no new command or option. The record stays at schema version 5. To go back to the final release, run `npm i -g tagreeve`.
+
+### What 0.9.0-rc.1 adds
+
+- Decode Pinterest Conversions API calls from server containers as `pinterest-capi`, and link them to browser hits by event ID (#1648, #1663).
+
+### Fixes in 0.9.0-rc.1
+
+- Server container: a call that arrives up to 2000 ms after its one same-key hit was answered, with no other same-client request or consent change between, is now an exact client-ID link, so a rule that only warned on it can now fail the run (#1640, #1659).
+- Canaries: a control character inside a reserved name is refused, a `#` in an unused variable no longer refuses the run, and padded Base64 SHA-256 digests of canary and identity values now match (#1612, #1660).
+- Consent matrix keeps event names with spaces or colons when they read as names (#1611, #1661).
+- `dataLayer`: an iframe loader is bounded by a main-frame navigation of its page. A popup's first document request now has a frame, so a main-frame loader followed only by a popup navigation can warn (#1591, #1664).
+
+### Upgrading from 0.8
+
+- **Some warnings are now failures.** A server call behind a container that answers first, with one same-key hit and no concurrent request or consent change, is `exact`. A `mustNot`, `deniedIdentifiers`, `earlyIdentifiers` or `identifierRoute` result that was a `serverSendProbableLink` warning is now a judged link that can fail the run and exit 1.
+- **`answeredBefore` and `concurrentRequest` cover different calls.** `answeredBefore` keeps its meaning and covers fewer calls: only a call more than 2000 ms after the answer, after a consent change, or with no answer time. An answered call with a concurrent request is now `concurrentRequest` where it was `answeredBefore`. Scripts that count either reason in `serverContainer.notExact` see different numbers.
+- **A new vendor, `pinterest-capi`.** A baseline made before 0.9.0 shows added hits for a run that records the call. A rule for `vendor: pinterest` is not changed. A custom tracker-list entry with the vendor key `pinterest-capi` is now refused, as for any decoder key. A browser request to `api.pinterest.com/v5/.../events` is now stubbed in `stub` mode, and its hit replaces the unknown destination flag.
+- **`Request.frame` has an optional `page`.** The schema version stays 5. A script that compares frames with strict equality sees one more key. A record made before 0.9.0 reads as before.
+- **Stored event names change.** A spaced or coloned event name that read `(other)` in a stored suite now reads as itself, so a `suite.json` made by 0.8 differs in `events` and `notInAccept`.
+- **A canary can newly fail a run.** A padded Base64 SHA-256 digest of a canary value, or of the identity email or phone, that was in a request before and went unseen is now found. A route flag for it reads transform `other`.
+- **A new release needs a new server image.** On arm64 (Apple silicon), run `tagreeve server-container build` after `npm i -g tagreeve@next`. A run with `--server-container` exits 2 with "The image tagreeve-sgtm:<version> is not available" until the image for that version exists. On amd64 the command builds nothing.
+
+### Known in 0.9.0-rc.1
+
+Issues still open that you can meet, in addition to those in 0.7.0:
+
+- The canary search reads only the forms it lists. It skips gzip and binary bodies, bodies cut at 64 KiB and net-log requests with no body, and it does not search headers. A pass means no planted value was found in the searched forms.
+- The Stape loader unwrap covers `/g/collect` and `/data`. Stape's hosting layer may act on a loader request in other ways, and the record says so in fixed text.
+
 ## 0.8.1
 
 `npm i -g tagreeve` installs this release. 0.8.1 is a patch release after 0.8.0. It has no new command, option or record field. The record stays at schema version 5. A 0.8.0 record reads as before.
