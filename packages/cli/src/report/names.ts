@@ -4,6 +4,7 @@ export const VENDOR_NAMES: Readonly<Record<string, string>> = {
   meta: 'Meta',
   'meta-capi': 'Meta Conversions API',
   pinterest: 'Pinterest',
+  'pinterest-capi': 'Pinterest Conversions API',
   sgtm: 'server container',
   linkedin: 'LinkedIn',
   'microsoft-uet': 'Microsoft UET',

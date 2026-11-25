@@ -1,0 +1,41 @@
+[
+  {
+    "method": "POST",
+    "url": "https://api.pinterest.com/v5/ad_accounts/100000000000002/events",
+    "resourceType": "fetch",
+    "body": {
+      "data": [
+        {
+          "event_name": "add_to_cart",
+          "action_source": "web",
+          "event_time": 1700000000,
+          "event_id": "pw-pin-event-1",
+          "event_source_url": "https://shop.example.com/product",
+          "user_data": {
+            "em": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+          },
+          "custom_data": {
+            "currency": "USD",
+            "value": "19.50",
+            "num_items": 1
+          }
+        },
+        {
+          "event_name": "page_visit",
+          "action_source": "web",
+          "event_time": 1700000001,
+          "event_id": "pw-pin-event-2",
+          "event_source_url": "https://shop.example.com/"
+        }
+      ]
+    },
+    "response": {
+      "num_events_received": 2,
+      "num_events_processed": 2,
+      "events": [
+        { "status": "processed", "error_message": "" },
+        { "status": "processed", "error_message": "" }
+      ]
+    }
+  }
+]

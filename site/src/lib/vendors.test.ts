@@ -26,6 +26,7 @@ const samples: Request[] = [
   req('https://www.googleadservices.com/pagead/conversion/000000001/?label=fake-label'),
   req('https://www.facebook.com/tr?id=100000000000001&ev=PageView'),
   req('https://ct.pinterest.com/v3/?tid=2612345678901&event=init'),
+  req('https://api.pinterest.com/v5/ad_accounts/100000000000002/events', 'POST', JSON.stringify({ data: [{ event_name: 'add_to_cart' }] })),
   req('https://shop.example.com/data?v=2&event=page_view'),
   req('https://graph.facebook.com/v19.0/100000000000001/events', 'POST', JSON.stringify({ data: [{ event_name: 'Purchase' }] })),
 ];

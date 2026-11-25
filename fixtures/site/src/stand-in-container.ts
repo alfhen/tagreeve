@@ -7,6 +7,8 @@ import tls from 'node:tls';
 import { fileURLToPath } from 'node:url';
 
 export const FIXTURE_AUTH = 'pw-fixture-auth';
+export const FIXTURE_PINTEREST_TOKEN = 'pw-fixture-pinterest-token';
+const PINTEREST_URL = 'https://api.pinterest.com/v5/ad_accounts/100000000000002/events';
 const CONTAINER_URL = `https://www.googletagmanager.com/server.js?id=GTM-PWTEST1&gtm_auth=${FIXTURE_AUTH}`;
 const DESTINATION_URL = 'https://www.googletagmanager.com/s/gtag/destination?id=G-PWTEST0001';
 const TRIGGER_PATHS = new Set(['/g/collect', '/pixel', '/capi']);
@@ -32,6 +34,7 @@ interface HitFields {
   email: string;
   clientId: string | undefined;
   copyGa4: boolean;
+  pinterestEvent: string | undefined;
 }
 
 /**
@@ -57,7 +60,7 @@ export function createStandIn(env: StandInEnv, options: { readonly socketTimeout
     return work;
   }
 
-  function viaProxy(method: string, target: string, body?: string): Promise<Reply> {
+  function viaProxy(method: string, target: string, body?: string, extraHeaders: Record<string, string> = {}): Promise<Reply> {
     return new Promise((resolveReply, rejectReply) => {
       if (!proxyUrl || ca === undefined) {
         rejectReply(new Error('HTTP_PROXY and NODE_EXTRA_CA_CERTS are needed'));
@@ -108,7 +111,7 @@ export function createStandIn(env: StandInEnv, options: { readonly socketTimeout
         }
         const secure = use(tls.connect({ socket, host: url.hostname, servername: url.hostname, ca }));
         secure.on('error', reject);
-        const headers: Record<string, string | number> = body === undefined ? {} : { 'content-type': 'text/plain', 'content-length': Buffer.byteLength(body) };
+        const headers: Record<string, string | number> = body === undefined ? { ...extraHeaders } : { 'content-type': 'text/plain', 'content-length': Buffer.byteLength(body), ...extraHeaders };
         // The agent hands out only the tunnel, and the lookup fails, so a request can never open a direct connection.
         const agent = new http.Agent({ keepAlive: false });
         agent.createConnection = () => secure;
@@ -172,6 +175,7 @@ export function createStandIn(env: StandInEnv, options: { readonly socketTimeout
       email: pick('email', 'em') ?? 'pw-fixture@example.invalid',
       clientId: copyGa4 ? pick('cid', 'client_id') : undefined,
       copyGa4,
+      pinterestEvent: url.searchParams.get('pinterest') || undefined,
     };
   }
 
@@ -200,6 +204,23 @@ export function createStandIn(env: StandInEnv, options: { readonly socketTimeout
         console.error(`Vendor call failed: ${error instanceof Error ? error.message : String(error)}`);
       });
     }
+    if (fields.pinterestEvent === undefined) return;
+    const pinterest = JSON.stringify({
+      data: [
+        {
+          event_name: fields.pinterestEvent,
+          action_source: 'web',
+          event_time: 1_700_000_000,
+          event_id: fields.eventId,
+          event_source_url: 'https://shop.example.com/product',
+          user_data: { em: [hashed] },
+        },
+      ],
+    });
+    console.error(`Calling ${PINTEREST_URL}`);
+    await viaProxy('POST', PINTEREST_URL, pinterest, { 'content-type': 'application/json', authorization: `Bearer ${FIXTURE_PINTEREST_TOKEN}` }).catch((error: unknown) => {
+      console.error(`Vendor call failed: ${error instanceof Error ? error.message : String(error)}`);
+    });
   }
 
   const server = http.createServer((req, res) => {

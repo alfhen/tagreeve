@@ -27,6 +27,7 @@ const samples: Request[] = [
   req('https://www.facebook.com/tr?id=100000000000001&ev=PageView'),
   req('https://graph.facebook.com/v21.0/100000000000001/events', { method: 'POST', resourceType: 'fetch', postData: '{"data":[{"event_name":"Lead"}]}' }),
   req('https://ct.pinterest.com/v3/?tid=2612345678901&event=init'),
+  req('https://api.pinterest.com/v5/ad_accounts/100000000000002/events', { method: 'POST', resourceType: 'fetch', postData: '{"data":[{"event_name":"add_to_cart"}]}' }),
   req('https://shop.example.com/data?v=2&event=page_view'),
 ];
 

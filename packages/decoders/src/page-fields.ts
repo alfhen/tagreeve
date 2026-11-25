@@ -6,6 +6,7 @@ export const PAGE_FIELDS = {
   meta: { page: ['dl'], referrer: ['rl'] },
   'meta-capi': { page: ['event_source_url'], referrer: [] },
   pinterest: { page: [PINTEREST_PAGE], referrer: [] },
+  'pinterest-capi': { page: ['event_source_url'], referrer: [] },
   sgtm: { page: ['page_location'], referrer: [] },
   tracker: { page: ['dl', 'page_location', 'page_url', 'url', 'u', 'loc', 'href'], referrer: [] },
 } as const;

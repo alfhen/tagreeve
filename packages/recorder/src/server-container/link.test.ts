@@ -49,6 +49,47 @@ describe('rule 1: event ID and event name', () => {
     expect(link([[pixelReq, pixel], [capiReq, capi]])[1]).toEqual({ hitId: pixel.id, by: 'eventId', confidence: 'probable' });
   });
 
+  describe('a Pinterest call and a Pinterest tag hit', () => {
+    const tagReq = request('https://ct.pinterest.com/v3/?event=addtocart', { t: 10 });
+    const pin = (vendor: string, event: string, eventId: string, over: Partial<Request> = {}) => {
+      const req = vendor === 'pinterest-capi' ? serverRequest('https://api.pinterest.com/v5/ad_accounts/100000000000002/events', { t: 50, ...over }) : tagReq;
+      return [req, hit(req, vendor, event, req.t, { eventId })] as [Request, Hit];
+    };
+    const via = (browser: [Request, Hit], server: [Request, Hit]) => link([browser, server])[1];
+    const exact = (hitId: string) => ({ hitId, by: 'eventId', confidence: 'exact' });
+
+    test('names that differ in case and underscores are exact, and both events stay as sent', () => {
+      const tag = pin('pinterest', 'addtocart', 'pw-pin-event-1');
+      const call = pin('pinterest-capi', 'add_to_cart', 'pw-pin-event-1');
+      expect(via(tag, call)).toEqual(exact(tag[1].id));
+      expect(tag[1].event).toBe('addtocart');
+      expect(call[1].event).toBe('add_to_cart');
+    });
+
+    test('page_visit meets pagevisit, and checkout meets checkout', () => {
+      const t1 = pin('pinterest', 'pagevisit', 'pw-pin-event-2');
+      expect(via(t1, pin('pinterest-capi', 'page_visit', 'pw-pin-event-2'))).toEqual(exact(t1[1].id));
+      const t2 = pin('pinterest', 'checkout', 'pw-pin-event-3');
+      expect(via(t2, pin('pinterest-capi', 'checkout', 'pw-pin-event-3'))).toEqual(exact(t2[1].id));
+    });
+
+    test('another event ID is not exact', () => {
+      const tag = pin('pinterest', 'addtocart', 'pw-pin-event-9');
+      expect(via(tag, pin('pinterest-capi', 'add_to_cart', 'pw-pin-event-1'))?.confidence).not.toBe('exact');
+    });
+
+    test('the key is for the Pinterest pair only', () => {
+      const metaTag = [tagReq, hit(tagReq, 'meta', 'addtocart', 10, { eventId: 'pw-pin-event-1' })] as [Request, Hit];
+      expect(via(metaTag, pin('pinterest-capi', 'add_to_cart', 'pw-pin-event-1'))?.confidence).not.toBe('exact');
+      const tag = pin('pinterest', 'addtocart', 'pw-pin-event-1');
+      const metaCall = [serverRequest('https://graph.facebook.com/v21.0/1/events', { t: 50 })] as [Request];
+      expect(via(tag, [metaCall[0], hit(metaCall[0], 'meta-capi', 'add_to_cart', 50, { eventId: 'pw-pin-event-1' })])?.confidence).not.toBe('exact');
+      const ga = [tagReq, hit(tagReq, 'ga4', 'add_to_cart', 10, { eventId: 'pw-pin-event-1' })] as [Request, Hit];
+      const gaCall = serverRequest('https://www.google-analytics.com/g/collect', { t: 50 });
+      expect(via(ga, [gaCall, hit(gaCall, 'ga4', 'addtocart', 50, { eventId: 'pw-pin-event-1' })])?.confidence).not.toBe('exact');
+    });
+  });
+
   test('two browser hits with the same ID and name are not exact', () => {
     const other = hit(request('https://www.facebook.com/tr/?ev=Purchase&eid=evt-12345678', { t: 20 }), 'meta', 'Purchase', 20, { eid: 'evt-12345678' });
     const capiReq = serverRequest('https://graph.facebook.com/v21.0/1/events', { t: 50 });

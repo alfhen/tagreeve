@@ -133,6 +133,26 @@ test('the Meta Conversions API endpoint is answered with a success body for ever
   expect(stubResponse({ resourceType: 'fetch', headers: {}, url: 'https://graph.facebook.com/v21.0/1/other' }).status).toBe(204);
 });
 
+test('the Pinterest Conversions API endpoint is answered 200 with a counted body, under any method, and another path is not', () => {
+  const url = 'https://api.pinterest.com/v5/ad_accounts/100000000000002/events';
+  for (const resourceType of ['fetch', 'xhr', 'ping']) {
+    const stub = stubResponse({ resourceType, headers: { origin: 'https://shop.example.com' }, url });
+    expect(stub.status).toBe(200);
+    expect(stub.headers['content-type']).toBe('application/json');
+    expect(stub.headers['access-control-allow-origin']).toBe('https://shop.example.com');
+    const body = JSON.parse(stub.body?.toString() ?? '') as { num_events_received: number; num_events_processed: number; events: unknown[] };
+    expect(typeof body.num_events_received).toBe('number');
+    expect(typeof body.num_events_processed).toBe('number');
+    expect(Array.isArray(body.events)).toBe(true);
+  }
+  expect(stubResponse({ resourceType: 'fetch', headers: {}, url: 'https://api.pinterest.com/v5/ad_accounts/100000000000002/audiences' }).status).toBe(204);
+  const req = (method: string, u: string) => ({ type: 'request', id: 'req_1', runId: 'run_1', stepId: null, t: 1, method, url: u, resourceType: 'fetch', frameUrl: null, initiator: null, headers: {}, postData: null, outcome: 'passed' }) as unknown as Request;
+  expect(isStubbedCollection(req('POST', url), { networkMode: 'stub', trackers: [] })).toBe(true);
+  expect(isStubbedCollection(req('OPTIONS', url), { networkMode: 'stub', trackers: [] })).toBe(true);
+  expect(isStubbedCollection(req('POST', url), { networkMode: 'server', serverHosts: ['127.0.0.1'], trackers: [] })).toBe(true);
+  expect(isStubbedCollection(req('POST', 'https://api.pinterest.com/v5/ad_accounts/100000000000002/audiences'), { networkMode: 'stub', trackers: [] })).toBe(false);
+});
+
 test.each([
   ['a collection request', 'https://sgtm.example.com/g/collect?v=2', 'fetch', true],
   ['a path no decoder knows', 'https://sgtm.example.com/data', 'fetch', true],

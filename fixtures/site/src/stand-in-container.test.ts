@@ -111,6 +111,19 @@ describe('stand-in container', () => {
     expect(answered[0]!.body.toString('utf8')).toContain('evt-77');
   });
 
+  it('makes a fourth call, to the Pinterest Conversions API, only with pinterest=<event name>', async () => {
+    const origin = await start();
+    await fetch(`${origin}/capi?pinterest=add_to_cart&event_id=pw-pin-event-1&email=Pw.Fixture@example.invalid`, { method: 'POST', body: '' });
+    await until(() => answered.length === 4);
+    const call = answered[3]!;
+    expect(`${call.method} ${new URL(call.url).host}${new URL(call.url).pathname}`).toBe('POST api.pinterest.com/v5/ad_accounts/100000000000002/events');
+    expect(call.headers.authorization).toBe('Bearer pw-fixture-pinterest-token');
+    const body = JSON.parse(call.body.toString('utf8')) as { data: Array<{ event_name: string; event_id: string; user_data: { em: string[] } }> };
+    expect(body.data[0]!.event_name).toBe('add_to_cart');
+    expect(body.data[0]!.event_id).toBe('pw-pin-event-1');
+    expect(body.data[0]!.user_data.em[0]).toMatch(/^[0-9a-f]{64}$/);
+  });
+
   it('delays the vendor calls by delayMs after it has answered', async () => {
     const origin = await start();
     const started = Date.now();

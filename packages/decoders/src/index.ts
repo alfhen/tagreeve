@@ -7,6 +7,7 @@ export * from './page-fields.ts';
 export * from './ga4.ts';
 export * from './meta.ts';
 export * from './meta-capi.ts';
+export * from './pinterest-capi.ts';
 export * from './pinterest.ts';
 export * from './google-ads.ts';
 export * from './sgtm-data-client.ts';
