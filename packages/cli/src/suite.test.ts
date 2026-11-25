@@ -1241,3 +1241,26 @@ test('report refuses a malformed consentMatrix as a bad manifest, and reads a go
   expect(good.code).toBe(0);
   await expect(readFile(html, 'utf8')).resolves.toContain('Consent audit');
 });
+
+test('a consent suite keeps spaced event names apart and stores no value from a spaced name', async () => {
+  const { dir, out } = await workDir({ 'a.yml': consentScenario() });
+  const phone = '4512 3456 78';
+  const hash = 'd41d8cd9 8f00b204 e9800998 ecf8427e';
+  const rec = recorder(async (spec) => {
+    const root = await mkdtemp(join(tmpdir(), 'pw-cell-'));
+    const events = spec.consentCell === 'reject' ? ['page_view', 'Add To Wishlist', phone, hash] : ['page_view', 'Start Trial'];
+    const path = join(root, `${spec.consentCell}.jsonl`);
+    await rename(await cellRecord(root, spec.scenarioName, events), path);
+    const { readRun } = await import('@tagreeve/core');
+    const names = (await readRun(path)).hits.map((h) => h.event);
+    if (spec.consentCell === 'reject') expect(names).toEqual(expect.arrayContaining([phone, hash]));
+    return { code: 0, summary: pass.summary, path };
+  });
+  const c = capture();
+  expect(await suiteCommand(args(dir, out, { consent: ['accept', 'reject'] }), c.io, rec)).toBe(0);
+  const text = await readFile(join(out, (await readdir(out))[0]!, 'suite.json'), 'utf8');
+  const ga4 = (JSON.parse(text) as SuiteManifest).consentMatrix![0]!.vendors.find((v) => v.vendor === 'ga4')!;
+  expect(ga4.notInAccept.reject!.events).toContain('Add To Wishlist');
+  expect(ga4.notInAccept.reject!.events).not.toContain('Start Trial');
+  for (const v of ['4512 3456 78', '4512345678', 'd41d8cd9 8f00b204', 'd41d8cd98f00b204']) expect(text).not.toContain(v);
+});

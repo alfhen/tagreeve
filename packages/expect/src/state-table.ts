@@ -1,5 +1,5 @@
 import { OTHER_NAME, guardFieldName, isValueSegment } from '@tagreeve/decoders';
-import type { Hit, HitIds, RunRecords } from '@tagreeve/core';
+import { valueKinds, type Hit, type HitIds, type RunRecords } from '@tagreeve/core';
 import { CONSENT_STATES, type ConsentState } from './consent-matrix.ts';
 import { DEFAULT_GRACE_MS, epochForHit, judgeIndex, judgedAt } from './evaluate.ts';
 
@@ -35,9 +35,32 @@ const EVENT_NAME = /^[\w.:-]+(?: [\w.:-]+)*$/;
 
 const byName = (x: string, y: string) => (x < y ? -1 : x > y ? 1 : 0);
 
+const MAX_EVENT_WORDS = 6;
+const MAX_EVENT_DIGITS = 3;
+
+/**
+ * A name with a space or a `:` cannot go through `guardFieldName`, which turns both into `other`. It is kept on limits that hold for any split of a value:
+ * at most 3 digits in all (a phone number, hash, UUID or click ID has more, and a split cannot remove digits), no `@`, and no run of words that reads as a value when joined.
+ */
+function spacedNameOk(name: string): boolean {
+  if (name.includes('@') || (name.match(/\d/g)?.length ?? 0) > MAX_EVENT_DIGITS) return false;
+  const words = name.split(' ');
+  if (words.length > MAX_EVENT_WORDS) return false;
+  for (let i = 0; i < words.length; i++) {
+    for (let j = i + 1; j <= words.length; j++) {
+      const span = words.slice(i, j).join('');
+      if (isValueSegment(span)) return false;
+      const kinds = valueKinds(span);
+      if (kinds.has('email') || kinds.has('phone')) return false;
+    }
+  }
+  return true;
+}
+
 /** The one guard for every name a stored list holds. A value-like name becomes `other`, so no email, phone, ID or hash reaches suite.json. */
 function guardName(name: string, isEvent = false): string {
   if (isEvent && (name.length > 64 || !EVENT_NAME.test(name))) return OTHER_NAME;
+  if (isEvent && /[ :]/.test(name)) return spacedNameOk(name) ? name : OTHER_NAME;
   return guardFieldName(name) === name && !isValueSegment(name) ? name : OTHER_NAME;
 }
 
