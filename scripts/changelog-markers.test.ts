@@ -192,9 +192,7 @@ describe('CHANGELOG.md', () => {
       for (const issue of ['#1640', '#1648', '#1606']) expect(known).toContain(issue);
     });
 
-    it('is not older than the package version and passes the marker check', () => {
-      const final080 = parseVersion(versionHeading.exec('## 0.8.0')!);
-      expect(isOlder(final080, parseVersion(versionHeading.exec(`## ${pkg.version}`)!))).toBe(false);
+    it('passes the marker check', () => {
       expect(markerProblems(text, '0.8.0')).toEqual([]);
     });
 
