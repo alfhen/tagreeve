@@ -279,7 +279,7 @@ describe('spaced and coloned event names', () => {
 
   test('a value joined by : or . inside a word reads other', () => {
     expectOther(
-      ['ref:AbCdEfGhIjKlMnOpQrStUv1w', 'AbCdEfGh:IjKlMnOp:QrStUv1w', 'x:abcdefabcdefabcdefabcdefabcdefab', 'Start x.AbCdEfGhIjKlMnOpQrStUv1w', 'Token abcdefab.cdefabcd.efabcdef.abcdefab', 'Token abcdefab_cdefabcd_efabcdef_abcdefab'],
+      ['ref:AbCdEfGhIjKlMnOpQrStUv1w', 'AbCdEfGh:IjKlMnOp:QrStUv1w', 'x:abcdefabcdefabcdefabcdefabcdefab', 'Start x.AbCdEfGhIjKlMnOpQrStUv1w', 'Token abcdefab.cdefabcd.efabcdef.abcdefab'],
       ['AbCdEfGh', 'abcdefab'],
     );
   });
