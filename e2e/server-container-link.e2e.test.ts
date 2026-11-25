@@ -139,6 +139,7 @@ describe('a client ID link while the browser request is in flight', () => {
     const call = await expectPrecondition(epoch);
     const hitT = tOf(epoch, browserPurchase(epoch, call));
     const callT = tOf(epoch, call);
+    expect(callT - hitT).toBeLessThan(2000);
     expect(epoch.records!.consentEpochs.some((e) => e.startT > hitT && e.startT <= callT)).toBe(true);
     expect(call.linkMiss?.clientId).toBe('answeredBefore');
     expect(call.via?.confidence).toBe('probable');
