@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseScenario } from '../packages/expect/src/index.ts';
@@ -136,4 +136,41 @@ test('diff pairs a hit that lands in a different step in each run, and still rep
   const changed = await diff([one, gcs]);
   expect(changed.stdout).not.toMatch(/added|removed/);
   expect(changed.stdout).toMatch(/changed, step "wait-1" -> "wait-2": .*gcs G100 -> G111/);
+}, 120_000);
+
+test('diff --by-page shows the page path of a canary run, never its query', async () => {
+  const source = await readFile(join(root, 'e2e/scenarios/canaries.yml'), 'utf8');
+  const recordCanaries = async (consent: string): Promise<string> => {
+    const file = join(outDir, `canaries-${consent}.yml`);
+    await writeFile(file, source.replace('consent: accept', `consent: ${consent}`));
+    const r = await new Promise<{ code: number; stdout: string }>((resolve) => {
+      execFile(process.execPath, [cli, 'run', file, '--site', site.url, '--out', outDir, '--json'], { cwd: root, maxBuffer: 1 << 26 }, (error, stdout) => {
+        resolve({ code: error ? ((error as { code?: number }).code ?? 1) : 0, stdout });
+      });
+    });
+    expect(r.code).not.toBe(2);
+    return (JSON.parse(r.stdout) as { path: string }).path;
+  };
+  const a = await recordCanaries('accept');
+  const b = await recordCanaries('reject');
+  type Entry = { hitId: string; page: string | null };
+  type Result = { added: Entry[]; removed: Entry[]; changed: { a: Entry; b: Entry }[] };
+  const json = await diff([a, b, '--by-page', '--json']);
+  const result = JSON.parse(json.stdout) as Result;
+  const entries = [...result.added, ...result.removed, ...result.changed.flatMap((c) => [c.a, c.b])];
+  const raw = new Map<string, string | null>();
+  for (const file of [a, b]) {
+    for (const line of (await readFile(file, 'utf8')).split('\n').filter(Boolean)) {
+      const rec = JSON.parse(line) as { type: string; id: string; page?: string | null };
+      if (rec.type === 'hit') raw.set(rec.id, rec.page ?? null);
+    }
+  }
+  const withCanary = entries.filter((e) => raw.get(e.hitId)?.includes('TEST-'));
+  expect(withCanary.length).toBeGreaterThan(0);
+  for (const e of withCanary) {
+    expect(e.page).toMatch(/^\//);
+    expect(e.page).not.toMatch(/[?#]/);
+  }
+  expect(json.stdout).not.toContain('TEST-');
+  expect((await diff([a, b, '--by-page'])).stdout).not.toContain('TEST-');
 }, 120_000);

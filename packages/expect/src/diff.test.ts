@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import type { DataLayerEvent } from '@tagreeve/core';
 import type { PushGroup } from './push-shape.ts';
 import { parseEventMap, type EventMap } from './event-map.ts';
-import { diffPushes, diffRuns, diffShapes, hitShape, kindsMerged, neighbourEpochs, pairNames, pushGroups, type ShapeKey, type ShapeTuple } from './diff.ts';
+import { diffPushes, diffRuns, diffShapes, hitShape, kindsMerged, neighbourEpochs, pairNames, pushGroups, shownPage, type ShapeKey, type ShapeTuple } from './diff.ts';
 
 const state = { analytics: 'denied', ads: 'denied', adUserData: 'denied', adPersonalization: 'denied' } as const;
 const consent = { ...state, raw: { gcs: 'G100' } };
@@ -1340,5 +1340,24 @@ describe('a path that moved epoch', () => {
     expect(Object.keys(d).sort()).toEqual(['changed', 'eventsAdded', 'eventsRemoved', 'kindChanged', 'moved', 'pathsAdded', 'pathsMoved', 'pathsRemoved', 'typeChanges']);
     expect(Object.keys(d.pathsMoved[0]!).sort()).toEqual(['event', 'frame', 'from', 'path', 'pushKind', 'to', 'types']);
     for (const empty of [d.eventsAdded, d.eventsRemoved, d.typeChanges, d.moved, d.kindChanged, d.pathsAdded, d.pathsRemoved]) expect(empty).toEqual([]);
+  });
+});
+
+describe('shownPage', () => {
+  test.each([
+    ['https://shop.test/products/1?gclid=TEST-x#TEST-y', '/products/1'],
+    ['/products/1?gclid=TEST-x', '/products/1'],
+    ['/products/1#TEST-y?z', '/products/1'],
+    ['products/1?gclid=TEST-x', '(other)'],
+    ['?gclid=TEST-x', '(other)'],
+    ['/checkout', '/checkout'],
+  ])('%s', (page, shown) => {
+    expect(shownPage(page)).toBe(shown);
+  });
+
+  test('a non-URL page keeps its raw value in the shape key', () => {
+    const run = makeRun();
+    addHit(run, { page: '/products/1?gclid=TEST-x' });
+    expect(hitShape(run, { byPage: true })[0]!.key.page).toBe('/products/1?gclid=TEST-x');
   });
 });
