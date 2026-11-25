@@ -44,8 +44,9 @@ const MAX_EVENT_DIGITS = 3;
  */
 function spacedNameOk(name: string): boolean {
   if (name.includes('@') || (name.match(/\d/g)?.length ?? 0) > MAX_EVENT_DIGITS) return false;
-  const words = name.split(' ');
-  if (words.length > MAX_EVENT_WORDS) return false;
+  if (name.split(' ').length > MAX_EVENT_WORDS) return false;
+  // `:` and `.` also separate pieces: a token joined by them inside a word must not slip past the span check.
+  const words = name.split(/[ .:]/).filter(Boolean);
   for (let i = 0; i < words.length; i++) {
     for (let j = i + 1; j <= words.length; j++) {
       const span = words.slice(i, j).join('');

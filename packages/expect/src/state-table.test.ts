@@ -277,6 +277,13 @@ describe('spaced and coloned event names', () => {
     expectOther(names, ['AbCdEfGh', 'abcdefab']);
   });
 
+  test('a value joined by : or . inside a word reads other', () => {
+    expectOther(
+      ['ref:AbCdEfGhIjKlMnOpQrStUv1w', 'AbCdEfGh:IjKlMnOp:QrStUv1w', 'x:abcdefabcdefabcdefabcdefabcdefab', 'Start x.AbCdEfGhIjKlMnOpQrStUv1w', 'Token abcdefab.cdefabcd.efabcdef.abcdefab'],
+      ['AbCdEfGh', 'abcdefab'],
+    );
+  });
+
   test('two spaced custom events stay apart in notInAccept', () => {
     const accept = makeRun();
     hit(accept, {});
