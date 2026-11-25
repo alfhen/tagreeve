@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.8.1
+
+`npm i -g tagreeve` installs this release. 0.8.1 is a patch release after 0.8.0. It has no new command, option or record field. The record stays at schema version 5. A 0.8.0 record reads as before.
+
+### Fixes in 0.8.1
+
+- `diff --by-page` prints only the path of a recorded page after `recorded as`, never the query or the fragment, and `diff --json` holds the same path in `page`. A canary run's fake `TEST-` click IDs no longer reach the diff output. A recorded page that is not a URL is cut at the first `?` or `#`, and shown as `(other)` when what is left does not start with `/`. Baseline keys do not change (#1606).
+- The `identifierRoute` pass message no longer says "No planted value found" when every route went to a host in `options.identifierRouteAllow`. It says no planted value reached a judged route, then names the allowed hosts. `pass`, severity and evidence do not change (#1634).
+- The Stape loader e2e test stand-in exits after it answers its first health request, so the test no longer depends on a fixed timer (#1625). This changes a test only.
+
+### Upgrading from 0.8.0
+
+- **A script that reads the `recorded as` text of `diff --by-page`, or `page` in `diff --json`, sees a path where it saw a URL.**
+- **A new release needs a new server image.** On arm64 (Apple silicon), run `tagreeve server-container build` after `npm i -g tagreeve`. A run with `--server-container` exits 2 with "The image tagreeve-sgtm:<version> is not available" until the image for that version exists. On amd64 the command builds nothing.
+
+### Known in 0.8.1
+
+Issues still open that you can meet, in addition to those in 0.8.0:
+
+- A server GA4 hit behind a container that answers before its call stays `probable` (#1640), so its identifier routes warn with `serverSendProbableLink`.
+- A Pinterest Conversions API call to api.pinterest.com gets no link to a browser hit, so its identifier routes warn under accept (#1648).
+- The canary search reads only the forms it lists. It skips gzip and binary bodies, bodies cut at 64 KiB and net-log requests with no body, and it does not search headers. A pass means no planted value was found in the searched forms.
+- The Stape loader unwrap covers `/g/collect` and `/data`. Stape's hosting layer may act on a loader request in other ways, and the record says so in fixed text.
+
 ## 0.8.0
 
 `npm i -g tagreeve` installs this release. 0.8.0 adds everything in the 0.8.0 release candidates (below), with no code change after rc.4. It has no new command. The record stays at schema version 5. To upgrade from 0.7.0, read the next section.
