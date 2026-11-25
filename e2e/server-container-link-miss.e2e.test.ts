@@ -7,7 +7,7 @@ import { standInContainerPath } from '../fixtures/site/src/index.ts';
 import { run, type CliRun } from './cli-helpers.ts';
 
 const CONFIG = Buffer.from('id=GTM-PWTEST1&env=1&auth=pw-fixture-auth').toString('base64');
-const IDS = ['pw-client-none-1', 'pw-client-same-1', 'pw-eid-several-1', 'pw-event-1', 'pw-client.1'];
+const IDS = ['pw-client-none-1', 'pw-client-same-1', 'pw-client-late-1', 'pw-eid-several-1', 'pw-event-1', 'pw-client.1'];
 
 interface NotExact {
   eventId: Record<HitLinkMiss['eventId'], number>;
@@ -49,17 +49,30 @@ function browserGa4(event: string): Hit[] {
 describe('why a container call is not exact', () => {
   test('the precondition holds: every case has its browser hits and container calls in the record', () => {
     expect(browserGa4('link_none')).toHaveLength(1);
+    expect(browserGa4('link_late')).toHaveLength(1);
     expect(browserGa4('link_nomatch')).toHaveLength(1);
     expect(browserGa4('link_several')).toHaveLength(2);
     expect(browserGa4('link_samekey')).toHaveLength(2);
     expect(containerGa4('link_none')).toHaveLength(1);
+    expect(containerGa4('link_late')).toHaveLength(1);
     expect(containerGa4('link_nomatch')).toHaveLength(1);
     expect(containerGa4('link_several')).toHaveLength(2);
     expect(containerGa4('link_samekey')).toHaveLength(2);
   });
 
-  test('a call with no event ID, answered before, is none and answeredBefore', () => {
-    expect(containerGa4('link_none')[0]!.linkMiss).toEqual({ eventId: 'none', clientId: 'answeredBefore' });
+  test('a call with no event ID, answered 300 ms earlier, is exact by client ID', () => {
+    const call = containerGa4('link_none')[0]!;
+    expect(call.via).toMatchObject({ by: 'clientId', confidence: 'exact' });
+    expect(call.linkMiss).toBeUndefined();
+  });
+
+  test('a call 3000 ms or more after its browser hit is answeredBefore', () => {
+    const call = containerGa4('link_late')[0]!;
+    const browser = browserGa4('link_late')[0]!;
+    const t = (h: Hit) => records.requests.find((r) => r.id === h.requestId)!.t;
+    expect(t(call) - t(browser)).toBeGreaterThanOrEqual(3000);
+    expect(call.linkMiss).toEqual({ eventId: 'none', clientId: 'answeredBefore' });
+    expect(call.via?.confidence).toBe('probable');
   });
 
   test('a call with an event ID no browser hit carries, and the fixed client ID, is noMatch and noSameKeyHit', () => {

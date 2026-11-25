@@ -406,7 +406,7 @@ describe('linkMiss', () => {
     expect(missOf([[a, hit(a, 'ga4', 'Purchase', 100)], [b, hit(b, 'ga4', 'Purchase', 110)], [c, hit(c, 'ga4', 'Purchase', 150)]], windows)[2]).toEqual({ eventId: 'none', clientId: 'severalSameKeyHits' });
   });
 
-  test('one same-key hit answered before the call is answeredBefore, and keeps its probable via', () => {
+  test('with no epoch starts, one same-key hit answered before the call stays answeredBefore with its probable via', () => {
     const b = browserCall('pw-client-0001', 100);
     const c = serverCall('pw-client-0001', 250);
     const call = linked([[b, hit(b, 'ga4', 'Purchase', 100)], [c, hit(c, 'ga4', 'Purchase', 250)]], [[b, { sentAt: 100, answeredAt: 200 }]])[1];
@@ -584,5 +584,149 @@ describe('rule 1: a later browser hit in the same consent epoch', () => {
     const out = linkServerHits({ hits: [h, c], requests: [r, req], serverHosts: hosts, identity, epochStarts })[1]!;
     expect(isExact(out)).toBe(false);
     expect(out.linkMiss?.eventId).toBe('noMatch');
+  });
+});
+
+describe('rule 2: a call after the answer', () => {
+  const SGTM = 'https://sgtm.example.invalid/g/collect';
+  const callUrl = (cid: string, en: string) => `https://www.google-analytics.com/g/collect?cid=${cid}&en=${en}`;
+  interface Opts {
+    callAt?: number;
+    cid?: string;
+    en?: string;
+    host?: string;
+    window?: InFlightWindow | null;
+    epochStarts?: number[] | null;
+    extra?: Array<{ url: string; t: number; hit?: string; initiator?: 'unload' }>;
+    second?: boolean;
+  }
+  function setup(o: Opts = {}) {
+    const b = request(`${o.host ?? 'https://sgtm.example.invalid'}/g/collect?cid=pw-client-0001&en=Purchase`, { t: 100 });
+    const c = serverRequest(callUrl(o.cid ?? 'pw-client-0001', o.en ?? 'Purchase'), { t: o.callAt ?? 500 });
+    const hits = [hit(b, 'ga4', 'Purchase', 100)];
+    const requests = [b];
+    const windows: Array<[string, InFlightWindow]> = [];
+    const w = o.window === undefined ? { sentAt: 100, answeredAt: 200 } : o.window;
+    if (w) windows.push([b.id, w]);
+    if (o.second) {
+      const b2 = request(`${SGTM}?cid=pw-client-0001&en=Purchase`, { t: 120 });
+      hits.push(hit(b2, 'ga4', 'Purchase', 120));
+      requests.push(b2);
+      windows.push([b2.id, { sentAt: 120, answeredAt: 220 }]);
+    }
+    for (const x of o.extra ?? []) {
+      const r = request(x.url, { t: x.t, ...(x.initiator ? { initiator: x.initiator } : {}) });
+      requests.push(r);
+      if (x.hit) hits.push(hit(r, 'ga4', x.hit, x.t));
+      windows.push([r.id, { sentAt: x.t, answeredAt: x.t + 10 }]);
+    }
+    const call = hit(c, 'ga4', o.en ?? 'Purchase', c.t);
+    const out = linkServerHits({
+      hits: [...hits, call],
+      requests: [...requests, c],
+      serverHosts: hosts,
+      identity,
+      inFlight: new Map(windows),
+      ...(o.epochStarts === null ? {} : { epochStarts: o.epochStarts ?? [50] }),
+    });
+    return { call: out[out.length - 1]!, b: out[0]!, w: w ?? null, callAt: c.t };
+  }
+  const exact = (b: Hit) => ({ hitId: b.id, by: 'clientId', confidence: 'exact' });
+  const miss = (clientId: string) => ({ eventId: 'none', clientId });
+
+  test('a call 300 ms after the answer is exact by client ID', () => {
+    const r = setup();
+    expect(r.callAt - r.w!.answeredAt).toBe(300);
+    expect(r.call.via).toEqual(exact(r.b));
+    expect(r.call.linkMiss).toBeUndefined();
+  });
+
+  test('2000 ms after the answer is exact, 2001 ms is answeredBefore', () => {
+    const a = setup({ callAt: 2200 });
+    expect(a.callAt - a.w!.answeredAt).toBe(2000);
+    expect(a.call.via).toEqual(exact(a.b));
+    expect(a.call.linkMiss).toBeUndefined();
+    const late = setup({ callAt: 2201 });
+    expect(late.callAt - late.w!.answeredAt).toBe(2001);
+    expect(late.call.linkMiss).toEqual(miss('answeredBefore'));
+    expect(late.call.via?.confidence).toBe('probable');
+  });
+
+  test('the window runs from the answer, not the send', () => {
+    const r = setup({ window: { sentAt: 100, answeredAt: 1500 }, callAt: 3400 });
+    expect(r.callAt - r.w!.answeredAt).toBe(1900);
+    expect(r.callAt - r.w!.sentAt).toBeGreaterThan(2000);
+    expect(r.call.via).toEqual(exact(r.b));
+  });
+
+  test('two same-key hits are severalSameKeyHits', () => {
+    const r = setup({ second: true });
+    expect(r.call.linkMiss).toEqual(miss('severalSameKeyHits'));
+    expect(r.call.via?.confidence).not.toBe('exact');
+  });
+
+  test('a hit with no window stays answeredBefore, with epoch starts too', () => {
+    const r = setup({ window: null });
+    expect(r.w).toBeNull();
+    expect(r.call.linkMiss).toEqual(miss('answeredBefore'));
+  });
+
+  test('another client ID, another event or another host does not link', () => {
+    const cid = setup({ cid: 'pw-client-0002' });
+    expect(cid.call.linkMiss).toEqual(miss('noSameKeyHit'));
+    expect(cid.call.via?.confidence).not.toBe('exact');
+    const en = setup({ en: 'PageView' });
+    expect(en.call.linkMiss?.clientId).toBe('noSameKeyHit');
+    expect(en.call.via?.confidence).not.toBe('exact');
+    const host = setup({ host: 'https://other.example.invalid' });
+    expect(host.call.via?.confidence).not.toBe('exact');
+  });
+
+  describe('a request in between', () => {
+    const same = (t: number, over: Partial<NonNullable<Opts['extra']>[number]> = {}) => ({ url: `${SGTM}?cid=pw-client-0001&en=PageView`, t, hit: 'PageView', ...over });
+    test.each([150, 300])('a same-ID request at %i is concurrentRequest', (t) => {
+      const r = setup({ extra: [same(t)] });
+      expect(r.call.linkMiss).toEqual(miss('concurrentRequest'));
+      expect(r.call.via?.confidence).toBe('probable');
+    });
+    test('a request with no decoded hit is concurrentRequest', () => {
+      expect(setup({ extra: [{ url: 'https://sgtm.example.invalid/other', t: 300 }] }).call.linkMiss).toEqual(miss('concurrentRequest'));
+    });
+    test('another client ID does not block', () => {
+      const r = setup({ extra: [same(300, { url: `${SGTM}?cid=pw-client-0002&en=PageView` })] });
+      expect(r.call.via).toEqual(exact(r.b));
+    });
+    test.each([50, 600])('a same-ID request at %i does not block', (t) => {
+      const r = setup({ extra: [same(t)] });
+      expect(r.call.via).toEqual(exact(r.b));
+    });
+    test('an unload send does not block', () => {
+      const r = setup({ extra: [same(300, { initiator: 'unload' })] });
+      expect(r.call.via).toEqual(exact(r.b));
+    });
+    test('concurrentRequest wins over a late call and over an epoch start', () => {
+      expect(setup({ callAt: 2700, extra: [same(300)] }).call.linkMiss).toEqual(miss('concurrentRequest'));
+      expect(setup({ epochStarts: [250], extra: [same(300)] }).call.linkMiss).toEqual(miss('concurrentRequest'));
+    });
+  });
+
+  describe('epoch starts', () => {
+    test.each([
+      [[300], 'answeredBefore'],
+      [[500], 'answeredBefore'],
+      [[100], 'exact'],
+      [[50], 'exact'],
+      [[600], 'exact'],
+      [null, 'answeredBefore'],
+    ] as const)('epochStarts %j gives %s', (starts, want) => {
+      const r = setup({ epochStarts: starts === null ? null : [...starts] });
+      if (want === 'exact') {
+        expect(r.call.via).toEqual(exact(r.b));
+        expect(r.call.linkMiss).toBeUndefined();
+      } else {
+        expect(r.call.linkMiss).toEqual(miss('answeredBefore'));
+        expect(r.call.via?.confidence).toBe('probable');
+      }
+    });
   });
 });

@@ -70,11 +70,21 @@ async function expectNoLeaks(r: CliRun): Promise<void> {
 describe('a client ID link while the browser request is in flight', () => {
   let forward: CliRun;
   let answerFirst: CliRun;
+  let late: CliRun;
+  let concurrent: CliRun;
+  let epoch: CliRun;
 
   beforeAll(async () => {
     forward = await run('server-container-ga4-forward', ['--server-container'], env);
     answerFirst = await run('server-container-ga4-answer-first', ['--server-container'], env);
-  }, 180_000);
+    late = await run('server-container-ga4-answered-late', ['--server-container'], env);
+    concurrent = await run('server-container-ga4-answered-concurrent', ['--server-container'], env);
+    epoch = await run('server-container-ga4-answered-epoch', ['--server-container'], env);
+  }, 300_000);
+
+  const tOf = (r: CliRun, h: Hit) => r.records!.requests.find((q) => q.id === h.requestId)!.t;
+  const browserPurchase = (r: CliRun, call: Hit) => r.records!.hits.find((h) => h.vendor === 'ga4' && h.event === 'purchase' && h.requestId !== call.requestId)!;
+  const mustNot = (r: CliRun) => r.records!.results.find((x) => x.expectation.includes('mustNot'))!;
 
   test('a container that answers after its tags send is linked exactly and fails the run', async () => {
     const call = await expectPrecondition(forward);
@@ -88,14 +98,52 @@ describe('a client ID link while the browser request is in flight', () => {
     await expectNoLeaks(forward);
   });
 
-  test('a container that answers first stays probable, warns and exits 0', async () => {
+  test('a container that answers first and calls 300 ms later is now exact and fails the run', async () => {
     const call = await expectPrecondition(answerFirst);
+    expect(call.via).toMatchObject({ by: 'clientId', confidence: 'exact' });
+    expect(answerFirst.code).toBe(1);
+    const result = mustNot(answerFirst);
+    expect(result.pass).toBe(false);
+    expect(result.severity).not.toBe('warn');
+    expect(result.note).not.toBe('serverSendProbableLink');
+    expect(result.evidence).toContain(call.id);
+    await expectNoLeaks(answerFirst);
+  });
+
+  test('a call 3000 ms after the answer stays probable, warns and exits 0', async () => {
+    const call = await expectPrecondition(late);
+    expect(tOf(late, call) - tOf(late, browserPurchase(late, call))).toBeGreaterThanOrEqual(3000);
     expect(call.via).toMatchObject({ by: 'clientId', confidence: 'probable' });
-    expect(answerFirst.code).toBe(0);
-    const result = answerFirst.records!.results.find((r) => r.expectation.includes('mustNot'))!;
+    expect(call.linkMiss?.clientId).toBe('answeredBefore');
+    expect(late.code).toBe(0);
+    const result = mustNot(late);
     expect(result.pass).toBe(false);
     expect(result.severity).toBe('warn');
     expect(result.note).toBe('serverSendProbableLink');
-    await expectNoLeaks(answerFirst);
+    await expectNoLeaks(late);
+  });
+
+  test('a same-client-ID request between the hit and the call gives concurrentRequest', async () => {
+    const call = await expectPrecondition(concurrent);
+    const hitT = tOf(concurrent, browserPurchase(concurrent, call));
+    const between = concurrent.records!.requests.filter(
+      (q) => q.captured !== 'serverContainer' && q.t > hitT && q.t < tOf(concurrent, call) && new URL(q.url).searchParams.get('cid') === CLIENT_ID,
+    );
+    expect(between.length).toBeGreaterThanOrEqual(1);
+    expect(call.linkMiss?.clientId).toBe('concurrentRequest');
+    expect(call.via?.confidence).not.toBe('exact');
+    await expectNoLeaks(concurrent);
+  });
+
+  test('a consent change between the hit and the call gives answeredBefore and a warning', async () => {
+    const call = await expectPrecondition(epoch);
+    const hitT = tOf(epoch, browserPurchase(epoch, call));
+    const callT = tOf(epoch, call);
+    expect(epoch.records!.consentEpochs.some((e) => e.startT > hitT && e.startT <= callT)).toBe(true);
+    expect(call.linkMiss?.clientId).toBe('answeredBefore');
+    expect(call.via?.confidence).toBe('probable');
+    expect(epoch.code).toBe(0);
+    expect(mustNot(epoch).severity).toBe('warn');
+    await expectNoLeaks(epoch);
   });
 });
