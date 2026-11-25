@@ -335,6 +335,7 @@ test.each([
     expect(parseScenario(text).start).toContain(held);
   });
   expect(r.err).not.toContain('already holds');
+  expect(r.start).toBeDefined();
 });
 
 const refillVars = (next: string) => `vars:\n  key: '{next}'\n  next: ${next}\n  other: 'a#b'\n`;

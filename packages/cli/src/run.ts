@@ -307,7 +307,7 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
     // A var value that holds a {name} placeholder would be filled again by the visit step, so plant on the unresolved start then.
     const refilled = [...resolved.matchAll(/\{(\w+)\}/g)].some((m) => Object.hasOwn(parsed.vars, m[1]!));
     if (refilled && usedVarValues(parsed.start, parsed.vars).some((v) => v.includes('#'))) {
-      return failed('options.canaries: a variable value holds both a {placeholder} and a #, so the canary parameters could land in the URL fragment. Remove one, or turn canaries off.\n');
+      return failed('options.canaries: a variable the start URL uses holds a #, while a variable holds a {placeholder} that is filled again, so the canary parameters could land in the URL fragment. Remove one, or turn canaries off.\n');
     }
     parsed = { ...parsed, start: refilled ? withCanaries(parsed.start, canaries, resolved) : withCanaries(resolved, canaries) };
   }
