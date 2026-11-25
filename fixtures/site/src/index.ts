@@ -75,6 +75,7 @@ const pages: Record<string, string> = {
   '/page-load-hit': 'page-load-hit.html',
   '/sgtm-leak': 'sgtm-leak.html',
   '/server-container-link': 'server-container-link.html',
+  '/server-container-pinterest': 'server-container-pinterest.html',
   '/identifiers': 'identifiers.html',
   '/cookies': 'cookies.html',
   '/tiles': 'tiles.html',

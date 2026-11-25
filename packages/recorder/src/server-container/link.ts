@@ -1,4 +1,4 @@
-import { unwrapStapeLoader } from '@tagreeve/decoders';
+import { pinterestEventKey, unwrapStapeLoader } from '@tagreeve/decoders';
 import { hashEmail, isServerContainerRequest, isServerHostUrl, type Hit, type HitLinkMiss, type Identity, type Request } from '@tagreeve/core';
 
 /** A shared value shorter than this proves nothing. */
@@ -7,6 +7,14 @@ const CLIENT_ID_NAMES = new Set(['cid', 'client_id', 'clientid', 'fbp']);
 
 function eventIdOf(hit: Hit): string | undefined {
   return hit.params.eventId ?? hit.params.eid ?? hit.params.event_id;
+}
+
+/** Event names match literally. A Pinterest tag hit and a Pinterest Conversions API hit match by `pinterestEventKey`. */
+function sameEventName(server: Hit, browser: Hit): boolean {
+  if (server.vendor === 'pinterest-capi' && browser.vendor === 'pinterest' && server.event !== null && browser.event !== null) {
+    return pinterestEventKey(server.event) === pinterestEventKey(browser.event);
+  }
+  return server.event === browser.event;
 }
 
 function collectNamed(value: unknown, names: ReadonlySet<string>, out: Set<string>): void {
@@ -105,7 +113,7 @@ function sharedKind(server: Facts, browser: Facts): 'eventId' | 'clientId' | 'id
 
 /**
  * Adds `via` to each hit decoded from a server container call. The proxy cannot see which browser hit led to a call,
- * so the first rule that fits decides: (1) the event ID and event name match exactly one browser hit sent at or before the call (at its request time, when that is known), or sent after the call, at most 5000 ms after it, with an event ID of at least 8 characters and no consent epoch starting after the call and at or before that hit (needs `epochStarts`), `exact`; two or more such hits give no exact link;
+ * so the first rule that fits decides: (1) the event ID and event name (a Pinterest call and a Pinterest tag hit compare names without case and `_`) match exactly one browser hit sent at or before the call (at its request time, when that is known), or sent after the call, at most 5000 ms after it, with an event ID of at least 8 characters and no consent epoch starting after the call and at or before that hit (needs `epochStarts`), `exact`; two or more such hits give no exact link;
  * (2) the client ID and event name match exactly one browser hit to a `serverHosts` host sent before the call, and its request to the
  * container was still in flight when the call arrived, `exact`; with `epochStarts` it is also `exact` when the answer came at most 2000 ms before the call and no consent epoch
  * started after the hit was sent and at or before the call; two or more such hits, in flight or answered, give no exact link, and neither does another
@@ -159,7 +167,7 @@ export function linkServerHits({ hits, requests, serverHosts, identity, inFlight
       f.eventId === undefined
         ? []
         : browser.filter((b) => {
-            if (b.eventId !== f.eventId || b.hit.event !== f.hit.event) return false;
+            if (b.eventId !== f.eventId || !sameEventName(f.hit, b.hit)) return false;
             if (callAt === undefined) return true;
             const sentAt = sentAtOf(b.hit.requestId, b.hit.t);
             return sentAt <= callAt || (epochEnd !== undefined && f.eventId!.length >= MIN_VALUE_LENGTH && sentAt - callAt <= LATER_HIT_WINDOW_MS && sentAt < epochEnd);

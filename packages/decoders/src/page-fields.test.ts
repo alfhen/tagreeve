@@ -84,6 +84,22 @@ const samples: Sample[] = [
       }),
   },
   {
+    name: 'pinterest-capi',
+    unnamedPage: null,
+    vendor: 'pinterest-capi',
+    names: PAGE_FIELDS['pinterest-capi'].page,
+    key: (n) => n,
+    others: { event_name: 'add_to_cart', event_id: 'pw-pin-event-1', action_source: 'web' },
+    build: (f) =>
+      req({
+        method: 'POST',
+        url: 'https://api.pinterest.com/v5/ad_accounts/100000000000002/events',
+        resourceType: 'fetch',
+        headers: { 'content-type': 'application/json' },
+        postData: JSON.stringify({ data: [f] }),
+      }),
+  },
+  {
     name: 'pinterest',
     unnamedPage: null,
     vendor: 'pinterest',
@@ -135,6 +151,7 @@ test('the module names each decoder page fields in order and the referrer fields
   expect(PAGE_FIELDS.meta).toEqual({ page: ['dl'], referrer: ['rl'] });
   expect(PAGE_FIELDS['meta-capi'].page).toEqual(['event_source_url']);
   expect(PAGE_FIELDS.pinterest.page).toEqual(['ad.loc']);
+  expect(PAGE_FIELDS['pinterest-capi'].page).toEqual(['event_source_url']);
   expect(PAGE_FIELDS.sgtm.page).toEqual(['page_location']);
   expect(PAGE_FIELDS.tracker.page).toEqual(['dl', 'page_location', 'page_url', 'url', 'u', 'loc', 'href']);
 });
@@ -200,6 +217,7 @@ test('each decoder reads the names PAGE_FIELDS holds, not literals of its own', 
     meta: 'meta',
     'meta-capi': 'meta-capi',
     pinterest: 'pinterest',
+    'pinterest-capi': 'pinterest-capi',
     'sgtm data client': 'sgtm',
     tracker: 'tracker',
   };

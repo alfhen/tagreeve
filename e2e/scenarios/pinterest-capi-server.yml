@@ -1,0 +1,8 @@
+start: /server-container-pinterest?email={email}&eid={eid}&delayMs=1500
+vars: { email: '', eid: 'pw-pin-event-1' }
+steps:
+  - consent: reject
+  - wait: 3s
+expect:
+  must: []
+options: { seed: 1, canaries: true, network: server, serverHosts: [127.0.0.1], allowUnknownDestination: true }

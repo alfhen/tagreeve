@@ -1,5 +1,5 @@
 import { isLibraryLoadPath, isServerContainerRequest, isServerHostUrl, LOAD_RESOURCE_TYPES, type Request } from '@tagreeve/core';
-import { isCollectionEndpoint, isMetaCapiEndpoint, type TrackerEntry } from '@tagreeve/decoders';
+import { isCollectionEndpoint, isMetaCapiEndpoint, isPinterestCapiEndpoint, type TrackerEntry } from '@tagreeve/decoders';
 
 const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
 
@@ -23,12 +23,16 @@ export function corsHeaders(headers: Record<string, string>): Record<string, str
 }
 
 const CAPI_ANSWER = Buffer.from('{"events_received":1,"messages":[],"fbtrace_id":"pw-fixture"}');
+const PINTEREST_CAPI_ANSWER = Buffer.from('{"num_events_received":1,"num_events_processed":1,"events":[{"status":"processed","error_message":""}]}');
 
-/** A 1x1 GIF for images, an empty script or page for those loads, a success body for the Meta Conversions API, 204 for everything else. */
+/** A 1x1 GIF for images, an empty script or page for those loads, a success body for the Meta and Pinterest Conversions APIs, 204 for everything else. */
 export function stubResponse(req: Pick<Request, 'resourceType' | 'headers'> & Partial<Pick<Request, 'url'>>): StubResponse {
   const cors = corsHeaders(req.headers);
   if (req.url !== undefined && isMetaCapiEndpoint({ url: req.url })) {
     return { status: 200, headers: { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' }, body: CAPI_ANSWER };
+  }
+  if (req.url !== undefined && isPinterestCapiEndpoint({ url: req.url })) {
+    return { status: 200, headers: { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' }, body: PINTEREST_CAPI_ANSWER };
   }
   switch (req.resourceType) {
     case 'image':

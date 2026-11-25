@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Server container Pinterest</title>
+<script src="/fixture-config.js"></script>
+<script>
+  if (new URLSearchParams(location.search).has('delayMs')) document.write('<script src="/assets/banner.js"><\/script>');
+</script>
+</head>
+<body>
+<h1>Server container Pinterest</h1>
+<p>Sends a Pinterest tag <code>addtocart</code> hit with event ID <code>pw-pin-event-1</code> to <code>ct.pinterest.com</code>, then a <code>POST /capi?pinterest=add_to_cart</code> to the mock server container host, which <code>--server-container</code> sends to the local container instead. The stand-in container then also calls the Pinterest Conversions API. <code>?email=</code> is the email in that body. <code>?eid=</code> is the event ID of the container call (default <code>pw-pin-event-1</code>). <code>?delayMs=</code> loads the consent banner, sends once the first consent answer is given, and asks the stand-in container to wait that long before it sends on.</p>
+<script>
+(function () {
+  var query = new URLSearchParams(location.search);
+  var email = query.get('email');
+  var delayMs = query.get('delayMs');
+  var tagEventId = 'pw-pin-event-1';
+  var callEventId = query.get('eid') || tagEventId;
+  function sendAll() {
+    var tag = new Image();
+    tag.src = 'https://ct.pinterest.com/v3/?tid=2612345678901&event=addtocart&ed=' + encodeURIComponent(JSON.stringify({ event_id: tagEventId })) + '&ad=' + encodeURIComponent(JSON.stringify({ loc: location.href }));
+    var body = { event_name: 'add_to_cart', event_id: callEventId };
+    if (email) body.email = email;
+    var url = window.__PW_FIXTURE.sgtmUrl + '/capi?pinterest=add_to_cart' + (delayMs ? '&delayMs=' + encodeURIComponent(delayMs) : '');
+    fetch(url, { method: 'POST', mode: 'no-cors', credentials: 'include', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) }).catch(function () {});
+  }
+  if (delayMs === null) {
+    sendAll();
+  } else {
+    var sent = false;
+    window.pwConsent.onAnswer(function () {
+      if (sent) return;
+      sent = true;
+      sendAll();
+    });
+  }
+})();
+</script>
+</body>
+</html>

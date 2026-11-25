@@ -124,6 +124,16 @@ describe('serverContainerAnswer', () => {
     expect(serverContainerAnswer({ url: 'https://graph.facebook.com/v21.0/1/events' }).status).toBe(200);
     expect(serverContainerAnswer({ url: 'https://www.google-analytics.com/g/collect' }).status).toBe(204);
   });
+
+  test('answers the Pinterest Conversions API with a counted 200 body, and another Pinterest path with 204', () => {
+    const answer = serverContainerAnswer({ url: 'https://api.pinterest.com/v5/ad_accounts/100000000000002/events' });
+    expect(answer.status).toBe(200);
+    const body = JSON.parse(Buffer.from(answer.body!).toString()) as { num_events_received: number; num_events_processed: number; events: unknown[] };
+    expect(typeof body.num_events_received).toBe('number');
+    expect(typeof body.num_events_processed).toBe('number');
+    expect(Array.isArray(body.events)).toBe(true);
+    expect(serverContainerAnswer({ url: 'https://api.pinterest.com/v5/ad_accounts/100000000000002/audiences' }).status).toBe(204);
+  });
 });
 
 describe('resolveUpstreamOrigin', () => {
