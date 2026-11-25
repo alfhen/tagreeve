@@ -202,6 +202,13 @@ function initiatorOf(request: PwRequest): string | null {
   return request.serviceWorker() ? 'serviceWorker' : null;
 }
 
+/** A navigation request sent before its frame existed. Its redirect hops share the entry. */
+interface FramelessEntry {
+  records: Request[];
+  request: PwRequest;
+  frame?: RequestFrame;
+}
+
 export class Recorder {
   runId: Id<'run'> = newId('run');
   coverage!: CaptureCoverage;
@@ -232,9 +239,8 @@ export class Recorder {
   private frameCount = 0;
   private readonly pageNumber = createPageNumbers();
   /** A popup's first request is sent before its frame exists, so it has no frame until the popup's page event. */
-  private readonly framelessNavigations: { records: Request[]; frame?: RequestFrame }[] = [];
-  private readonly framelessEntryOf = new Map<string, { records: Request[]; frame?: RequestFrame }>();
-  private readonly unclaimedPopups: Page[] = [];
+  private readonly framelessNavigations: FramelessEntry[] = [];
+  private readonly framelessEntryOf = new Map<string, FramelessEntry>();
   private readonly navigationSeen = new WeakSet<PwRequest>();
   private readonly requestFrameIds = new Map<string, string>();
   private readonly collectorReports: (CollectorReport | InvalidReport)[] = [];
@@ -398,7 +404,6 @@ export class Recorder {
     context.on('page', (page) => {
       // The run's own first page is numbered 0 when it opens. Every later page is a popup.
       if (this.pageNumber(page) === 0) return;
-      this.unclaimedPopups.push(page);
       this.claimPopups();
     });
     context.on('requestfailed', (request) => {
@@ -590,7 +595,7 @@ export class Recorder {
   private trackFrameless(request: PwRequest, record: Request): void {
     const previous = request.redirectedFrom();
     const earlier = previous ? this.requests.get(previous) : undefined;
-    const entry = (earlier && this.framelessEntryOf.get(earlier.id)) || { records: [] };
+    const entry = (earlier && this.framelessEntryOf.get(earlier.id)) || { records: [], request };
     if (!this.framelessEntryOf.has(record.id) && entry.records.length === 0) this.framelessNavigations.push(entry);
     entry.records.push(record);
     this.framelessEntryOf.set(record.id, entry);
@@ -598,13 +603,18 @@ export class Recorder {
     else this.claimPopups();
   }
 
+  /** Asks Playwright for each open entry's frame again. It answers once the popup's page event has fired, so a blank popup that sent no request cannot be paired with another popup's request. */
   private claimPopups(): void {
     for (const entry of this.framelessNavigations) {
       if (entry.frame) continue;
-      const page = this.unclaimedPopups.shift();
-      if (!page) return;
-      entry.frame = { main: true, n: this.frameNumber(page.mainFrame()), page: this.pageNumber(page) };
-      for (const r of entry.records) r.frame = entry.frame;
+      let frame: RequestFrame;
+      try {
+        frame = this.requestFrameRef(entry.request.frame());
+      } catch {
+        continue;
+      }
+      entry.frame = frame;
+      for (const r of entry.records) r.frame = frame;
     }
   }
 

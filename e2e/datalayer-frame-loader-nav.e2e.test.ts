@@ -52,3 +52,13 @@ test('a click that opens a popup leaves the warning, because the popup is anothe
   expect(r.stdout).toContain('could not all be read');
   expect(r.code).toBe(0);
 }, 90_000);
+
+test('a popup document gets its own page number when an earlier blank popup sent no request', async () => {
+  const text = (await readFile(scenario('datalayer-frame-loader-nav'), 'utf8')).replace('start: /datalayer-frame-loader', 'start: /datalayer-frame-loader?blank=1');
+  const file = join(outDir, `frame-loader-blank-${Math.random().toString(36).slice(2)}.yml`);
+  await writeFile(file, text);
+  const r = await runCli(['run', file, '--site', site.url, '--out', outDir, '--json'], testOrigin());
+  const doc = r.records!.requests.find((q) => isMainDoc(q) && new URL(q.url).pathname === '/datalayer-frame');
+  expect(doc).toBeDefined();
+  expect(doc!.frame!.page).toBe(2);
+}, 90_000);

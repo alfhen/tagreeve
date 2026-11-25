@@ -6,13 +6,15 @@
 </head>
 <body>
 <h1>DataLayer frame loader</h1>
-<p>Embeds <code>/datalayer-frame-loader-child</code>, which loads the fake container with <code>l=myLayer</code>. The link leaves the page. With <code>?popup=1</code> it opens a popup instead.</p>
+<p>Embeds <code>/datalayer-frame-loader-child</code>, which loads the fake container with <code>l=myLayer</code>. The link leaves the page. With <code>?popup=1</code> it opens a popup instead. With <code>?blank=1</code> a blank popup opens first.</p>
 <iframe src="/datalayer-frame-loader-child" title="Embedded loader"></iframe>
 <a id="go" href="/datalayer-frame">Leave this page</a>
 <script>
 window.dataLayer = window.dataLayer || [];
 window.dataLayer.push({ event: 'top_push' });
-if (new URLSearchParams(location.search).has('popup')) document.getElementById('go').target = '_blank';
+const mode = new URLSearchParams(location.search);
+if (mode.has('popup') || mode.get('blank') === '1') document.getElementById('go').target = '_blank';
+if (mode.get('blank') === '1') document.getElementById('go').addEventListener('click', () => window.open(''));
 </script>
 </body>
 </html>
