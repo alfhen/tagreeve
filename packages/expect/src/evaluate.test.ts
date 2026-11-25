@@ -11,7 +11,7 @@ import {
   type Request,
   type Step,
 } from '@tagreeve/core';
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { decodeRequest } from '@tagreeve/decoders';
 import { HASH_REQUIRED_VENDORS, effectiveConsentAt, epochForHit, evaluate, placeHitsInEpochs, type EvalEpoch } from './evaluate.ts';
 import { parseScenario } from './scenario.ts';
@@ -1035,6 +1035,77 @@ test('a mustNot dataLayer rule after: warns for a loader on the same document, a
   const separated = rule(text, [...base, navigation(800)]);
   expect(separated.pass).toBe(true);
   expect(separated.severity).toBeUndefined();
+});
+
+describe('an embedded-frame loader and a main-frame navigation of its page', () => {
+  const text = `steps:\n  - { wait: 1s, label: first }\n  - { wait: 1s, label: second }\nexpect:\n  mustNot:\n    - { dataLayer: { event: purchase }, after: first }`;
+  type Frame = NonNullable<Request['frame']>;
+  const iframe: Frame = { main: false, n: 1, page: 0 };
+  const mainDoc = (t: number, frame: Frame, extra: Partial<Request> = {}) => request({ t, resourceType: 'document', frame, ...extra } as Partial<Request>);
+  const verdict = (loaderFrame: Frame, requests: Request[]) => {
+    const loader = request({ t: 500, url: LOADER_URL, frame: loaderFrame } as Partial<Request>);
+    return rule(text, [stepRec('first', 1, 100, 1000), stepRec('second', 2, 1000, 2000), loader, hookFlag('dataLayerNotHooked', [loader.id]), ...requests]);
+  };
+  const warned = (r: ReturnType<typeof verdict>) => {
+    expect(r).toMatchObject({ pass: false, severity: 'warn' });
+    expect(r.message).toContain('could not all be read');
+  };
+  const passed = (r: ReturnType<typeof verdict>) => {
+    expect(r.pass).toBe(true);
+    expect(r.severity).toBeUndefined();
+    expect(r.message).not.toContain('could not all be read');
+  };
+
+  test('is bounded by a later main-frame document request on the same page', () => {
+    passed(verdict(iframe, [mainDoc(800, { main: true, n: 0, page: 0 })]));
+  });
+
+  test('stays unbounded for a request on another page', () => {
+    const doc = mainDoc(800, { main: true, n: 0, page: 1 });
+    expect(doc.frame?.page).toBe(1);
+    warned(verdict(iframe, [doc]));
+  });
+
+  test('stays unbounded for an aborted request', () => {
+    const doc = mainDoc(800, { main: true, n: 0, page: 0 }, { outcome: 'failed', failure: 'net::ERR_ABORTED' });
+    expect(doc.failure).toBe('net::ERR_ABORTED');
+    warned(verdict(iframe, [doc]));
+  });
+
+  test('stays unbounded when the loader has no page', () => {
+    const bare: Frame = { main: false, n: 1 };
+    expect('page' in bare).toBe(false);
+    warned(verdict(bare, [mainDoc(800, { main: true, n: 0, page: 0 })]));
+  });
+
+  test('stays unbounded when the request has no page', () => {
+    const bare: Frame = { main: true, n: 0 };
+    expect('page' in bare).toBe(false);
+    warned(verdict(iframe, [mainDoc(800, bare)]));
+  });
+
+  test('a main-frame loader is bounded by the main frame only', () => {
+    const top: Frame = { main: true, n: 0, page: 0 };
+    passed(verdict(top, [mainDoc(800, { main: true, n: 0, page: 0 })]));
+    const popup = mainDoc(800, { main: true, n: 2, page: 1 });
+    expect(popup.frame?.n).not.toBe(top.n);
+    expect(popup.frame?.page).toBe(1);
+    warned(verdict(top, [popup]));
+  });
+
+  test('an iframe loader is bounded by a document request of its own frame', () => {
+    passed(verdict(iframe, [mainDoc(800, { main: false, n: 1, page: 0 })]));
+  });
+
+  test('a visit step still ends the document of an iframe loader', () => {
+    const visitText = `steps:\n  - { wait: 1s, label: first }\n  - { visit: /next, label: second }\nexpect:\n  mustNot:\n    - { dataLayer: { event: purchase }, after: second }`;
+    const loader = request({ t: 500, url: LOADER_URL, frame: iframe } as Partial<Request>);
+    const records = [stepRec('first', 1, 100, 400), stepRec('second', 2, 600, 2000), loader, hookFlag('dataLayerNotHooked', [loader.id])];
+    expect(records.some((r) => r.type === 'request' && r !== loader)).toBe(false);
+    const r = rule(visitText, records);
+    expect(r.pass).toBe(true);
+    expect(r.severity).toBeUndefined();
+  });
 });
 
 const MUST_SCOPES = [

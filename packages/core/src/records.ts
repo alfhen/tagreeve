@@ -33,6 +33,7 @@ export interface CaptureCoverage {
  * `noTagReports` and `tagNameUnknown`, and the flag kinds `dataLayerReassigned` and `dataLayerNotHooked`.
  * 0.6.0-rc.3 adds, within version 5, the flag kind `dataLayerIncomplete` and the optional field `InvalidReport.got`.
  * 0.6.1 adds, within version 5, the flag kind `possibleRealDataPush` and the `HitLinkMiss.clientId` value `concurrentRequest`.
+ * 0.9.0 adds, within version 5, the optional `Request.frame.page`.
  * A new flag kind or a new optional field that an older reader of the same version reads correctly does not bump
  * the version. A new required field, or a changed meaning, does.
  * A record with no version is version 0.
@@ -185,7 +186,7 @@ export interface Request {
    */
   captured?: 'netlog' | 'serverContainer';
   /** The frame that made the request. `n` is the run's number for that frame. Never a URL. Absent before version 5, which reads as unknown. */
-  frame?: DataLayerFrame;
+  frame?: RequestFrame;
 }
 
 export interface Response {
@@ -289,6 +290,11 @@ export interface DataLayerEvent {
 export interface DataLayerFrame {
   main: boolean;
   n: number;
+}
+
+/** A request's frame. `page` is the run's number for the page (tab or popup) that holds the frame. Never a URL. Absent before 0.9.0. */
+export interface RequestFrame extends DataLayerFrame {
+  page?: number;
 }
 
 /** The status values GTM reports for a tag. */

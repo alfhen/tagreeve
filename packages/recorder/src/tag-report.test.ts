@@ -157,3 +157,14 @@ describe('parseTagReport', () => {
     expect(bad.got).toBe('string');
   });
 });
+
+describe('a context frame that holds a page', () => {
+  test('is reduced to main and n in the report', () => {
+    const withPage = { ...ctx, frame: { main: false, n: 2, page: 0 } };
+    expect('page' in withPage.frame).toBe(true);
+    const r = parseTagReport(good(), 'web', withPage);
+    if (!r.ok) throw new Error('expected a report');
+    expect(r.report.frame).toEqual({ main: false, n: 2 });
+    expect(r.report.frame).not.toHaveProperty('page');
+  });
+});

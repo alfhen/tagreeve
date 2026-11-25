@@ -17,6 +17,7 @@ import {
   type ConsentEpoch,
   type DataLayerEvent,
   type DataLayerFrame,
+  type RequestFrame,
   type Flag,
   type Canary,
   type Hit,
@@ -50,6 +51,7 @@ import {
   type Route,
 } from 'playwright';
 import { routeCollector, type CollectorHandler, type ParsedReport } from './collector.ts';
+import { createPageNumbers } from './frame-page.ts';
 import { COLLECTOR_ORIGIN, SELFTEST_ORIGIN } from './origins.ts';
 import { DATALAYER_BINDING, DATALAYER_TALLY, dataLayerEventFromPayload, dataLayerInitScript, hookedLayerNames, type DataLayerPayload } from './datalayer.ts';
 import { buildTallyFlags, PayloadCounts, postedAhead, validateTally, type FrameTally } from './datalayer-tally.ts';
@@ -228,6 +230,11 @@ export class Recorder {
   private readonly frameNumbers = new WeakMap<Frame, number>();
   private readonly frameNavigations = new WeakMap<Frame, number>();
   private frameCount = 0;
+  private readonly pageNumber = createPageNumbers();
+  /** A popup's first request is sent before its frame exists, so it has no frame until the popup's page event. */
+  private readonly framelessNavigations: { records: Request[]; frame?: RequestFrame }[] = [];
+  private readonly framelessEntryOf = new Map<string, { records: Request[]; frame?: RequestFrame }>();
+  private readonly unclaimedPopups: Page[] = [];
   private readonly navigationSeen = new WeakSet<PwRequest>();
   private readonly requestFrameIds = new Map<string, string>();
   private readonly collectorReports: (CollectorReport | InvalidReport)[] = [];
@@ -388,6 +395,12 @@ export class Recorder {
       await context.addInitScript(handoffOverlayScript(this.handoff.nonce));
     }
     context.on('request', (request) => void this.recordFor(request));
+    context.on('page', (page) => {
+      // The run's own first page is numbered 0 when it opens. Every later page is a popup.
+      if (this.pageNumber(page) === 0) return;
+      this.unclaimedPopups.push(page);
+      this.claimPopups();
+    });
     context.on('requestfailed', (request) => {
       const record = this.recordFor(request);
       if (!record) return;
@@ -491,6 +504,10 @@ export class Recorder {
     return { main: frame === frame.page().mainFrame(), n: this.frameNumber(frame) };
   }
 
+  private requestFrameRef(frame: Frame): RequestFrame {
+    return { ...this.frameRef(frame), page: this.pageNumber(frame.page()) };
+  }
+
   private frameNumber(frame: Frame): number {
     let number = this.frameNumbers.get(frame);
     if (number === undefined) {
@@ -533,9 +550,9 @@ export class Recorder {
     // The collector and self-test origins are Tagreeve's own channel, not site traffic.
     if (!/^https?:/.test(url) || url.startsWith(COLLECTOR_ORIGIN) || url.startsWith(SELFTEST_ORIGIN)) return undefined;
     const body = request.postData();
-    let frame: DataLayerFrame | undefined;
+    let frame: RequestFrame | undefined;
     try {
-      frame = this.frameRef(request.frame());
+      frame = this.requestFrameRef(request.frame());
     } catch {
       // Requests from workers have no frame.
     }
@@ -560,6 +577,7 @@ export class Recorder {
     if (loaderName !== undefined) this.loaderLayers.push({ id: record.id, name: loaderName });
     record = this.redactForHandoff(record);
     this.requests.set(request, record);
+    if (!frame && request.isNavigationRequest()) this.trackFrameless(request, record);
     const frameId = this.requestFrameId(request);
     if (frameId !== null) this.requestFrameIds.set(record.id, frameId);
     if (request.isNavigationRequest() && isTopLevelFrameRequest(request)) {
@@ -567,6 +585,27 @@ export class Recorder {
       this.navigations.push(record.t);
     }
     return record;
+  }
+
+  private trackFrameless(request: PwRequest, record: Request): void {
+    const previous = request.redirectedFrom();
+    const earlier = previous ? this.requests.get(previous) : undefined;
+    const entry = (earlier && this.framelessEntryOf.get(earlier.id)) || { records: [] };
+    if (!this.framelessEntryOf.has(record.id) && entry.records.length === 0) this.framelessNavigations.push(entry);
+    entry.records.push(record);
+    this.framelessEntryOf.set(record.id, entry);
+    if (entry.frame) record.frame = entry.frame;
+    else this.claimPopups();
+  }
+
+  private claimPopups(): void {
+    for (const entry of this.framelessNavigations) {
+      if (entry.frame) continue;
+      const page = this.unclaimedPopups.shift();
+      if (!page) return;
+      entry.frame = { main: true, n: this.frameNumber(page.mainFrame()), page: this.pageNumber(page) };
+      for (const r of entry.records) r.frame = entry.frame;
+    }
   }
 
   /** A person is typing during a handoff, so only requests that decode as tracking hits keep their body and query. */

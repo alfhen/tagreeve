@@ -539,10 +539,14 @@ function evaluatePushRuleIn(rule: Rule, ctx: Context): RuleOutcome {
   return evaluatePushRule(rule, { pushes: ctx.dataLayerEvents, inScope, where: narrowed.length ? ` ${narrowed.join(', ')}` : '', hookIncomplete });
 }
 
-/** An unhooked loader leaves its whole document unread: from the last navigation at or before it to the next one. A navigation is a document request of the loader's own frame that did not abort; without a frame on either side, any main-frame request counts. */
+/** An unhooked loader leaves its whole document unread: from the last navigation at or before it to the next one. A navigation is a document request of the loader's own frame that did not abort; without a frame on either side, any main-frame request counts. An embedded loader also ends with a main-frame navigation of its own page, since that unloads the frame. Both pages must be numbered, so a popup does not end it. */
 function loaderReachesScope(loader: Request | undefined, ctx: Context, inScope: (t: number) => boolean, windowStartAt: number | undefined): boolean {
   if (!loader) return true;
-  const sameFrame = (r: Request) => (loader.frame && r.frame ? r.frame.n === loader.frame.n : r.frame?.main !== false);
+  const sameFrame = (r: Request) => {
+    if (!(loader.frame && r.frame)) return r.frame?.main !== false;
+    if (r.frame.n === loader.frame.n) return true;
+    return !loader.frame.main && r.frame.main && loader.frame.page !== undefined && r.frame.page === loader.frame.page;
+  };
   const aborted = (r: Request) => r.outcome === 'failed' && r.failure === 'net::ERR_ABORTED';
   const navigations = [
     ...ctx.visitTimes,
