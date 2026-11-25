@@ -217,7 +217,7 @@ export interface HitVia {
   by: 'eventId' | 'clientId' | 'identity';
   /**
    * `exact` is proven: by event ID and event name, or by client ID and event name on the one browser hit
-   * whose request to the container was in flight. `probable`: a shared value.
+   * whose request to the container was in flight, or was answered at most 2000 ms before the call with no other request and no consent change in between. `probable`: a shared value.
    */
   confidence: 'exact' | 'probable';
 }
@@ -261,8 +261,8 @@ export interface HitLinkMiss {
   /**
    * Rule 2, the first reason that applies. `noClientId`: no event name, or no client ID of at least 8 characters.
    * `noSameKeyHit`: no browser hit shares the key. `severalSameKeyHits`: more than one does.
-   * `answeredBefore`: one same-key hit, and the call came after its answer or it has no window.
-   * `concurrentRequest`: one same-key hit in flight, but another container-routed browser request that shares a client ID
+   * `answeredBefore`: one same-key hit, and the call came more than 2000 ms after its answer, a consent epoch started between the hit and the call, there are no epoch starts, or it has no window.
+   * `concurrentRequest`: one same-key hit in flight or answered, but another container-routed browser request that shares a client ID
    * or has no decoded hit was sent between that hit and the call.
    */
   clientId: 'noClientId' | 'noSameKeyHit' | 'severalSameKeyHits' | 'answeredBefore' | 'concurrentRequest';

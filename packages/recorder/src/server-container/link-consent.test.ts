@@ -53,3 +53,15 @@ test('a call made while consent was granted links to the hit sent before it, and
   const result = evaluate(records as never, parseScenario('start: /\n')).find((r) => r.expectation === 'builtin: identifierRoute');
   expect(result?.pass).toBe(true);
 });
+
+test('an answered client-ID call is not exact when a consent epoch started between the hit and the call', () => {
+  const b = request('https://sgtm.example.invalid/g/collect?cid=pw-client-0001&en=Purchase', 100, { method: 'POST' });
+  const c = request('https://www.google-analytics.com/g/collect?cid=pw-client-0001&en=Purchase', 500, { captured: 'serverContainer', initiator: 'serverContainer', outcome: 'stubbed' });
+  const hb = hit(b, 'ga4', {});
+  const hc = hit(c, 'ga4', {});
+  const starts = [300];
+  expect(starts[0]! > b.t && starts[0]! <= c.t).toBe(true);
+  const out = linkServerHits({ hits: [hb, hc], requests: [b, c], serverHosts: ['sgtm.example.invalid'], identity: createIdentity(1), inFlight: new Map([[b.id, { sentAt: 100, answeredAt: 200 }]]), epochStarts: starts });
+  expect(out[1]!.via?.confidence).not.toBe('exact');
+  expect(out[1]!.linkMiss?.clientId).toBe('answeredBefore');
+});

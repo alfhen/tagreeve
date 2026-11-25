@@ -87,12 +87,14 @@ export interface LinkInput {
   identity: Identity | null;
   /** By request ID. A request with no answer time is not here, so it never counts as in flight. */
   inFlight?: ReadonlyMap<string, InFlightWindow>;
-  /** Start times of the run's consent epochs, on the request clock, in any order. Only rule (1) reads them: without them a browser hit sent after the call never counts. */
+  /** Start times of the run's consent epochs, on the request clock, in any order. Rule (1) reads them for hits sent after the call, rule (2) for an answered request. Without them neither applies. */
   epochStarts?: readonly number[];
 }
 
 /** How long after a call a browser hit with the call's event ID may still be its source. */
 const LATER_HIT_WINDOW_MS = 5000;
+/** How long after the answer to a browser request a container call may still be its call. */
+const ANSWERED_WINDOW_MS = 2000;
 
 function sharedKind(server: Facts, browser: Facts): 'eventId' | 'clientId' | 'identity' | undefined {
   if (server.eventId && server.eventId.length >= MIN_VALUE_LENGTH && server.eventId === browser.eventId) return 'eventId';
@@ -105,8 +107,9 @@ function sharedKind(server: Facts, browser: Facts): 'eventId' | 'clientId' | 'id
  * Adds `via` to each hit decoded from a server container call. The proxy cannot see which browser hit led to a call,
  * so the first rule that fits decides: (1) the event ID and event name match exactly one browser hit sent at or before the call (at its request time, when that is known), or sent after the call, at most 5000 ms after it, with an event ID of at least 8 characters and no consent epoch starting after the call and at or before that hit (needs `epochStarts`), `exact`; two or more such hits give no exact link;
  * (2) the client ID and event name match exactly one browser hit to a `serverHosts` host sent before the call, and its request to the
- * container was still in flight when the call arrived, `exact`; two or more such hits, in flight or answered, give no exact link, and neither does another
- * container-routed request that shares a client ID or has no decoded hit and was sent in between (`concurrentRequest`);
+ * container was still in flight when the call arrived, `exact`; with `epochStarts` it is also `exact` when the answer came at most 2000 ms before the call and no consent epoch
+ * started after the hit was sent and at or before the call; two or more such hits, in flight or answered, give no exact link, and neither does another
+ * container-routed request that shares a client ID or has no decoded hit and was sent in between (`concurrentRequest`, which wins over a late call or an epoch start);
  * (3) a shared value, `probable`: the latest earlier hit to a `serverHosts` host, else the latest earlier browser hit.
  * No match leaves the hit unlinked. Browser hits are returned as they are.
  */
@@ -177,8 +180,13 @@ export function linkServerHits({ hits, requests, serverHosts, identity, inFlight
     const only = sameKey.length === 1 ? sameKey[0]! : undefined;
     const window = only && inFlight?.get(only.hit.requestId);
     const inFlightNow = only !== undefined && window && callAt !== undefined && callAt < window.answeredAt;
-    const concurrent = inFlightNow && hasConcurrentRequest(only, window.sentAt, callAt, f.clientIds);
+    // An answered request counts only with epoch starts, so a run that cannot see consent changes keeps the old result.
+    const answeredNow = only !== undefined && window && callAt !== undefined && sortedStarts !== undefined && callAt >= window.answeredAt;
+    const concurrent = (inFlightNow || answeredNow) && hasConcurrentRequest(only, window.sentAt, callAt, f.clientIds);
     if (inFlightNow && !concurrent) {
+      return { ...f.hit, via: { hitId: only.hit.id, by: 'clientId', confidence: 'exact' } };
+    }
+    if (answeredNow && !concurrent && callAt - window.answeredAt <= ANSWERED_WINDOW_MS && !sortedStarts.some((t) => t > window.sentAt && t <= callAt)) {
       return { ...f.hit, via: { hitId: only.hit.id, by: 'clientId', confidence: 'exact' } };
     }
     const clientIdMiss: HitLinkMiss['clientId'] =
