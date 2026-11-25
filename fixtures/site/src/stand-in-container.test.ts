@@ -113,6 +113,12 @@ describe('stand-in container', () => {
 
   it('makes a fourth call, to the Pinterest Conversions API, only with pinterest=<event name>', async () => {
     const origin = await start();
+    await fetch(`${origin}/capi?event_id=evt-78`, { method: 'POST', body: '' });
+    await until(() => answered.length === 3);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(answered).toHaveLength(3);
+    expect(answered.some((r) => new URL(r.url).host === 'api.pinterest.com')).toBe(false);
+    answered.length = 0;
     await fetch(`${origin}/capi?pinterest=add_to_cart&event_id=pw-pin-event-1&email=Pw.Fixture@example.invalid`, { method: 'POST', body: '' });
     await until(() => answered.length === 4);
     const call = answered[3]!;
