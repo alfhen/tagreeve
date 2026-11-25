@@ -1,5 +1,5 @@
 import { OTHER_NAME, guardFieldName, isValueSegment } from '@tagreeve/decoders';
-import { valueKinds, type Hit, type HitIds, type RunRecords } from '@tagreeve/core';
+import { type Hit, type HitIds, type RunRecords } from '@tagreeve/core';
 import { CONSENT_STATES, type ConsentState } from './consent-matrix.ts';
 import { DEFAULT_GRACE_MS, epochForHit, judgeIndex, judgedAt } from './evaluate.ts';
 
@@ -45,14 +45,12 @@ const MAX_EVENT_DIGITS = 3;
 function spacedNameOk(name: string): boolean {
   if (name.includes('@') || (name.match(/\d/g)?.length ?? 0) > MAX_EVENT_DIGITS) return false;
   if (name.split(' ').length > MAX_EVENT_WORDS) return false;
-  // `:` and `.` also separate pieces: a token joined by them inside a word must not slip past the span check.
-  const words = name.split(/[ .:]/).filter(Boolean);
+  // `:`, `.` and `_` also separate pieces: a token joined by them inside a word must not slip past the span check.
+  const words = name.split(/[ .:_]/).filter(Boolean);
   for (let i = 0; i < words.length; i++) {
     for (let j = i + 1; j <= words.length; j++) {
       const span = words.slice(i, j).join('');
       if (isValueSegment(span)) return false;
-      const kinds = valueKinds(span);
-      if (kinds.has('email') || kinds.has('phone')) return false;
     }
   }
   return true;
