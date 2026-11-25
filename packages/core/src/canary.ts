@@ -35,6 +35,12 @@ export function canaryPool(canaries: readonly Canary[], identity: Pick<Identity,
   const nameOf = (text: string): string | undefined => {
     const exact = forms.get(text);
     if (exact !== undefined) return exact;
+    // Padded Base64 of a digest, or a value followed by =, is the unpadded form with its padding.
+    const bare = text.replace(/=+$/, '');
+    if (bare !== text) {
+      const padded = forms.get(bare);
+      if (padded !== undefined) return padded;
+    }
     const token = CLICK_ID_COOKIE.exec(text)?.[1];
     return token === undefined ? undefined : forms.get(token);
   };
