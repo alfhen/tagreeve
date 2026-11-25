@@ -123,7 +123,7 @@ describe('a client ID link while the browser request is in flight', () => {
     await expectNoLeaks(late);
   });
 
-  test('a same-client-ID request between the hit and the call gives concurrentRequest', async () => {
+  test('a request with no decoded hit between the hit and the call gives concurrentRequest', async () => {
     const call = await expectPrecondition(concurrent);
     const hitT = tOf(concurrent, browserPurchase(concurrent, call));
     const between = concurrent.records!.requests.filter(

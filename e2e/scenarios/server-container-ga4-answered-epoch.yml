@@ -1,6 +1,6 @@
 start: /sgtm-leak?mode=allowlist
 steps:
-  - evaluate: "fetch(window.__PW_FIXTURE.sgtmUrl + '/g/collect?v=2&tid=G-PWTEST0001&cid=pw-client-0001&en=purchase&ga4=copy&delayMs=1000', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: '' }).then(function () { return true; })"
+  - evaluate: "fetch(window.__PW_FIXTURE.sgtmUrl + '/g/collect?v=2&tid=G-PWTEST0001&cid=pw-client-0001&en=purchase&ga4=copy&delayMs=1500', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: '' }).then(function () { return true; })"
   - consent: reject
     label: rejected
   - wait: 4s

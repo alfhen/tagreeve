@@ -661,6 +661,8 @@ describe('rule 2: a call after the answer', () => {
 
   test('two same-key hits are severalSameKeyHits', () => {
     const r = setup({ second: true });
+    expect(r.callAt).toBeGreaterThan(220);
+    expect(r.w!.answeredAt).toBeLessThan(r.callAt);
     expect(r.call.linkMiss).toEqual(miss('severalSameKeyHits'));
     expect(r.call.via?.confidence).not.toBe('exact');
   });
@@ -673,12 +675,15 @@ describe('rule 2: a call after the answer', () => {
 
   test('another client ID, another event or another host does not link', () => {
     const cid = setup({ cid: 'pw-client-0002' });
+    expect(new URL(callUrl('pw-client-0002', 'Purchase')).searchParams.get('cid')).not.toBe('pw-client-0001');
     expect(cid.call.linkMiss).toEqual(miss('noSameKeyHit'));
     expect(cid.call.via?.confidence).not.toBe('exact');
     const en = setup({ en: 'PageView' });
+    expect('PageView').not.toBe('Purchase');
     expect(en.call.linkMiss?.clientId).toBe('noSameKeyHit');
     expect(en.call.via?.confidence).not.toBe('exact');
     const host = setup({ host: 'https://other.example.invalid' });
+    expect(hosts).not.toContain('other.example.invalid');
     expect(host.call.via?.confidence).not.toBe('exact');
   });
 
@@ -686,22 +691,33 @@ describe('rule 2: a call after the answer', () => {
     const same = (t: number, over: Partial<NonNullable<Opts['extra']>[number]> = {}) => ({ url: `${SGTM}?cid=pw-client-0001&en=PageView`, t, hit: 'PageView', ...over });
     test.each([150, 300])('a same-ID request at %i is concurrentRequest', (t) => {
       const r = setup({ extra: [same(t)] });
+      expect(t).toBeGreaterThan(r.w!.sentAt);
+      expect(t).toBeLessThan(r.callAt);
+      expect(same(t).url).toContain('cid=pw-client-0001');
       expect(r.call.linkMiss).toEqual(miss('concurrentRequest'));
       expect(r.call.via?.confidence).toBe('probable');
     });
     test('a request with no decoded hit is concurrentRequest', () => {
-      expect(setup({ extra: [{ url: 'https://sgtm.example.invalid/other', t: 300 }] }).call.linkMiss).toEqual(miss('concurrentRequest'));
+      const r = setup({ extra: [{ url: 'https://sgtm.example.invalid/other', t: 300 }] });
+      expect(300).toBeGreaterThan(r.w!.sentAt);
+      expect(300).toBeLessThan(r.callAt);
+      expect(r.call.linkMiss).toEqual(miss('concurrentRequest'));
     });
     test('another client ID does not block', () => {
-      const r = setup({ extra: [same(300, { url: `${SGTM}?cid=pw-client-0002&en=PageView` })] });
+      const other = same(300, { url: `${SGTM}?cid=pw-client-0002&en=PageView` });
+      expect(other.url).not.toContain('cid=pw-client-0001');
+      const r = setup({ extra: [other] });
       expect(r.call.via).toEqual(exact(r.b));
     });
     test.each([50, 600])('a same-ID request at %i does not block', (t) => {
       const r = setup({ extra: [same(t)] });
+      expect(t < r.w!.sentAt || t > r.callAt).toBe(true);
       expect(r.call.via).toEqual(exact(r.b));
     });
     test('an unload send does not block', () => {
-      const r = setup({ extra: [same(300, { initiator: 'unload' })] });
+      const x = same(300, { initiator: 'unload' });
+      expect(x.initiator).toBe('unload');
+      const r = setup({ extra: [x] });
       expect(r.call.via).toEqual(exact(r.b));
     });
     test('concurrentRequest wins over a late call and over an epoch start', () => {
@@ -720,6 +736,10 @@ describe('rule 2: a call after the answer', () => {
       [null, 'answeredBefore'],
     ] as const)('epochStarts %j gives %s', (starts, want) => {
       const r = setup({ epochStarts: starts === null ? null : [...starts] });
+      for (const t of starts ?? []) {
+        const inSpan = t > r.w!.sentAt && t <= r.callAt;
+        expect(inSpan).toBe(want === 'answeredBefore');
+      }
       if (want === 'exact') {
         expect(r.call.via).toEqual(exact(r.b));
         expect(r.call.linkMiss).toBeUndefined();
