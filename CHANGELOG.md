@@ -7,8 +7,8 @@
 ### Fixes in 0.8.1
 
 - `diff --by-page` prints only the path of a recorded page after `recorded as`, never the query or the fragment, and `diff --json` holds the same path in `page`. A canary run's fake `TEST-` click IDs no longer reach the diff output. A recorded page that is not a URL is cut at the first `?` or `#`, and shown as `(other)` when what is left does not start with `/`. Baseline keys do not change (#1606).
-- The `identifierRoute` pass message no longer says "No planted value found" when every route went to a host in `options.identifierRouteAllow`. It says no planted value reached a judged route, then names the allowed hosts. `pass`, severity and evidence do not change (#1634).
-- The Stape loader e2e test stand-in exits after it answers its first health request, so the test no longer depends on a fixed timer (#1625). This changes a test only.
+- The `identifierRoute` pass message no longer says "No planted value found" when every route went to a host in `options.identifierRouteAllow`. It now starts "No planted value reached a judged sink;", then names the allowed hosts. `pass`, severity and evidence do not change (#1634).
+- The Stape loader e2e test stand-in exits 300 ms after its first health answer, so the exit no longer races the container start (#1625). This changes a test only.
 
 ### Upgrading from 0.8.0
 
@@ -17,7 +17,7 @@
 
 ### Known in 0.8.1
 
-Issues still open that you can meet, in addition to those in 0.8.0:
+Issues still open that you can meet, in addition to those in 0.7.0:
 
 - A server GA4 hit behind a container that answers before its call stays `probable` (#1640), so its identifier routes warn with `serverSendProbableLink`.
 - A Pinterest Conversions API call to api.pinterest.com gets no link to a browser hit, so its identifier routes warn under accept (#1648).
