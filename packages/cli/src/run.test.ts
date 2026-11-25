@@ -339,7 +339,7 @@ test.each([
 
 const refillVars = (next: string) => `vars:\n  key: '{next}'\n  next: ${next}\n  other: 'a#b'\n`;
 
-test('a # in a variable that the start URL does not use does not refuse a refilled run', async () => {
+test('a canary run with a refill does not refuse a # in a variable the start URL does not use', async () => {
   const r = await canaryRun(`start: /p/{key}\n${refillVars('y')}`, (text) => {
     expect(parseScenario(text).vars.other).toContain('#');
   });
@@ -351,7 +351,7 @@ test.each([
   ['a # in a variable the start uses directly', `start: /p/{key}/{other}\n${refillVars('y')}`, 'other'],
   ['a # reached through another variable', `start: /p/{key}\nvars:\n  key: '{next}'\n  next: 'y#z'\n`, 'next'],
   ['a # in the inner variable beside an unused one', `start: /p/{key}\n${refillVars("'y#z'")}`, 'next'],
-])('with a refill, %s still refuses the run', async (_label, head, name) => {
+])('a canary run with a refill and %s still refuses', async (_label, head, name) => {
   const r = await canaryRun(head, (text) => {
     const vars = parseScenario(text).vars;
     expect(vars[name]).toContain('#');
