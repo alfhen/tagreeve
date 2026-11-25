@@ -1,0 +1,9 @@
+start: /datalayer-frame-loader
+steps:
+  - { wait: 1s, label: first }
+  - { click: "#go", label: leave }
+  - { wait: 1s, label: later }
+options: { seed: 1, allowUnknownDestination: true }
+expect:
+  mustNot:
+    - { dataLayer: { event: purchase }, after: later }
