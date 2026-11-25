@@ -127,3 +127,26 @@ test('no output prints a canary value or the identity email or phone', async () 
     for (const needle of needles) expect(output).not.toContain(needle);
   }
 }, 300_000);
+
+test('a raw tab inside a reserved parameter name of the start URL is refused', async () => {
+  const dir = await tempDir('canaries-tab-');
+  const file = join(dir, 's.yml');
+  await writeFile(file, (await readFile(scenario('canaries'), 'utf8')).replace('start: /plain/product', 'start: "/plain/product?gc\\tlid=pw-1"'));
+  expect((await readFile(file, 'utf8')).split('\n')[0]).toBe('start: "/plain/product?gc\\tlid=pw-1"');
+  const r = await runCli(['run', file, '--site', site.url, '--out', outDir, '--json']);
+  expect(r.code).toBe(2);
+  expect(r.stderr).toContain('already holds the gclid parameter');
+  expect(r.stdout + r.stderr).not.toContain('pw-1');
+}, 150_000);
+
+test('a # in a variable that the start URL does not use does not refuse the run', async () => {
+  const dir = await tempDir('canaries-unused-');
+  const file = join(dir, 's.yml');
+  const source = (await readFile(scenario('canaries'), 'utf8')).replace('start: /plain/product', 'start: "/plain/product?ref={tag}"\nvars:\n  tag: \'{x}\'\n  x: \'1\'\n  note: \'a#b\'');
+  await writeFile(file, source);
+  expect(source).toContain("note: 'a#b'");
+  const r = await runCli(['run', file, '--site', site.url, '--out', outDir, '--json']);
+  expect(r.code).not.toBe(2);
+  expect(r.stderr).not.toContain('fragment');
+  expect(new URL(startRequest(r.records!).url).searchParams.get('gclid')).toBe('TEST-GCLID-7-RUN-0001');
+}, 150_000);

@@ -298,3 +298,75 @@ test('a canary run refuses a var value that holds a placeholder and a #', async 
   expect(code).toBe(2);
   expect(err.join('')).toContain('fragment');
 });
+
+const CANARY_TAIL = 'options: { canaries: true, seed: 7 }\nsteps:\n  - wait: 1s\nexpect:\n  must: []\n  mustNot: []\n';
+
+async function canaryRun(head: string, check: (text: string) => void, stopAtStart = true) {
+  const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
+  const scenario = join(dir, 's.yml');
+  await writeFile(scenario, head + CANARY_TAIL);
+  check(await readFile(scenario, 'utf8'));
+  const err: string[] = [];
+  failStart.on = stopAtStart;
+  failStart.seen = undefined;
+  let code: number;
+  try {
+    code = await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: {}, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err.push(t) });
+  } finally {
+    failStart.on = false;
+  }
+  return { code, err: err.join(''), start: (failStart.seen as { start: string } | undefined)?.start };
+}
+
+test.each([['tab', '\\t', '\t'], ['newline', '\\n', '\n'], ['carriage return', '\\r', '\r']])('canaries refuse a start URL with a raw %s inside a reserved name', async (_label, escape, raw) => {
+  const r = await canaryRun(`start: "/plain/product?gc${escape}lid=pw-1"\n`, (text) => {
+    expect(parseScenario(text).start).toContain(`gc${raw}lid`);
+  });
+  expect(r.code).toBe(2);
+  expect(r.err).toContain('already holds the gclid parameter');
+  expect(r.err).not.toContain('pw-1');
+});
+
+test.each([
+  ['a percent-encoded tab', '/plain/product?gc%09lid=pw-1', '%09'],
+  ['a name that is not reserved after the strip', '"/plain/product?gc\\tlidx=pw-1"', '\tlidx'],
+])('canaries do not refuse a start URL with %s', async (_label, start, held) => {
+  const r = await canaryRun(`start: ${start}\n`, (text) => {
+    expect(parseScenario(text).start).toContain(held);
+  });
+  expect(r.err).not.toContain('already holds');
+  expect(r.start).toBeDefined();
+});
+
+const refillVars = (next: string) => `vars:\n  key: '{next}'\n  next: ${next}\n  other: 'a#b'\n`;
+
+test('a canary run with a refill does not refuse a # in a variable the start URL does not use', async () => {
+  const r = await canaryRun(`start: /p/{key}\n${refillVars('y')}`, (text) => {
+    expect(parseScenario(text).vars.other).toContain('#');
+  });
+  expect(r.err).not.toContain('fragment');
+  expect(r.start?.startsWith('/p/{key}?gclid=')).toBe(true);
+});
+
+test.each([
+  ['a # in a variable the start uses directly', `start: /p/{key}/{other}\n${refillVars('y')}`, 'other'],
+  ['a # reached through another variable', `start: /p/{key}\nvars:\n  key: '{next}'\n  next: 'y#z'\n`, 'next'],
+  ['a # in the inner variable beside an unused one', `start: /p/{key}\n${refillVars("'y#z'")}`, 'next'],
+])('a canary run with a refill and %s still refuses', async (_label, head, name) => {
+  const r = await canaryRun(head, (text) => {
+    const vars = parseScenario(text).vars;
+    expect(vars[name]).toContain('#');
+    if (name === 'next') expect(vars.key).not.toContain('#');
+  }, false);
+  expect(r.code).toBe(2);
+  expect(r.err).toContain('fragment');
+});
+
+test('with no refill a direct # variable is not refused and the canaries go before the #', async () => {
+  const r = await canaryRun('start: "/p?x={frag}"\nvars:\n  frag: \'a#b\'\n', (text) => {
+    expect(parseScenario(text).vars.frag).toContain('#');
+  });
+  expect(r.err).not.toContain('fragment');
+  expect(r.start?.startsWith('/p?x=a&gclid=')).toBe(true);
+  expect(r.start?.endsWith('#b')).toBe(true);
+});

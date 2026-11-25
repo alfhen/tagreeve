@@ -238,13 +238,29 @@ function declarationHint(spec: RunSpec, label: string | undefined): string | und
 function queryNames(start: string): string[] {
   const query = start.split('#')[0]!.split('?').slice(1).join('?');
   return query.split('&').map((pair) => {
-    const raw = pair.split('=')[0]!;
+    // URL parsers drop tab, newline and carriage return inside a name.
+    const raw = pair.split('=')[0]!.replace(/[\t\n\r]/g, '');
     try {
       return decodeURIComponent(raw.replace(/\+/g, ' '));
     } catch {
       return raw;
     }
   });
+}
+
+/** The values of the variables the start URL reaches, directly or through the {name}s in another reached value. */
+function usedVarValues(start: string, vars: Record<string, string>): string[] {
+  const seen = new Set<string>();
+  const queue = [start];
+  while (queue.length) {
+    for (const m of queue.pop()!.matchAll(/\{(\w+)\}/g)) {
+      const name = m[1]!;
+      if (!Object.hasOwn(vars, name) || seen.has(name)) continue;
+      seen.add(name);
+      queue.push(vars[name]!);
+    }
+  }
+  return [...seen].map((name) => vars[name]!);
 }
 
 function withCanaries(start: string, canaries: Canary[], probe = start): string {
@@ -290,8 +306,8 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
     canaries = canaryValues(seed, spec.consentCell);
     // A var value that holds a {name} placeholder would be filled again by the visit step, so plant on the unresolved start then.
     const refilled = [...resolved.matchAll(/\{(\w+)\}/g)].some((m) => Object.hasOwn(parsed.vars, m[1]!));
-    if (refilled && Object.values(parsed.vars).some((v) => v.includes('#'))) {
-      return failed('options.canaries: a variable value holds both a {placeholder} and a #, so the canary parameters could land in the URL fragment. Remove one, or turn canaries off.\n');
+    if (refilled && usedVarValues(parsed.start, parsed.vars).some((v) => v.includes('#'))) {
+      return failed('options.canaries: a variable the start URL uses holds a #, while a variable holds a {placeholder} that is filled again, so the canary parameters could land in the URL fragment. Remove one, or turn canaries off.\n');
     }
     parsed = { ...parsed, start: refilled ? withCanaries(parsed.start, canaries, resolved) : withCanaries(resolved, canaries) };
   }

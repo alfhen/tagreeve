@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, test } from 'vitest';
 import { canaryPool, canaryValues, CANARY_NAMES } from './canary.ts';
 import { createIdentity, fieldHashes } from './identity.ts';
@@ -60,5 +61,48 @@ describe('canaryPool', () => {
     const only = canaryPool(canaries, null);
     expect(only.match(identity.email)).toBeUndefined();
     expect(only.match(canaries[3]!.value)).toBe('fbclid');
+  });
+
+  const padded = (value: string) => createHash('sha256').update(value.trim().toLowerCase()).digest('base64');
+
+  test.each([
+    ['gclid', canaries[0]!.value],
+    ['email', identity.email],
+    ['phone', identity.phone],
+  ])('matches the padded Base64 digest of the %s value', (name, value) => {
+    const digest = padded(value);
+    expect(digest.endsWith('=')).toBe(true);
+    expect(pool.forms.has(digest)).toBe(false);
+    expect(pool.match(digest)).toBe(name);
+  });
+
+  test('matches a plain canary value followed by =', () => {
+    expect(pool.match(canaries[0]!.value + '=')).toBe('gclid');
+  });
+
+  test('does not match the padded digest or the = form of a changed value', () => {
+    const changed = 'TEST-GCLID-7-RUN-0002';
+    for (const text of [padded(changed), `${changed}=`]) {
+      expect(text.endsWith('=')).toBe(true);
+      expect(pool.match(text)).toBeUndefined();
+    }
+  });
+
+  test('keeps its forms and names, and leaves a trailing = text with no canary unmatched', () => {
+    const expected = new Map<string, string>();
+    for (const [name, value] of [...canaries.map((c) => [c.name, c.value] as const), ['email', identity.email] as const, ['phone', identity.phone] as const]) {
+      for (const form of [value, encodeURIComponent(value), base64(value, 'base64'), base64(value, 'base64url'), ...fieldHashes(value)]) if (!expected.has(form)) expected.set(form, name);
+    }
+    expect(pool.forms).toEqual(expected);
+    for (const [form, name] of pool.forms) expect(pool.match(form)).toBe(name);
+    for (let seed = 1; seed <= 50; seed++) {
+      if (seed === 7) continue;
+      for (const { value } of canaryValues(seed)) {
+        for (const text of [padded(value), `${value}=`]) {
+          expect(text.endsWith('=')).toBe(true);
+          expect(pool.match(text)).toBeUndefined();
+        }
+      }
+    }
   });
 });
