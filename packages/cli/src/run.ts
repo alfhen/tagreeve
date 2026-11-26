@@ -288,7 +288,7 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
       if (place === 'start') filledStart = filled;
     } catch (error) {
       if (!(error instanceof VarCycleError)) throw error;
-      return failed(`${place}: variables ${error.names.join(', ')} use each other in a cycle. Break the cycle.\n`);
+      return failed(`${place}: ${error.message}. Break the cycle.\n`);
     }
   }
 
