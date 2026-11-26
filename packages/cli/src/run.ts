@@ -1,6 +1,6 @@
 import { appendFile, readFile, rename, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { canaryValues, CANARY_NAMES, readRun, type Canary, type TagreeveRecord, type Result, type Run, type RunRecords } from '@tagreeve/core';
+import { canaryValues, CANARY_NAMES, fillVars, readRun, VarCycleError, type Canary, type TagreeveRecord, type Result, type Run, type RunRecords } from '@tagreeve/core';
 import { parseTrackerList, type TrackerEntry } from '@tagreeve/decoders';
 import { DEFAULT_GRACE_MS, evaluate, isLoopbackPattern, mergeOptions, parseScenario, ScenarioError, type Scenario, type Viewport } from '@tagreeve/expect';
 import {
@@ -248,29 +248,12 @@ function queryNames(start: string): string[] {
   });
 }
 
-/** The values of the variables the start URL reaches, directly or through the {name}s in another reached value. */
-function usedVarValues(start: string, vars: Record<string, string>): string[] {
-  const seen = new Set<string>();
-  const queue = [start];
-  while (queue.length) {
-    for (const m of queue.pop()!.matchAll(/\{(\w+)\}/g)) {
-      const name = m[1]!;
-      if (!Object.hasOwn(vars, name) || seen.has(name)) continue;
-      seen.add(name);
-      queue.push(vars[name]!);
-    }
-  }
-  return [...seen].map((name) => vars[name]!);
-}
-
-function withCanaries(start: string, canaries: Canary[], probe = start): string {
+function withCanaries(start: string, canaries: Canary[]): string {
   const hash = start.indexOf('#');
   const base = hash < 0 ? start : start.slice(0, hash);
   const tail = hash < 0 ? '' : start.slice(hash);
-  const probeHash = probe.indexOf('#');
-  const probeBase = probeHash < 0 ? probe : probe.slice(0, probeHash);
   const added = canaries.map((c) => `${c.name}=${encodeURIComponent(c.value)}`).join('&');
-  return `${base}${probeBase.includes('?') ? (/[?&]$/.test(probeBase) ? '' : '&') : '?'}${added}${tail}`;
+  return `${base}${base.includes('?') ? (/[?&]$/.test(base) ? '' : '&') : '?'}${added}${tail}`;
 }
 
 const nameCanaries = maskCanaries;
@@ -297,19 +280,25 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
     return { code: 2, error: scrubber ? scrubber.text(error) : error };
   };
 
+  let filledStart = parsed.start;
+  const places: [string, string][] = [['start', parsed.start], ...parsed.steps.flatMap((s, i): [string, string][] => (s.kind === 'visit' ? [[`step ${i + 1}`, s.value]] : []))];
+  for (const [place, text] of places) {
+    try {
+      const filled = fillVars(text, parsed.vars);
+      if (place === 'start') filledStart = filled;
+    } catch (error) {
+      if (!(error instanceof VarCycleError)) throw error;
+      return failed(`${place}: variables ${error.names.join(', ')} use each other in a cycle. Break the cycle.\n`);
+    }
+  }
+
   if (parsed.options.canaries) {
-    const resolved = parsed.start.replace(/\{(\w+)\}/g, (m, name: string) => parsed.vars[name] ?? m);
-    const held = queryNames(resolved);
+    const held = queryNames(filledStart);
     const taken = CANARY_NAMES.find((name) => held.includes(name));
     if (taken) return failed(`options.canaries: the start URL already holds the ${taken} parameter. Remove it from start, or turn canaries off.\n`);
     seed ??= parsed.options.seed ?? Math.floor(Math.random() * 2 ** 31);
     canaries = canaryValues(seed, spec.consentCell);
-    // A var value that holds a {name} placeholder would be filled again by the visit step, so plant on the unresolved start then.
-    const refilled = [...resolved.matchAll(/\{(\w+)\}/g)].some((m) => Object.hasOwn(parsed.vars, m[1]!));
-    if (refilled && usedVarValues(parsed.start, parsed.vars).some((v) => v.includes('#'))) {
-      return failed('options.canaries: a variable the start URL uses holds a #, while a variable holds a {placeholder} that is filled again, so the canary parameters could land in the URL fragment. Remove one, or turn canaries off.\n');
-    }
-    parsed = { ...parsed, start: refilled ? withCanaries(parsed.start, canaries, resolved) : withCanaries(resolved, canaries) };
+    parsed = { ...parsed, start: withCanaries(filledStart, canaries) };
   }
 
   let records: RunRecords;

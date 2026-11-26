@@ -11,3 +11,4 @@ export * from './glob.ts';
 export * from './limits.ts';
 export * from './consent-command.ts';
 export * from './server-hosts.ts';
+export * from './vars.ts';

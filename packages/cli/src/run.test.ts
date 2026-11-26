@@ -273,7 +273,7 @@ test('a failed canary run names the base64 forms of a canary value too', async (
   expect(out).toContain('(url param gclid)');
 });
 
-test('a canary run whose var value holds a placeholder keeps the start unresolved, so the visit step fills it once', async () => {
+test('a canary run whose var value holds a placeholder plants the canaries on the fully filled start', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
   const scenario = join(dir, 's.yml');
   await writeFile(scenario, 'start: /p/{key}\nvars:\n  key: x\n  next: y\noptions: { canaries: true, seed: 7 }\nsteps:\n  - wait: 1s\nexpect:\n  must: []\n  mustNot: []\n');
@@ -284,19 +284,27 @@ test('a canary run whose var value holds a placeholder keeps the start unresolve
   } finally {
     failStart.on = false;
   }
-  const seen = failStart.seen as { start: string; vars: Record<string, string> } | undefined;
-  expect(seen?.start.startsWith('/p/{key}?gclid=')).toBe(true);
-  expect(seen?.vars.key).toBe('{next}');
+  const seen = failStart.seen as { start: string } | undefined;
+  expect(seen?.start.startsWith('/p/y?gclid=')).toBe(true);
 });
 
-test('a canary run refuses a var value that holds a placeholder and a #', async () => {
+test('a canary run runs a var value that holds a placeholder and a #, with the canaries before the #', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
   const scenario = join(dir, 's.yml');
-  await writeFile(scenario, 'start: /p/{key}\nvars:\n  key: x\n  next: y\noptions: { canaries: true, seed: 7 }\nsteps:\n  - wait: 1s\nexpect:\n  must: []\n  mustNot: []\n');
+  await writeFile(scenario, "start: /p/{key}\nvars:\n  key: '{next}'\n  next: 'y#z'\noptions: { canaries: true, seed: 7 }\nsteps:\n  - wait: 1s\nexpect:\n  must: []\n  mustNot: []\n");
+  expect(parseScenario(await readFile(scenario, 'utf8')).vars.next).toContain('#');
   const err: string[] = [];
-  const code = await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: { key: '{next}#frag' }, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err.push(t) });
-  expect(code).toBe(2);
-  expect(err.join('')).toContain('fragment');
+  failStart.on = true;
+  failStart.seen = undefined;
+  try {
+    await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: {}, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err.push(t) });
+  } finally {
+    failStart.on = false;
+  }
+  const start = (failStart.seen as { start: string } | undefined)?.start;
+  expect(err.join('')).not.toContain('fragment');
+  expect(start?.startsWith('/p/y?gclid=')).toBe(true);
+  expect(start?.endsWith('#z')).toBe(true);
 });
 
 const CANARY_TAIL = 'options: { canaries: true, seed: 7 }\nsteps:\n  - wait: 1s\nexpect:\n  must: []\n  mustNot: []\n';
@@ -340,26 +348,63 @@ test.each([
 
 const refillVars = (next: string) => `vars:\n  key: '{next}'\n  next: ${next}\n  other: 'a#b'\n`;
 
-test('a canary run with a refill does not refuse a # in a variable the start URL does not use', async () => {
+test('a canary run with nested vars does not refuse a # in a variable the start URL does not use', async () => {
   const r = await canaryRun(`start: /p/{key}\n${refillVars('y')}`, (text) => {
     expect(parseScenario(text).vars.other).toContain('#');
   });
   expect(r.err).not.toContain('fragment');
-  expect(r.start?.startsWith('/p/{key}?gclid=')).toBe(true);
+  expect(r.start?.startsWith('/p/y?gclid=')).toBe(true);
 });
 
 test.each([
   ['a # in a variable the start uses directly', `start: /p/{key}/{other}\n${refillVars('y')}`, 'other'],
   ['a # reached through another variable', `start: /p/{key}\nvars:\n  key: '{next}'\n  next: 'y#z'\n`, 'next'],
-  ['a # in the inner variable beside an unused one', `start: /p/{key}\n${refillVars("'y#z'")}`, 'next'],
-])('a canary run with a refill and %s still refuses', async (_label, head, name) => {
+])('a canary run with nested vars and %s keeps the canaries before the #', async (_label, head, name) => {
   const r = await canaryRun(head, (text) => {
-    const vars = parseScenario(text).vars;
-    expect(vars[name]).toContain('#');
-    if (name === 'next') expect(vars.key).not.toContain('#');
+    expect(parseScenario(text).vars[name]).toContain('#');
+  });
+  expect(r.err).not.toContain('fragment');
+  expect(r.start).toContain('?gclid=');
+  expect(r.start?.indexOf('?gclid=')).toBeLessThan(r.start!.indexOf('#'));
+});
+
+test('the gclid refusal sees a start that is filled through a nested variable', async () => {
+  const r = await canaryRun('start: "/p?{q}"\nvars:\n  q: \'{r}\'\n  r: \'gclid=pw-1\'\n', (text) => {
+    expect(parseScenario(text).vars.r).toBe('gclid=pw-1');
   }, false);
   expect(r.code).toBe(2);
-  expect(r.err).toContain('fragment');
+  expect(r.err).toContain('already holds the gclid parameter');
+  expect(r.err).not.toContain('pw-1');
+});
+
+const CYCLE = "vars:\n  loopone: 'pw-v1-{looptwo}'\n  looptwo: 'pw-v2-{loopone}'\n";
+
+test.each([
+  ['the start', `start: /p/{loopone}\n${CYCLE}`, '  - wait: 1s\n', {}, /start/],
+  ['a visit step', `start: /\n${CYCLE}`, '  - wait: 1s\n  - visit: /p/{loopone}\n', {}, /step 2|visit-2/],
+  ['the start, made by a --var value', "start: /p/{loopone}\nvars:\n  loopone: 'pw-v1-{looptwo}'\n  looptwo: 'pw-v2'\n", '  - wait: 1s\n', { looptwo: '{loopone}' }, /start/],
+])('a variable cycle in %s exits 2 before the recorder starts, with no value', async (_label, head, steps, cliVars, where) => {
+  const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
+  const scenario = join(dir, 's.yml');
+  await writeFile(scenario, `${head}steps:\n${steps}expect:\n  must: []\n  mustNot: []\n`);
+  expect((await readFile(scenario, 'utf8')) + JSON.stringify(cliVars)).toContain('pw-v1-');
+  const err: string[] = [];
+  failStart.on = true;
+  failStart.seen = undefined;
+  let code: number;
+  try {
+    code = await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: cliVars, out: dir } as unknown as RunArgs, { stdout: () => undefined, stderr: (t) => err.push(t) });
+  } finally {
+    failStart.on = false;
+  }
+  const out = err.join('');
+  expect(code).toBe(2);
+  expect(failStart.seen).toBeUndefined();
+  expect(out).toContain('loopone');
+  expect(out).toContain('looptwo');
+  expect(out).toMatch(where);
+  expect(out).not.toContain('pw-v1-');
+  expect(out).not.toContain('pw-v2');
 });
 
 test('with no refill a direct # variable is not refused and the canaries go before the #', async () => {
