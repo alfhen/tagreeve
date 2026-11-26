@@ -1,6 +1,6 @@
 # Plan for 0.9.1
 
-0.9.1 is a patch release after 0.9.0. It fixes two bugs found in the 0.9.0-rc.1 field test: a `{name}` inside a variable value is never filled (#1666), and a padded Base64 SHA-256 match in an `identifierRoute` flag reads transform `other` (#1667). No new command, option or record field, no record schema change, no new decoded hit or vendor, and nothing turns a pass or a warning into a failure. Each item is one PR. A PR is done when its acceptance test passes in CI, an adversarial review reports no blockers or majors, and it is squash-merged.
+0.9.1 is a patch release after 0.9.0. It fixes two bugs found in the 0.9.0-rc.1 field test: a `{name}` inside a variable value is never filled (#1666), and a padded Base64 SHA-256 match in an `identifierRoute` flag reads transform `other` (#1667). No new command, option or record field, no record schema change, no new decoded hit or vendor, and nothing turns a pass or a warning into a failure, except V91 (see its Flagged concerns). Each item is one PR. A PR is done when its acceptance test passes in CI, an adversarial review reports no blockers or majors, and it is squash-merged.
 
 0.9.1 starts from `main` at `050ebe8` ("Release prep for 0.9.0 (#1668)").
 
@@ -63,7 +63,7 @@ The rules in `AGENTS.md` and the earlier plans still hold: CLI only, no MCP serv
 
 More for 0.9.1:
 
-- **A patch release.** No new command, option or record field. No entry adds a decoded hit or a vendor, or changes what a decoder outputs. No baseline key changes. No entry turns a pass or a warning into a failure. A message may change its text.
+- **A patch release.** No new command, option or record field. No entry adds a decoded hit or a vendor, or changes what a decoder outputs. No baseline key changes. No entry turns a pass or a warning into a failure, except V91, which the maintainer accepted: it makes a run open the page it names, so a scenario can fail checks it passed on the wrong page, and a variable cycle exits 2 (see its Flagged concerns). H91 and R91 stay under the rule. A message may change its text.
 - **Each PR adds a regression test that fails without the change,** and the PR body says which line was reverted to see it fail.
 - **Every negative test checks its input first.** A leak check asserts the value is in the input or the record, then that it is absent from the output.
 - **Never edit a file outside the Touches line.** A flaky test is reported, not patched. Known flaky: the second test of `e2e/unload-gap-frame-nav.e2e.test.ts` (#1608).
@@ -141,5 +141,5 @@ After CI publishes 0.9.1, run `node scripts/check-npm-dist-tag.ts 0.9.1` and the
 | --- | --- |
 | Every other open issue | The maintainer set the scope to #1666 and #1667. |
 | The second option of #1666 (refuse a start that still holds a declared `{name}`) | V91 takes the first option. The maintainer may change it. |
-| New commands, a record schema change, a new decoded hit or vendor, a check that turns a pass or a warning into a failure | Not allowed in a patch release. |
+| New commands, a record schema change, a new decoded hit or vendor, a check that turns a pass or a warning into a failure | Not allowed in a patch release. The one exception is V91, accepted by the maintainer (see its Flagged concerns). |
 | An MCP server (#362) | AGENTS.md: CLI only. |
