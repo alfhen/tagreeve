@@ -612,7 +612,7 @@ Where the code in 0.9 differs from the design above. Sections 15.1 to 15.8 still
 - **`dataLayer` loaders.** An iframe loader is bounded by a main-frame navigation of its page. A popup's first document request has a frame (#1591).
 - **Consent matrix names.** Event names with spaces or colons are kept when they read as names (#1611).
 - **Canaries.** A control character inside a reserved name is refused, a `#` in an unused variable no longer refuses the run, and padded Base64 SHA-256 digests of canary and identity values match (#1612).
-- **0.9.0.** The release is 0.9.0-rc.1 plus release prep, with no code change. It was field-tested on a real store with no regressions.
+- **0.9.0.** The release is 0.9.0-rc.1 plus release prep, with no code change. It was field-tested on a real store with no regressions. Still open: #1666 and #1667.
 - **Not built:** the server tag reporter, the Shopify bridge, a full `microsoft-uet` decoder, the collector origin bridge, a `mobile` preset and observed runtime IDs.
 
 ## 16. Related tools
