@@ -25,7 +25,7 @@ The maintainer set the scope: the six issues in milestone 0.9.2, no others. Ever
 | #1662 | bug (false failure) | Open. `VENDOR_IGNORE` has `ga4`, `meta`, `meta-capi` and `sgtm`, and no `pinterest-capi`. The decoder emits the five transport fields as hit fields (`jsonEntries(item)`). | P92 | `packages/decoders/src/ignore-lists.ts`, `VENDOR_IGNORE` in `packages/expect/src/evaluate.ts` |
 | #1599 | bug (wrong verdict) | Open. In `diffShapes`, a new tuple that pairs with a gone gcd-letter candidate gets a `gcdLetters` entry, and the rest of its need goes to `added`. A paired gone tuple that is not fully used goes to `removed` when the new tuple also exists in the baseline. | B92 | `diffShapes` in `packages/expect/src/diff.ts`, the warning text in `packages/cli/src/baseline.ts` |
 | #1673 | bug (no warning) | Open. `executeRun` fills the start and each `visit` path with `fillVars` and keeps only the filled start. A `{name}` that no variable declares stays as written. The parser's `checkVars` looks at the written text only. | V92 | `executeRun` in `packages/cli/src/run.ts` |
-| #1608 | flaky e2e | Open. The first test of `e2e/unload-gap-frame-nav.e2e.test.ts` failed twice with `expected [] to have a length of 1`. The only `toHaveLength(1)` in that test is on the `unloadGap` flags. | F92 | `e2e/unload-gap-frame-nav.e2e.test.ts` |
+| #1608 | flaky e2e | Open. The first test of `e2e/unload-gap-frame-nav.e2e.test.ts` failed twice with `expected [] to have a length of 1`. The only `toHaveLength(1)` in that test is on the `unloadGap` flags. | F92 | `e2e/unload-gap-frame-nav.e2e.test.ts` and the file that holds the cause |
 | #1600 | review minors | Open. The sandbox-prefix test in `packages/recorder/src/steps.test.ts` does not first check its input or pin the masked path. The JSDoc of `createCartCheck` sits above `cartRequestTest`. | K92 | `packages/recorder/src/steps.test.ts`, `packages/recorder/src/steps.ts` |
 | #1485 | review minor | The rename the issue asked for is on main: `HASH_MESSAGE_VENDOR_LABELS` in `packages/expect/src/evaluate.ts`. Only the "later" part is open. | K92 | `packages/expect/src/evaluate.ts`, `packages/expect/src/evaluate.test.ts` |
 
@@ -42,10 +42,10 @@ Decided by the maintainer (2026-11-26):
 Decided in this plan (each is a choice: maintainer may change):
 
 - **P92: a `PINTEREST_CAPI_BODY_ONLY_IGNORE` list.** New export in `packages/decoders/src/ignore-lists.ts`, next to the meta-capi one, holding `event_name`, `event_time`, `event_id`, `event_source_url` and `action_source`. Pinterest's Conversions API reference (developers.pinterest.com/docs/api/v5/events-create/) lists these as the per-event fields of an item of `data`, and the `pinterest-capi` decoder emits each as a hit field. The builder checks the list against that page and adds no other field. A field is added only when the page shows it is a per-event transport field and the decoder emits it. `VENDOR_IGNORE` gets `'pinterest-capi': PINTEREST_CAPI_BODY_ONLY_IGNORE`. This only removes a false failure.
-- **B92: the first fix of #1599.** Once a new tuple is paired with a gone gcd-letter candidate, the rest of that tuple is a count change, not an addition. The same holds on the gone side: a gone tuple that was paired and is not fully used is a count change, not a removal. The warning "This is not drift." then never comes with drift on the same tuple. No baseline key changes. It only removes false drift. The related case in the issue (a gone tuple that splits into two different new variants, `first.left = 0`) is not changed; see Out of scope.
+- **B92: the first fix of #1599.** Once a new tuple is paired with a gone gcd-letter candidate, the rest of that tuple is a count change, not an addition. The same holds on the gone side: a gone tuple that was paired and is not fully used is a count change, not a removal. For the two shapes fixed here the warning "This is not drift." no longer comes with drift. It still can in the related case below. No baseline key changes. It only removes false drift. Three cases of the issue are not changed, and the issue stays open for them; see Out of scope. The issue's second example (p x1 and q x1, then q x1) is real drift on main (a lone p hit that nothing pairs is `removed`, with no gcd warning), so it stays drift. The related case (p x1, then q x1 and r x1: `first.left = 0`) still gives drift together with a gcd warning on the same tuple. A later release may use the issue's second fix (push the `gcdLetters` entry only when the whole tuple is accounted for).
 - **V92: a warning, not exit 2.** Exit 2 would turn a run that exits 0 into a failure, and a patch does not do that. Exit 2 can come in 0.10.0. A site path may also hold literal braces. After the fill in `executeRun`, a filled start or `visit` path that still holds a `{name}` that no variable declares, and that came from a variable value, prints one warning line on stderr, and the run goes on as today. The channel is the one the run already uses for scenario parse warnings: `io.stderr("Warning: ...\n")` in `run.ts`. With `--json` the summary on stdout is unchanged and the warning goes to stderr. No new record field.
 - **K92: close #1485 as done, with a guard test.** The shared table is not moved. The message uses a sentence label, `the Conversions API`, where the report uses `Meta Conversions API` (`VENDOR_NAMES` in `packages/cli/src/report/names.ts`). One vendor is in `HASH_REQUIRED_VENDORS`, so moving the table to `@tagreeve/core` would add a module and change the `meta-capi` message text (`evaluate.test.ts` lines 298 and 312 hold it) for no change in what a person sees. The smallest change is a test in `packages/expect/src/evaluate.test.ts` that fails when a vendor is in `HASH_REQUIRED_VENDORS` and has no entry in `HASH_MESSAGE_VENDOR_LABELS`, so the message can never show a raw key. That needs `HASH_MESSAGE_VENDOR_LABELS` exported. The `meta-capi` message text does not change. The PR closes #1485 with this reason.
-- **Test-only entries.** F92 changes one test file. K92 changes tests, a comment block and one `export` keyword. Neither changes behaviour, so the rule of a regression test that fails without the change is met by a mutation check in the PR body: F92 by the invariant below, K92 by adding a vendor to the set with no label and seeing the guard fail. R92 is exempt, as R91 was.
+- **Test-only entries.** F92 changes the test file, or the file its cause is in. K92 changes tests, a comment block and one `export` keyword. Neither changes behaviour unless F92's cause is in the recorder (then F92 is a code entry and adds its own regression test). Otherwise the rule of a regression test that fails without the change is met by a mutation check in the PR body: F92 by the invariant below, K92 by adding a vendor to the set with no label and seeing the guard fail. R92 is exempt, as R91 was.
 - **Docs owners.** P92 adds a `pinterest-capi` row to the ignore table in `docs/cli.md`. B92 edits the baseline paragraph in `docs/cli.md`. V92 edits the `--var` row of `docs/cli.md`. R92 edits only the version lines and §15.
 - **CHANGELOG.** This is a plan PR and needs no `CHANGELOG:` line. The code PRs end their body with `CHANGELOG: <one line>`, and R92 writes the `## 0.9.2` section from them.
 
@@ -63,7 +63,7 @@ No two entries edit the same part of a file:
 - **P92:** `packages/decoders/src/ignore-lists.ts` and its test, the import line and `VENDOR_IGNORE` in `packages/expect/src/evaluate.ts`, `packages/expect/src/body-rules.test.ts`.
 - **B92:** `diffShapes` in `packages/expect/src/diff.ts`, `packages/expect/src/diff.test.ts`, `packages/cli/src/baseline.test.ts`.
 - **V92:** `executeRun` in `packages/cli/src/run.ts`, `packages/cli/src/run.test.ts`.
-- **F92:** `e2e/unload-gap-frame-nav.e2e.test.ts`.
+- **F92:** `e2e/unload-gap-frame-nav.e2e.test.ts`, and the one of the scenario, the frame fixture page, `recorder.ts` (frame ids) or `flags.ts` (`sameFrame`) that holds the cause.
 - **K92:** `packages/recorder/src/steps.ts` and its test, `HASH_MESSAGE_VENDOR_LABELS` in `packages/expect/src/evaluate.ts`, `packages/expect/src/evaluate.test.ts`.
 - **`packages/expect/src/evaluate.ts`.** P92 edits the import line and `VENDOR_IGNORE`. K92 edits the `HASH_MESSAGE_VENDOR_LABELS` line. Different parts.
 - **`docs/cli.md`.** P92 edits the ignore table. B92 edits the baseline paragraph. V92 edits the `--var` row. R92 edits only its version lines.
@@ -105,7 +105,7 @@ Evals:
 Acceptance: P92-1 passes, and fails on `main`.
 
 **B92 A gcd letter split with a count change reports no drift (#1599).** Round cap 3. Touches: `diffShapes` in `packages/expect/src/diff.ts`; `packages/expect/src/diff.test.ts`; `packages/cli/src/baseline.test.ts`; the baseline paragraph in `docs/cli.md`.
-Closes #1599
+Refs #1599. The PR does not close the issue: cases 2 and 3 below stay open, and the PR body says so and comments on the issue.
 - Shape 1 (the issue's first): baseline `view_product` tuple `13p3p3p2p5l1` x2, run `13p3p3p2p5l1` x1 and `13q3q3q2q5l1` x3, same gcs and IDs. On main the q tuple pairs with the one spare p hit and gets a `gcdLetters` entry, and the other 2 go to `added`: drift with 1 added, and also "This is not drift." After the fix the other 2 are a count change: `drift` is false, `added` and `removed` are 0, and `gcdLetters` has one entry.
 - Shape 2 (a merge with a count drop): baseline p x2 and q x1, run q x2. On main the q tuple pairs with one p hit and the other p hit goes to `removed`: drift, with the "not drift" warning. After the fix the unused p hit is a count change, so `drift` is false. The issue words this shape as "p x1 plus q x1, then q x1". The builder traces that literal input first: on main a lone p hit that nothing pairs is `removed` with no gcd warning, which is real drift and does not change. The test names the input that gives drift with the warning, as above.
 - What prints after the fix, for shape 1: `--json` has `baseline.drift: false`, `added: 0`, `removed: 0`, `countChanges: 2` (p 2 -> 1 and q 1 -> 3), one entry in `warnings` (the gcd letter line, unchanged text) and the matching `changes` lines. The text summary prints `Baseline: no drift (0 added, 0 removed, 2 count changes)`, and each count line ends `(not drift)`. For shape 2, `countChanges` is 2 (q 1 -> 2, p 2 -> 1), with the same warning. The builder confirms both by running them before the edit and after.
@@ -120,7 +120,7 @@ Evals:
 | B92-1 | regression | Shape 1 gives `drift` false, no `added`, one `gcdLetters` entry and a count change for q. | `pnpm exec vitest run --project unit packages/expect/src/diff.test.ts`. It fails while the rest of the q tuple goes to `added`. |
 | B92-2 | regression | Shape 2 gives `drift` false and no `removed`. | The same file. |
 | B92-3 | regression | `compareBaseline` for shape 1 gives `drift: false`, `countChanges: 2` and one gcd warning. | `pnpm exec vitest run --project unit packages/cli/src/baseline.test.ts`. |
-| B92-4 | regression | A new tuple with no gcd partner is `added`, a gone one with no partner is `removed`, and `p` to `t` is drift, as on main. | `diff.test.ts`. |
+| B92-4 | regression | A new tuple with no gcd partner is `added`, a gone one with no partner is `removed`, and `p` to `t` is drift, as on main. The issue's literal second example (p x1 and q x1, then q x1) is drift. The related case (p x1, then q x1 and r x1) keeps its result: `diff.test.ts` pins it, so a later fix shows as a test change. | `diff.test.ts`. |
 
 Acceptance: B92-1 and B92-3 pass, and fail on `main`.
 
@@ -144,13 +144,13 @@ Evals:
 
 Acceptance: V92-1 passes, and fails on `main`.
 
-**F92 The unload-gap frame-nav e2e waits for what it asserts (#1608).** Round cap 3. Touches: `e2e/unload-gap-frame-nav.e2e.test.ts`, the first test only.
-Closes #1608
+**F92 The unload-gap frame-nav e2e waits for what it asserts (#1608).** Round cap 3. Touches: `e2e/unload-gap-frame-nav.e2e.test.ts` (first test only), `e2e/scenarios/unload-gap-frame-nav.yml`, `fixtures/site/public/unload-gap-frame-nav-frame.html`, and the frame-id code in `packages/recorder/src/recorder.ts` (where `eventFrames` and `requestFrameIds` are set) and `packages/recorder/src/flags.ts` (the `sameFrame` rule in `buildUnloadGapFlags`). The cause picks the file. Only the file that holds the cause changes, and the PR body says which.
+Closes #1608 only when a fix lands and F92-1 passes. When the cause is not found, or the fix needs a file outside this Touches line, the PR is an investigation: it changes nothing but may add a note, it says `Refs #1608` and reports the cause or what it ruled out, and a follow-up issue is filed.
 - The builder first runs the test in a loop under load (parallel CPU work) and names the assertion that fails. The issue's message points to the `unloadGap` flags, the only `toHaveLength(1)` in the test. The cause is not confirmed in this plan. The CLI run is finished when the test reads the records, and the scenario waits a fixed `wait: 3s`, so the issue's reading ("the records are read before the frame's next document sent its hit") does not fit the code as it stands. The builder finds the real cause (the frame's two documents and their 400 ms timers in `fixtures/site/public/unload-gap-frame-nav-frame.html` against the fixed wait and the frame and navigation times the recorder keeps) before changing anything.
-- The fix waits for the condition the assertion needs, with a bounded timeout, instead of a fixed time, and keeps every assertion. If the fix needs the scenario file or the fixture page, the builder says so as a deviation and changes only what the cause needs.
+- The test calls `run()` once and reads the records after the CLI has exited, so the test has nothing later to wait for. A test-only wait fits only if the cause is in the test. More likely causes: the fixed `wait: 3s` in the scenario against the frame's 400 ms timers, or a race in the recorder between `frameDocumentId` when the binding runs (`eventFrames`) and when the request is seen (`requestFrameIds`), which makes the `sameFrame` rule cover the push. A product cause (recorder or `flags.ts`) is a code change and needs the regression test rule of the plan, with the revert named. A scenario or fixture cause waits for an event instead of a timer, as #1504 did.
 - #1504 (closed) was fixed by making the fixture wait for an event instead of a timer. The same shape applies here only if the cause is a timer.
 
-Invariants: Every assertion of the test stays. The test still fails when the frame rule it guards is reverted: the `sameFrame` line in `buildUnloadGapFlags` (`packages/recorder/src/flags.ts`) that lets a GA4 hit from the same frame cover a push (F90/#1591). The builder reverts that line, sees the test fail for the right reason, and restores it. The second test is untouched.
+Invariants: Every assertion of the test stays. The second test is untouched. The test still fails when the frame rule it guards is reverted: the `sameFrame` line in `buildUnloadGapFlags` (`packages/recorder/src/flags.ts`) that lets a GA4 hit from the same frame cover a push (F90/#1591). The builder reverts that line, sees the test fail for the right reason, and restores it.
 
 Evals:
 
@@ -174,11 +174,11 @@ Evals:
 
 | Id | Kind | What must be true | How to check |
 | --- | --- | --- | --- |
-| K92-1 | quality bar | The sandbox-prefix test asserts its input holds `12345678` and pins the masked path. It still fails when the masking is broken. | `pnpm exec vitest run --project unit packages/recorder/src/steps.test.ts`, once with `maskValuePath` made to return its input. |
+| K92-1 | quality bar | The sandbox-prefix test asserts its input holds `12345678` and pins the masked path. It still fails when the masking in `cartAnswerNote` is broken. `maskValuePath` (`packages/decoders/src/sandbox.ts`) is not called by `steps.ts` and is not the mutation target. | `pnpm exec vitest run --project unit packages/recorder/src/steps.test.ts`, once with the masking in `cartAnswerNote` (`packages/recorder/src/steps.ts`) broken, so the `.map` callback returns the segment unchanged (`(segment) => segment`). The test must fail on the pinned path `/(other)/(other)/sandbox/strict/cart/add.js`. The new `12345678` precondition on the built URL does not depend on the masking and stays true. |
 | K92-2 | quality bar | The diff of `steps.ts` holds only comment lines, and the JSDoc is directly above `createCartCheck`. | Read the diff. |
 | K92-3 | error path | The guard test fails when a vendor is added to `HASH_REQUIRED_VENDORS` with no label, and passes on the branch. | `pnpm exec vitest run --project unit packages/expect/src/evaluate.test.ts`, once with `ga4` added to the set and no label. |
 
-Acceptance: K92-1 and K92-3 pass, each failing under its mutation.
+Acceptance: K92-1 and K92-3 pass, each failing under its mutation. For K92-3 the mutation is made in the source set in `evaluate.ts`. The two existing tests that add `ga4` to the set at run time and remove it again are not the guard, and the guard reads the set in its own test.
 
 ## Release
 
@@ -195,10 +195,11 @@ After CI publishes 0.9.2, run `node scripts/check-npm-dist-tag.ts 0.9.2` and the
 ## Flagged concerns
 
 - **P92 makes a failing rule pass.** A `body.only` rule on `pinterest-capi` that failed on the five transport fields now passes. A suite that was red for that reason turns green. That is the fix.
+- **B92 closes #1599 only in part.** It fixes the first shape and the merge with a count drop in the form that gives the warning. The related split case still reports drift with a "not drift" warning on the same tuple. The PR says `Refs #1599`.
 - **B92 makes some `run --baseline` results stop reporting drift.** A gcd letter split together with a count change used to give drift, exit code 1 and `pass` false. It now gives no drift. A suite that relied on that exit code sees a pass. Real drift (a tuple on one side only, with no gcd pair) is unchanged.
 - **V92 adds a stderr warning line.** A script that treats any stderr output as a failure sees a new line on a run that has an undeclared `{name}` in a variable value. The exit code and the stdout summary do not change.
 - **K92 does not unify the two vendor name tables.** #1485 is closed with a guard test. The `meta-capi` message keeps `the Conversions API`, and the report keeps `Meta Conversions API`. A later vendor in `HASH_REQUIRED_VENDORS` needs its label, and the guard test says so.
-- **F92's cause is not confirmed in this plan.** The plan names the failing assertion from the issue's message and the test file. The builder must reproduce it before the fix and report the cause.
+- **F92's cause is not confirmed in this plan.** The plan names the failing assertion from the issue's message and the test file. The builder must reproduce it before the fix and report the cause. F92 may turn out to be an investigation that closes nothing. If the cause is in the recorder, F92 changes behaviour and not only a test.
 - **No field test of its own.** The changes are small and have unit tests. No entry adds an e2e file.
 
 ## Out of scope
@@ -207,7 +208,7 @@ After CI publishes 0.9.2, run `node scripts/check-npm-dist-tag.ts 0.9.2` and the
 | --- | --- |
 | Every other open issue | The maintainer set the scope to the six issues in the 0.9.2 milestone. |
 | Exit 2 for an undeclared `{name}` in a variable value (#1673) | It would turn a run that exits 0 into a failure. A patch does not do that. It can come in 0.10.0. |
-| A gone tuple that splits into two new gcd-letter variants (the related case in #1599) | The issue calls it unlikely in the #1569 race. B92 does not change the `first.left = 0` branch. |
+| The issue's second example and its related case (#1599): p x1 and q x1 then q x1, and a gone tuple that splits into two new gcd-letter variants | The first is real drift. The second still gives drift with a gcd warning, and the issue calls it unlikely in the #1569 race. B92 does not change the `first.left = 0` branch. #1599 stays open for them, with a comment from the B92 PR. |
 | Moving `VENDOR_NAMES` to `@tagreeve/core` (#1485) | See K92. It would change the `meta-capi` message text. |
 | New commands, a record schema change, a new decoded hit or vendor, a check that turns a pass or a warning into a failure | Not allowed in a patch release. |
 | An MCP server (#362) | AGENTS.md: CLI only. |
