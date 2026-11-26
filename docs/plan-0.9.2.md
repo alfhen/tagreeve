@@ -67,7 +67,7 @@ No two entries edit the same part of a file:
 - **K92:** `packages/recorder/src/steps.ts` and its test, `HASH_MESSAGE_VENDOR_LABELS` in `packages/expect/src/evaluate.ts`, `packages/expect/src/evaluate.test.ts`.
 - **`packages/expect/src/evaluate.ts`.** P92 edits the import line and `VENDOR_IGNORE`. K92 edits the `HASH_MESSAGE_VENDOR_LABELS` line. Different parts.
 - **`docs/cli.md`.** P92 edits the ignore table. B92 edits the baseline paragraph. V92 edits the `--var` row. R92 edits only its version lines.
-- **`docs/design.md`.** R92 only, when all five entries are merged or F92 ended as an investigation.
+- **`docs/design.md`.** R92 only, when P92, B92, V92 and K92 are merged, and F92 is merged or ended as an investigation.
 
 ## Rules for every PR
 
@@ -160,7 +160,7 @@ Evals:
 | F92-1 | quality bar | The test passes 20 times in a row under CPU load, run alone. | `pnpm build`, then a loop of `pnpm exec vitest run --project e2e e2e/unload-gap-frame-nav.e2e.test.ts -t "next document"`, with parallel load. |
 | F92-2 | regression | With `sameFrame` in `flags.ts` comparing frame URLs only (#883 reverted), the test fails on the `unloadGap` length assertion with `expected [] to have a length of 1`. | The same command, with the body of `sameFrame` changed to `return b != null && a.url !== null && a.url === b.url;`. |
 
-Acceptance: the outcome is a fix when the builder finds a cause inside the Touches line: then F92-1 and F92-2 pass, and the PR body names the cause found and the line reverted. The outcome is an investigation when no cause is found or the fix needs a file outside the Touches line: then the PR says `Refs #1608`, its body says what was ruled out, and the test may gain diagnostics and nothing else changes. A cause that contradicts design 5.3 stops the PR for the maintainer. A fix whose F92-1 loop still fails is not done. An investigation-only F92 finishes its entry for the release-prep gate: R92 starts when all five entries are merged or ended this way.
+Acceptance: the outcome is a fix when the builder finds a cause inside the Touches line: then F92-1 and F92-2 pass, and the PR body names the cause found and the line reverted. The outcome is an investigation when no cause is found or the fix needs a file outside the Touches line: then the PR says `Refs #1608`, its body says what was ruled out, and the test may gain diagnostics and nothing else changes. A cause that contradicts design 5.3 stops the PR for the maintainer. A fix whose F92-1 loop still fails is not done. An investigation-only F92 finishes its entry for the release-prep gate: R92 starts when P92, B92, V92 and K92 are merged, and F92 is merged or ended as an investigation.
 
 **K92 Two cleanups: sandbox-prefix test and doc placement (#1600), and the hash message label guard (#1485).** Round cap 3. Touches: the test `masks value segments inside a sandbox prefix` in `packages/recorder/src/steps.test.ts`; the JSDoc block of `createCartCheck` and `cartRequestTest` in `packages/recorder/src/steps.ts`; the `HASH_MESSAGE_VENDOR_LABELS` line (the `export` keyword) in `packages/expect/src/evaluate.ts`; a case in `packages/expect/src/evaluate.test.ts`.
 Closes #1600
@@ -183,7 +183,7 @@ Acceptance: K92-1 and K92-3 pass, each failing under its mutation. For K92-3 the
 
 ## Release
 
-**R92 Release prep for 0.9.2.** Written as its own entry. It starts when all five entries are merged, or F92 ended as an investigation. The PR runs `scripts/bump-version.sh 0.9.2`, which sets `package.json` and the version lines of the README, `docs/cli.md` and `docs/design.md`. It writes the `## 0.9.2` section of `CHANGELOG.md` from the PR lines, a README "In 0.9.2" line and a new item in design §15.9. It re-records `site/demo/` if `pnpm docs:test` shows a change. There is no release candidate, as for 0.8.1 and 0.9.1. `package.json` is gated, so the maintainer merges it, and CI publishes the release after the merge. No agent publishes, tags or starts the release workflow.
+**R92 Release prep for 0.9.2.** Written as its own entry. It starts when P92, B92, V92 and K92 are merged, and F92 is merged or ended as an investigation. The PR runs `scripts/bump-version.sh 0.9.2`, which sets `package.json` and the version lines of the README, `docs/cli.md` and `docs/design.md`. It writes the `## 0.9.2` section of `CHANGELOG.md` from the PR lines, a README "In 0.9.2" line and a new item in design §15.9. It re-records `site/demo/` if `pnpm docs:test` shows a change. There is no release candidate, as for 0.8.1 and 0.9.1. `package.json` is gated, so the maintainer merges it, and CI publishes the release after the merge. No agent publishes, tags or starts the release workflow.
 
 Touches: `package.json`, the "In 0.9.2" line and the version lines of `README.md`, the version lines of `docs/cli.md` and `docs/design.md`, the `## 0.9.2` section of `CHANGELOG.md`, `docs/design.md` §15, `site/demo/`.
 
