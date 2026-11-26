@@ -114,7 +114,7 @@ describe('a padded Base64 match', () => {
     expect(new URL(r.url).searchParams.get('x')).toBe(value);
     const flags = flagsFor([r]);
     expect(only(flags).route!.sink.transform).toBe('plain');
-    expect(JSON.stringify(flags)).not.toContain(gclid);
+    for (const secret of [gclid, identity.email, sha(gclid), sha(gclid).replace(/=+$/, '')]) expect(JSON.stringify(flags)).not.toContain(secret);
   });
 
   test('the unpadded digest, the bare value and cookie forms keep their transforms', () => {
