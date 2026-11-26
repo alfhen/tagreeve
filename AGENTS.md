@@ -2,7 +2,7 @@
 
 This file is for coding agents and the people who run them. It says how a change gets from an idea to `main`, and the rules every change follows.
 
-The spec is [docs/design.md](docs/design.md). The product goals are [docs/goals.md](docs/goals.md). The current plan is `docs/plan-0.9.1.md`. Each plan PR updates this line. No sort order is used to find the plan. `docs/plan-site.md` is not a release plan. Read all three before you change code.
+The spec is [docs/design.md](docs/design.md). The product goals are [docs/goals.md](docs/goals.md). The current plan is `docs/plan-0.9.2.md`. Each plan PR updates this line. No sort order is used to find the plan. `docs/plan-site.md` is not a release plan. Read all three before you change code.
 
 ## Rules for every change
 
