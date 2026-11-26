@@ -64,7 +64,7 @@ The rules in `AGENTS.md` and the earlier plans still hold: CLI only, no MCP serv
 More for 0.9.1:
 
 - **A patch release.** No new command, option or record field. No entry adds a decoded hit or a vendor, or changes what a decoder outputs. No baseline key changes. No entry turns a pass or a warning into a failure, except V91, which the maintainer accepted: it makes a run open the page it names, so a scenario can fail checks it passed on the wrong page, and a variable cycle exits 2 (see its Flagged concerns). H91 and R91 stay under the rule. A message may change its text.
-- **Each PR adds a regression test that fails without the change,** and the PR body says which line was reverted to see it fail.
+- **Each PR adds a regression test that fails without the change,** and the PR body says which line was reverted to see it fail. R91 is exempt: it changes no code, and its Acceptance line names the tests it runs.
 - **Every negative test checks its input first.** A leak check asserts the value is in the input or the record, then that it is absent from the output.
 - **Never edit a file outside the Touches line.** A flaky test is reported, not patched. Known flaky: the second test of `e2e/unload-gap-frame-nav.e2e.test.ts` (#1608).
 - **New e2e tests go in new files,** unless the entry names an existing file.
