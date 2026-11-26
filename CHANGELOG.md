@@ -13,7 +13,7 @@
 
 - **A nested variable now opens the filled page, so checks can fail where they passed.** A start URL or visit path that used a variable holding a `{name}` opened the literal `%7Bname%7D` path in 0.9.0, and the run could exit 0 on the wrong page. It now opens the filled page, and the rules run against that page.
 - **A variable cycle exits 2.** A cycle made by `{a}` and `{b}` pointing at each other, in the config or in a `--var` value, stops the run before the recorder starts.
-- **A `#` in a used variable now runs.** 0.9.0 refused a canary run when a used variable held a `#`. It now runs, with the canaries planted before the `#`.
+- **A `#` in a used variable now runs.** 0.9.0 refused a canary run when a used variable held a `#` and another variable held a `{name}`. It now runs, with the canaries planted before the `#`.
 - **A padded digest reads `sha256` and a canary followed by `=` reads `plain`.** Report rows and route lines that were split between `other` and the plain form now merge. No verdict changes.
 - **A new release needs a new server image.** On arm64 (Apple silicon), run `tagreeve server-container build` after `npm i -g tagreeve`. A run with `--server-container` exits 2 with "The image tagreeve-sgtm:<version> is not available" until the image for that version exists. On amd64 the command builds nothing.
 
