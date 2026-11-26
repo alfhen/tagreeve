@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.9.1
+
+`npm i -g tagreeve` installs this release. 0.9.1 is a patch release after 0.9.0. It has no new command, option or record field. The record stays at schema version 5. A 0.9.0 record reads as before.
+
+### Fixes in 0.9.1
+
+- Variables: a `{name}` inside a variable value is now filled, three levels deep too, in the start URL and in every visit path. A variable cycle exits 2 before the recorder starts and names the place and the variables, never a value. A canary run plants the canaries on the fully filled start (#1666, #1671).
+- `identifierRoute`: a padded Base64 SHA-256 digest of a canary or of the identity email now reads transform `sha256`, as the unpadded digest does. A canary followed by `=` reads `plain` (#1667, #1670).
+
+### Upgrading from 0.9.0
+
+- **A nested variable now opens the filled page, so checks can fail where they passed.** A start URL or visit path that used a variable holding a `{name}` opened the literal `%7Bname%7D` path in 0.9.0, and the run could exit 0 on the wrong page. It now opens the filled page, and the rules run against that page.
+- **A variable cycle exits 2.** A cycle made by `{a}` and `{b}` pointing at each other, in the config or in a `--var` value, stops the run before the recorder starts.
+- **A `#` in a used variable now runs.** 0.9.0 refused a canary run when a used variable held a `#` and another variable held a `{name}`. It now runs, with the canaries planted before the `#`.
+- **A padded digest reads `sha256` and a canary followed by `=` reads `plain`.** Report rows and route lines that were split between `other` and the plain form now merge. No verdict changes.
+- **A new release needs a new server image.** On arm64 (Apple silicon), run `tagreeve server-container build` after `npm i -g tagreeve`. A run with `--server-container` exits 2 with "The image tagreeve-sgtm:<version> is not available" until the image for that version exists. On amd64 the command builds nothing.
+
+### Known in 0.9.1
+
+Issues still open that you can meet, in addition to those in 0.7.0:
+
+- The canary search reads only the forms it lists. It skips gzip and binary bodies, bodies cut at 64 KiB and net-log requests with no body, and it does not search headers. A pass means no planted value was found in the searched forms.
+- The Stape loader unwrap covers `/g/collect` and `/data`. Stape's hosting layer may act on a loader request in other ways, and the record says so in fixed text.
+
 ## 0.9.0
 
 `npm i -g tagreeve` installs this release. 0.9.0 is the final release after 0.9.0-rc.1, with no changes since the candidate. It has no new command or option. The record stays at schema version 5, and a 0.8 record reads as before. It was field-tested on a real store with no regressions.
@@ -31,8 +55,6 @@ Issues still open that you can meet, in addition to those in 0.7.0:
 
 - The canary search reads only the forms it lists. It skips gzip and binary bodies, bodies cut at 64 KiB and net-log requests with no body, and it does not search headers. A pass means no planted value was found in the searched forms.
 - The Stape loader unwrap covers `/g/collect` and `/data`. Stape's hosting layer may act on a loader request in other ways, and the record says so in fixed text.
-- A `{placeholder}` inside a variable value is never filled, because the start URL is filled in one pass (#1666). The browser opens the literal `%7Bname%7D` path, and the run can exit 0.
-- A padded Base64 SHA-256 match reads transform `other`, not `sha256`, in the route line and the report rows (#1667). The verdict is not affected.
 
 ## 0.8.1
 
