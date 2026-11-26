@@ -98,8 +98,9 @@ function scan(text: string, pool: CanaryPool, transforms: ReadonlyMap<string, st
   const layers = readings(text);
   const name = pool.match(text);
   if (name !== undefined) {
-    const read = layers.find((layer) => transforms.has(layer));
-    found.set(name, { name, transform: read === undefined ? 'other' : transforms.get(read)! });
+    // `canaryPool.match` strips trailing `=`, so the transform lookup does too: padded Base64 reads as the bare form.
+    const read = layers.map((layer) => transforms.get(layer) ?? transforms.get(layer.replace(/=+$/, ''))).find((t) => t !== undefined);
+    found.set(name, { name, transform: read ?? 'other' });
   }
   if (depth < MAX_DEPTH) {
     for (const layer of layers) {

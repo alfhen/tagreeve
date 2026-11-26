@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, test } from 'vitest';
 import { canaryPool, canaryValues, createIdentity, MAX_POST_DATA, newId, readRun, type Checkpoint, type CheckpointCookie, type Flag, type Hit, type Request } from '@tagreeve/core';
@@ -75,6 +76,80 @@ describe('what is found and where', () => {
     expect(flags).toHaveLength(1);
     expect(flags[0]).toMatchObject({ route: { kind: 'direct', source: { source: 'identity', name: 'email' }, sink: { transform: 'sha256' } } });
     expect(JSON.stringify(flags)).not.toContain(identity.email);
+  });
+});
+
+describe('a padded Base64 match', () => {
+  const sha = (text: string, enc: 'base64' | 'hex' = 'base64') => createHash('sha256').update(text.trim().toLowerCase()).digest(enc);
+  const only = (flags: Flag[]) => {
+    const found = routes(flags);
+    expect(found).toHaveLength(1);
+    return found[0]!;
+  };
+
+  test('a padded SHA-256 of a canary or the email reads sha256', () => {
+    const padded = sha(gclid);
+    expect(padded.endsWith('=')).toBe(true);
+    const r = req(`${VENDOR}?x=${encodeURIComponent(padded)}`);
+    expect(r.url).toContain(encodeURIComponent(padded));
+    const flag = only(flagsFor([r]));
+    expect(flag.route!.sink.transform).toBe('sha256');
+    expect(flag.detail).toMatch(/, sha256$/);
+    const email = sha(identity.email);
+    expect(email.endsWith('=')).toBe(true);
+    const m = req(`${VENDOR}?x=${encodeURIComponent(email)}`);
+    expect(m.url).toContain(encodeURIComponent(email));
+    const mail = only(flagsFor([m], [], { identity }));
+    expect(mail.route!.sink.transform).toBe('sha256');
+    expect(mail.detail).toMatch(/, sha256$/);
+    for (const f of [flag, mail]) {
+      const text = JSON.stringify(f);
+      for (const secret of [gclid, identity.email, padded, email, padded.slice(0, -1), email.slice(0, -1)]) expect(text).not.toContain(secret);
+    }
+  });
+
+  test('a canary followed by = reads plain, and no value is stored', () => {
+    const value = `${gclid}=`;
+    const r = req(`${VENDOR}?x=${encodeURIComponent(value)}`);
+    expect(new URL(r.url).searchParams.get('x')).toBe(value);
+    const flags = flagsFor([r]);
+    expect(only(flags).route!.sink.transform).toBe('plain');
+    expect(JSON.stringify(flags)).not.toContain(gclid);
+  });
+
+  test('the unpadded digest, the bare value and cookie forms keep their transforms', () => {
+    const bare = sha(gclid).replace(/=+$/, '');
+    expect(bare.endsWith('=')).toBe(false);
+    const cases: [string, string][] = [[bare, 'sha256'], [gclid, 'plain'], [`GCL.1700000000.${gclid}`, 'other'], [`fb.1.1700000000.${gclid}`, 'other']];
+    for (const [value, transform] of cases) {
+      const r = req(`${VENDOR}?x=${encodeURIComponent(value)}`);
+      expect(r.url).toContain(encodeURIComponent(value));
+      expect(only(flagsFor([r])).route!.sink.transform).toBe(transform);
+    }
+  });
+
+  test('padded and unpadded digests give the same transform', () => {
+    const padded = sha(gclid);
+    const bare = padded.replace(/=+$/, '');
+    expect(padded).not.toBe(bare);
+    const [a, b] = [padded, bare].map((v) => only(flagsFor([req(`${VENDOR}?x=${encodeURIComponent(v)}`)])).route!.sink.transform);
+    expect(a).toBe('sha256');
+    expect(b).toBe(a);
+  });
+
+  test('only the transform changes for a padded match', () => {
+    const r = req(`${VENDOR}?x=${encodeURIComponent(sha(gclid))}`);
+    const flags = routes(flagsFor([r], [hit(r, 'google-ads', {})]));
+    expect(flags).toHaveLength(1);
+    expect(flags[0]!.route).toEqual({ kind: 'unknown', source: { source: 'urlParam', name: 'gclid' }, sink: { requestId: r.id, host: 'www.googleadservices.com', vendor: 'google-ads', field: 'x', transform: 'sha256' }, hops: [] });
+  });
+
+  test('a padded digest in an unparsable body reads sha256 under (body)', () => {
+    const padded = sha(gclid);
+    const r = req(VENDOR, { method: 'POST', postData: `--b\r\n${padded}\r\n--b--` });
+    expect(r.postData).toContain(padded);
+    const flag = only(flagsFor([r]));
+    expect(flag.route!.sink).toMatchObject({ field: '(body)', transform: 'sha256' });
   });
 });
 
