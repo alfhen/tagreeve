@@ -1,5 +1,6 @@
 import { createIdentity, type Request } from '@tagreeve/core';
 import { parseScenario } from '@tagreeve/expect';
+import { readFile } from 'node:fs/promises';
 import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { TEST_LOOPBACK_IS_HOSTED_ENV, isGuardExemptHost, isLoopbackHost, isSensitiveField } from './guard.ts';
@@ -79,6 +80,20 @@ test('visit paths resolve against the site with vars and cannot leave it', () =>
   expect(resolveSitePath('cart', 'http://localhost:3000/shop/', {})).toBe('http://localhost:3000/shop/cart');
   expect(() => resolveSitePath('https://elsewhere.example.com/', 'http://localhost:3000', {})).toThrow(/leaves the site/);
   expect(() => resolveSitePath('//elsewhere.example.com/', 'http://localhost:3000', {})).toThrow(/leaves the site/);
+});
+
+test('a visit path fills a nested variable fully', () => {
+  expect(resolveSitePath('{path}', 'http://localhost:3000', { path: '/p/{x}', x: 'tee' })).toBe('http://localhost:3000/p/tee');
+});
+
+test('a visit path gives the same URL for the starts of real scenario files, and keeps an undeclared name', async () => {
+  const read = async (name: string) => parseScenario(await readFile(new URL(`../../../e2e/scenarios/${name}`, import.meta.url), 'utf8'));
+  const tiles = await read('tiles-role.yml');
+  expect(resolveSitePath(tiles.start, 'http://localhost:3000', tiles.vars)).toBe('http://localhost:3000/tiles?theme=radio');
+  const server = await read('server-container.yml');
+  expect(resolveSitePath(server.start, 'http://localhost:3000', server.vars)).toBe('http://localhost:3000/server-container?email=&extra=0');
+  expect(Object.hasOwn({ p: 'x' }, 'nope')).toBe(false);
+  expect(resolveSitePath('/p/{nope}', 'http://localhost:3000', { p: 'x' })).toBe('http://localhost:3000/p/%7Bnope%7D');
 });
 
 test('hasHandoff is true only for a scenario with a handoff step', () => {

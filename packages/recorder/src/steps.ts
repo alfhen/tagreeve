@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline/promises';
-import { createIdentity, hasCountryFormat, type Identity, type Request, type Step as StepRecord } from '@tagreeve/core';
+import { createIdentity, fillVars, hasCountryFormat, type Identity, type Request, type Step as StepRecord } from '@tagreeve/core';
 import { OTHER_NAME, isValueSegment } from '@tagreeve/decoders';
 import { IDENTITY_FIELDS, SECRET_FIELD, type IdentityField, type Locator, type Scenario, type Step, type UrlMatcher } from '@tagreeve/expect';
 import type { Frame, JSHandle, Locator as PlaywrightLocator, Page } from 'playwright';
@@ -147,7 +147,7 @@ export function fillValue(value: string, identity: Identity): string {
 
 export function resolveSitePath(path: string, site: string, vars: Record<string, string>): string {
   const base = new URL(site);
-  const filled = path.replace(/\{(\w+)\}/g, (_m, name: string) => vars[name] ?? `{${name}}`);
+  const filled = fillVars(path, vars);
   const url = new URL(filled, base);
   if (url.origin !== base.origin) throw new Error(`"${path}" leaves the site ${base.origin}`);
   return url.href;
