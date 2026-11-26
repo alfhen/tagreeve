@@ -1,14 +1,14 @@
 # Changelog
 
-## 0.9.0-rc.1
+## 0.9.0
 
-The first release candidate of 0.9.0. Install it with `npm i -g tagreeve@next`. It has no new command or option. The record stays at schema version 5. To go back to the final release, run `npm i -g tagreeve`.
+`npm i -g tagreeve` installs this release. 0.9.0 is the final release after 0.9.0-rc.1, with no changes since the candidate. It has no new command or option. The record stays at schema version 5, and a 0.8 record reads as before. It was field-tested on a real store with no regressions.
 
-### What 0.9.0-rc.1 adds
+### What 0.9.0 adds
 
 - Decode Pinterest Conversions API calls from server containers as `pinterest-capi`, and link them to browser hits by event ID (#1648, #1663).
 
-### Fixes in 0.9.0-rc.1
+### Fixes in 0.9.0
 
 - Server container: a call that arrives up to 2000 ms after its one same-key hit was answered, with no other same-client request or consent change between, is now an exact client-ID link, so a rule that only warned on it can now fail the run (#1640, #1659).
 - Canaries: a control character inside a reserved name is refused, a `#` in an unused variable no longer refuses the run, and padded Base64 SHA-256 digests of canary and identity values now match (#1612, #1660).
@@ -23,14 +23,16 @@ The first release candidate of 0.9.0. Install it with `npm i -g tagreeve@next`. 
 - **`Request.frame` has an optional `page`.** The schema version stays 5. A script that compares frames with strict equality sees one more key. A record made before 0.9.0 reads as before.
 - **Stored event names change.** A spaced or coloned event name that read `(other)` in a stored suite now reads as itself, so a `suite.json` made by 0.8 differs in `events` and `notInAccept`.
 - **A canary can newly fail a run.** A padded Base64 SHA-256 digest of a canary value, or of the identity email or phone, that was in a request before and went unseen is now found. A route flag for it reads transform `other`.
-- **A new release needs a new server image.** On arm64 (Apple silicon), run `tagreeve server-container build` after `npm i -g tagreeve@next`. A run with `--server-container` exits 2 with "The image tagreeve-sgtm:<version> is not available" until the image for that version exists. On amd64 the command builds nothing.
+- **A new release needs a new server image.** On arm64 (Apple silicon), run `tagreeve server-container build` after `npm i -g tagreeve`. A run with `--server-container` exits 2 with "The image tagreeve-sgtm:<version> is not available" until the image for that version exists. On amd64 the command builds nothing.
 
-### Known in 0.9.0-rc.1
+### Known in 0.9.0
 
 Issues still open that you can meet, in addition to those in 0.7.0:
 
 - The canary search reads only the forms it lists. It skips gzip and binary bodies, bodies cut at 64 KiB and net-log requests with no body, and it does not search headers. A pass means no planted value was found in the searched forms.
 - The Stape loader unwrap covers `/g/collect` and `/data`. Stape's hosting layer may act on a loader request in other ways, and the record says so in fixed text.
+- A `{placeholder}` inside a variable value is never filled, because the start URL is filled in one pass (#1666). The browser opens the literal `%7Bname%7D` path, and the run can exit 0.
+- A padded Base64 SHA-256 match reads transform `other`, not `sha256`, in the route line and the report rows (#1667). The verdict is not affected.
 
 ## 0.8.1
 
