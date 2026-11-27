@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type { RunArgs } from './args.ts';
+import { fillVars } from '@tagreeve/core';
 import { parseScenario } from '@tagreeve/expect';
 import { prepareServerContainer, resolveNetwork, runCommand } from './run.ts';
 
@@ -414,4 +415,131 @@ test('with no refill a direct # variable is not refused and the canaries go befo
   expect(r.err).not.toContain('fragment');
   expect(r.start?.startsWith('/p?x=a&gclid=')).toBe(true);
   expect(r.start?.endsWith('#b')).toBe(true);
+});
+
+async function warnRun(head: string, steps: string, extra: Record<string, unknown> = {}, cliVars: Record<string, string> = {}, file?: string) {
+  const dir = await mkdtemp(join(tmpdir(), 'pw-run-'));
+  const scenario = file ?? join(dir, 's.yml');
+  if (!file) await writeFile(scenario, `${head}steps:\n${steps}expect:\n  must: []\n  mustNot: []\n`);
+  const err: string[] = [];
+  const out: string[] = [];
+  failStart.on = true;
+  failStart.seen = undefined as typeof failStart.seen;
+  let code: number;
+  try {
+    code = await runCommand({ scenario, site: 'http://127.0.0.1:9', vars: cliVars, out: dir, ...extra } as unknown as RunArgs, { stdout: (t) => out.push(t), stderr: (t) => err.push(t) });
+  } finally {
+    failStart.on = false;
+  }
+  const lines = err.join('').split('\n');
+  return { code, err: err.join(''), out: out.join(''), warnings: lines.filter((l) => l.startsWith('Warning: ')), seen: failStart.seen };
+}
+
+const WAIT = '  - wait: 1s\n';
+
+test('an undeclared {name} in a variable value warns once and the recorder gets the same start', async () => {
+  const head = 'start: "{path}"\nvars:\n  path: /collections/{nope}\n';
+  const r = await warnRun(head, WAIT);
+  expect(r.warnings).toHaveLength(1);
+  expect(r.warnings[0]).toContain('{nope}');
+  expect(r.warnings[0]).toContain('path');
+  expect(r.warnings[0]).toContain('start');
+  expect(r.seen!.start).toBe('{path}');
+  expect(fillVars(r.seen!.start, r.seen!.vars)).toBe('/collections/{nope}');
+  expect(r.code).toBe(2);
+  const k = await warnRun(`${head}options:\n  canaries: true\n  seed: 7\n`, WAIT);
+  expect(k.seen!.start.startsWith('/collections/{nope}?gclid=')).toBe(true);
+  expect(k.warnings).toHaveLength(1);
+});
+
+test('the warning names step N for a visit path, and a --var value warns the same way', async () => {
+  const a = await warnRun('start: /\nvars:\n  path: /collections/{nope}\n', `${WAIT}  - visit: "{path}"\n`);
+  expect(a.warnings).toHaveLength(1);
+  expect(a.warnings[0]).toContain('{nope}');
+  expect(a.warnings[0]).toContain('path');
+  expect(a.warnings[0]).toContain('step 2');
+  expect(a.warnings[0]).not.toContain('(start)');
+  expect(a.seen!.start).toBe('/');
+  const text = 'start: "{path}"\nvars:\n  path: /c/plain\n';
+  expect(parseScenario(`${text}steps:\n${WAIT}`).vars.path).not.toContain('{nope}');
+  const b = await warnRun(text, WAIT, {}, { path: '/c/{nope}' });
+  expect(b.warnings).toHaveLength(1);
+  expect(b.warnings[0]).toMatch(/path.*\{nope\}.*start/);
+  expect(b.seen!.vars.path).toBe('/c/{nope}');
+});
+
+test('the warning holds no value but the undeclared name', async () => {
+  const a = await warnRun('start: "{path}"\nvars:\n  path: /pw-marker-7/{nope}\n', WAIT);
+  expect(a.seen!.vars.path).toContain('pw-marker-7');
+  expect(a.err).not.toContain('pw-marker-7');
+  expect(a.warnings.some((l) => l.includes('path') && l.includes('{nope}'))).toBe(true);
+  const b = await warnRun('start: "{path}"\nvars:\n  path: /c\n', WAIT, {}, { path: '/pw-cli-9/{nope}' });
+  expect(b.seen!.vars.path).toContain('pw-cli-9');
+  expect(b.err).not.toContain('pw-cli-9');
+  expect(b.warnings.some((l) => l.includes('path') && l.includes('{nope}'))).toBe(true);
+});
+
+test('no warning for a declared nested variable, and the parser exit is unchanged', async () => {
+  const head = 'start: "{path}"\nvars:\n  path: /collections/{known}\n  known: shirts\n';
+  expect(parseScenario(`${head}steps:\n${WAIT}`).vars.path).toContain('{known}');
+  const a = await warnRun(head, WAIT);
+  expect(a.warnings).toEqual([]);
+  expect(a.code).toBe(2);
+  const text = 'start: "/x/{nope}"\nvars:\n  path: /c\n';
+  expect(text).toContain('{nope}');
+  const b = await warnRun(text, WAIT);
+  expect(b.code).toBe(2);
+  expect(b.err).toContain('uses {nope} but vars has no "nope"');
+  expect(b.seen).toBeUndefined();
+  expect(b.warnings).toEqual([]);
+});
+
+test('only a variable that supplies the start and holds the placeholder is named', async () => {
+  const un = await warnRun('start: "{path}"\nvars:\n  path: /c/{nope}\n  spare: /s/{nope}\n', WAIT);
+  expect(un.seen!.vars.spare).toContain('{nope}');
+  expect(un.warnings.some((l) => l.includes('path'))).toBe(true);
+  expect(un.warnings.some((l) => /\bspare\b/.test(l))).toBe(false);
+  const head = 'start: "{path}"\nvars:\n  path: /c/{mid}\n  mid: /m/{nope}\n';
+  const vars = parseScenario(`${head}steps:\n${WAIT}`).vars;
+  expect(vars.path).toContain('{mid}');
+  expect(vars.path).not.toContain('{nope}');
+  const pass = await warnRun(head, WAIT);
+  expect(pass.warnings).toHaveLength(1);
+  expect(pass.warnings[0]).toMatch(/mid.*\{nope\}/);
+  expect(pass.warnings.some((l) => /\bpath\b/.test(l))).toBe(false);
+  const whole = await warnRun('start: "{path}"\nvars:\n  path: "{nope}"\n', WAIT);
+  expect(whole.warnings).toHaveLength(1);
+  expect(whole.warnings[0]).toMatch(/path.*\{nope\}/);
+  const proto = await warnRun('start: "{path}"\nvars:\n  path: /c/{constructor}\n', WAIT);
+  expect(proto.warnings).toHaveLength(1);
+  expect(proto.warnings[0]).toMatch(/path.*\{constructor\}/);
+});
+
+test('one warning line for each variable, placeholder and place, and none on stdout with --json', async () => {
+  const a = await warnRun('start: "{path}{path}"\nvars:\n  path: /c/{nope}/{nope}\n', `${WAIT}  - visit: "{path}"\n`);
+  const nope = a.warnings.filter((l) => l.includes('{nope}'));
+  expect(nope).toHaveLength(2);
+  expect(nope.filter((l) => l.includes('(start)'))).toHaveLength(1);
+  expect(nope.filter((l) => l.includes('step 2'))).toHaveLength(1);
+  const b = await warnRun('start: "{path}"\nvars:\n  path: /c/{nope}/{nada}\n', WAIT);
+  expect(b.warnings.filter((l) => l.includes('path') && l.includes('{nope}'))).toHaveLength(1);
+  expect(b.warnings.filter((l) => l.includes('path') && l.includes('{nada}'))).toHaveLength(1);
+  expect(b.warnings).toHaveLength(2);
+  const c = await warnRun('start: "{path}"\nvars:\n  path: /collections/{nope}\n', WAIT, { json: true });
+  expect(c.warnings).toHaveLength(1);
+  expect(c.out).not.toContain('Warning: ');
+  expect(c.out).not.toContain('{nope}');
+});
+
+test('the real scenario tiles-any.yml warns only for a --var value with an undeclared name', async () => {
+  const file = join(process.cwd(), 'e2e/scenarios/tiles-any.yml');
+  const a = await warnRun('', '', {}, {}, file);
+  expect(a.warnings).toEqual([]);
+  expect(a.seen!.start).toBe('/tiles?theme={theme}');
+  expect(a.code).toBe(2);
+  const b = await warnRun('', '', {}, { theme: 'radio-{nope}' }, file);
+  expect(b.warnings).toHaveLength(1);
+  expect(b.warnings[0]).toMatch(/theme.*\{nope\}.*start/);
+  expect(b.seen!.start).toBe('/tiles?theme={theme}');
+  expect(b.code).toBe(2);
 });

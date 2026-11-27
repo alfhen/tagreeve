@@ -264,6 +264,25 @@ async function scrubStepErrors(path: string, canaries: Canary[]): Promise<void> 
   await writeFile(path, kept.join('\n'));
 }
 
+/** The variables that supply `text`, directly or nested, whose own value holds a {name} that no variable declares. */
+function undeclaredInValues(text: string, vars: Record<string, string>): [string, string][] {
+  const found: [string, string][] = [];
+  const seen = new Set<string>();
+  const walk = (value: string): void => {
+    for (const [, name] of value.matchAll(/\{(\w+)\}/g)) {
+      if (!Object.hasOwn(vars, name!) || seen.has(name!)) continue;
+      seen.add(name!);
+      const own = vars[name!]!;
+      for (const [, inner] of own.matchAll(/\{(\w+)\}/g)) {
+        if (!Object.hasOwn(vars, inner!) && !found.some(([v, n]) => v === name && n === inner)) found.push([name!, inner!]);
+      }
+      walk(own);
+    }
+  };
+  walk(text);
+  return found;
+}
+
 export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> {
   const { gtmOverride, variant } = spec;
   let parsed = spec.parsed;
@@ -282,15 +301,18 @@ export async function executeRun(spec: RunSpec, rawIo: Io): Promise<RunOutcome> 
 
   let filledStart = parsed.start;
   const places: [string, string][] = [['start', parsed.start], ...parsed.steps.flatMap((s, i): [string, string][] => (s.kind === 'visit' ? [[`step ${i + 1}`, s.value]] : []))];
+  const undeclared: string[] = [];
   for (const [place, text] of places) {
     try {
       const filled = fillVars(text, parsed.vars);
       if (place === 'start') filledStart = filled;
+      for (const [variable, name] of undeclaredInValues(text, parsed.vars)) undeclared.push(`Warning: variable ${variable} holds {${name}}, which no variable declares (${place}).\n`);
     } catch (error) {
       if (!(error instanceof VarCycleError)) throw error;
       return failed(`${place}: ${error.message}. Break the cycle.\n`);
     }
   }
+  for (const line of undeclared) io.stderr(line);
 
   if (parsed.options.canaries) {
     const held = queryNames(filledStart);
