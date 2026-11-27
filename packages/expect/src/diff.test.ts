@@ -1247,6 +1247,12 @@ describe('gcd letters in diffShapes', () => {
     expect(d.countChanges).toHaveLength(2);
   });
 
+  test('a paired tuple whose count equals the lost tuple count adds no count line', () => {
+    const d = diffShapes(side([P, 2]), side([P, 1], [Q, 2]));
+    expect(d).toMatchObject({ added: [], removed: [], drift: false });
+    expect(d.countChanges.map((c) => [c.consent.gcd, c.a, c.b])).toEqual([[P, 2, 1]]);
+  });
+
   test('the issue literal second example (p x1 and q x1, then q x1) is still drift', () => {
     const d = diffShapes(side([P, 1], [Q, 1]), side([Q, 1]));
     expect(d.drift).toBe(true);

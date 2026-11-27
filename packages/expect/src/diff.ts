@@ -641,7 +641,7 @@ export function diffShapes(a: ShapeKey[], b: ShapeKey[], options: ShapeDiffOptio
         if (first.t.count !== t.count) result.countChanges.push({ key, consent: t.consent, ids: t.ids, a: first.t.count, b: t.count });
       } else if (first && need > 0) {
         // The tuple pairs with a gcd-letter tuple that is still in the run and has more hits than it lost, so the extra hits are a count change. With no extra hits the pair adds no count line.
-        result.countChanges.push({ key, consent: t.consent, ids: t.ids, a: first.t.count, b: t.count });
+        if (first.t.count !== t.count) result.countChanges.push({ key, consent: t.consent, ids: t.ids, a: first.t.count, b: t.count });
       } else if (need > 0) {
         result.added.push({ key, consent: t.consent, ids: t.ids, wholeKey: !ka });
       }
