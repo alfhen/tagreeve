@@ -278,9 +278,13 @@ test('body.only still fails a pinterest-capi hit on a field that is not transpor
   expect(r.message).toBe(`${h.id} has fields outside body.only: partner_name (1 of 8).`);
 });
 
-test('the pinterest-capi ignore list does not cover the pinterest tag or meta-capi differently', () => {
+test('the pinterest-capi list does not apply to the pinterest tag, and meta-capi still passes', () => {
   const pin = hit({ vendor: 'pinterest', fields: [...TRANSPORT, 'custom_data.value', 'user_data.em'] });
-  expect(one(CAPI_RULE, [pin]).pass).toBe(false);
+  const r = one(CAPI_RULE, [pin]);
+  expect(r.pass).toBe(false);
+  expect(r.message).toBe(
+    `${pin.id} has fields outside body.only: event_name, event_time, event_id, event_source_url, action_source (5 of 7).`,
+  );
   const meta = hit({ vendor: 'meta-capi', fields: [...TRANSPORT, 'custom_data.value', 'user_data.em'] });
   expect(one(CAPI_RULE, [meta]).pass).toBe(true);
 });
