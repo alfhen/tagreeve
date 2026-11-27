@@ -13,7 +13,7 @@ import {
 } from '@tagreeve/core';
 import { describe, expect, test } from 'vitest';
 import { decodeRequest } from '@tagreeve/decoders';
-import { HASH_REQUIRED_VENDORS, effectiveConsentAt, epochForHit, evaluate, placeHitsInEpochs, type EvalEpoch } from './evaluate.ts';
+import { HASH_MESSAGE_VENDOR_LABELS, HASH_REQUIRED_VENDORS, effectiveConsentAt, epochForHit, evaluate, placeHitsInEpochs, type EvalEpoch } from './evaluate.ts';
 import { parseScenario } from './scenario.ts';
 import { README_SCENARIO } from './readme-scenario.ts';
 
@@ -271,6 +271,11 @@ test('from: judges an unlinked server hit as cannot evaluate', () => {
   const unlinked = rule(q, [step, server()]);
   expect(unlinked).toMatchObject({ pass: false, severity: 'warn', note: 'serverSendUnlinked' });
   expect(unlinked.message).toContain('Cannot evaluate');
+});
+
+test('every vendor in the required-hash set has a label for the message', () => {
+  expect(HASH_REQUIRED_VENDORS.size).toBeGreaterThan(0);
+  for (const vendor of HASH_REQUIRED_VENDORS) expect(HASH_MESSAGE_VENDOR_LABELS[vendor], vendor).toBeTruthy();
 });
 
 test('a vendor added to the required-hash set fails a plain address field with no other change', () => {
