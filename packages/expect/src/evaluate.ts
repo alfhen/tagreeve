@@ -29,7 +29,7 @@ import {
   binaryShare,
   globToRegExp,
 } from '@tagreeve/core';
-import { GA4_BODY_ONLY_IGNORE, type MultipartBody, bodyEntries, guardFieldName, multipartPartName, splitMultipart, META_BODY_ONLY_IGNORE, META_CAPI_BODY_ONLY_IGNORE, META_CAPI_PARAM_NAMES, metaCapiBaseParam, SGTM_BODY_ONLY_IGNORE, isSandboxPageUrl, maskValuePath, matchesIgnoreList, identifierClass, identifierSignal, type IdentifierClass } from '@tagreeve/decoders';
+import { GA4_BODY_ONLY_IGNORE, type MultipartBody, bodyEntries, guardFieldName, multipartPartName, splitMultipart, META_BODY_ONLY_IGNORE, META_CAPI_BODY_ONLY_IGNORE, META_CAPI_PARAM_NAMES, metaCapiBaseParam, PINTEREST_CAPI_BODY_ONLY_IGNORE, SGTM_BODY_ONLY_IGNORE, isSandboxPageUrl, maskValuePath, matchesIgnoreList, identifierClass, identifierSignal, type IdentifierClass } from '@tagreeve/decoders';
 import { consentModeSetup, GOOGLE_VENDORS } from './consent-mode-setup.ts';
 import { identifierRoute } from './identifier-route.ts';
 import { earlyIdentityPush } from './early-identity-push.ts';
@@ -562,7 +562,7 @@ function loaderReachesScope(loader: Request | undefined, ctx: Context, inScope: 
 
 const NOT_RECORDED = 'cannot evaluate: field names not recorded';
 const BODY_CUT = 'cannot evaluate: body not fully recorded';
-const VENDOR_IGNORE: Record<string, readonly string[]> = { ga4: GA4_BODY_ONLY_IGNORE, meta: META_BODY_ONLY_IGNORE, 'meta-capi': META_CAPI_BODY_ONLY_IGNORE, sgtm: SGTM_BODY_ONLY_IGNORE };
+const VENDOR_IGNORE: Record<string, readonly string[]> = { ga4: GA4_BODY_ONLY_IGNORE, meta: META_BODY_ONLY_IGNORE, 'meta-capi': META_CAPI_BODY_ONLY_IGNORE, 'pinterest-capi': PINTEREST_CAPI_BODY_ONLY_IGNORE, sgtm: SGTM_BODY_ONLY_IGNORE };
 
 function listNames(names: string[]): string {
   return names.length > MAX_NAMES ? `${names.slice(0, MAX_NAMES).join(', ')} and ${names.length - MAX_NAMES} more` : names.join(', ');

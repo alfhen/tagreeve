@@ -260,3 +260,27 @@ test('body.only accepts the leaf form', () => {
 test('a bare **. is a scenario error', () => {
   expect(() => parseScenario('start: /\nexpect:\n  mustNot:\n    - { body.has: ["**."] }')).toThrow(ScenarioError);
 });
+
+const TRANSPORT = ['event_name', 'event_time', 'event_id', 'event_source_url', 'action_source'];
+const CAPI_RULE = 'expect:\n  must:\n    - { body.only: ["custom_data.*", "user_data.*"] }';
+
+test('body.only ignores the transport fields of a pinterest-capi hit', () => {
+  const h = hit({ vendor: 'pinterest-capi', fields: [...TRANSPORT, 'custom_data.value', 'user_data.em'] });
+  expect(h.fields).toContain('event_time');
+  expect(one(CAPI_RULE, [h]).pass).toBe(true);
+});
+
+test('body.only still fails a pinterest-capi hit on a field that is not transport', () => {
+  const h = hit({ vendor: 'pinterest-capi', fields: [...TRANSPORT, 'custom_data.value', 'user_data.em', 'partner_name'] });
+  expect(h.fields).toContain('partner_name');
+  const r = one(CAPI_RULE, [h]);
+  expect(r.pass).toBe(false);
+  expect(r.message).toBe(`${h.id} has fields outside body.only: partner_name (1 of 8).`);
+});
+
+test('the pinterest-capi ignore list does not cover the pinterest tag or meta-capi differently', () => {
+  const pin = hit({ vendor: 'pinterest', fields: [...TRANSPORT, 'custom_data.value', 'user_data.em'] });
+  expect(one(CAPI_RULE, [pin]).pass).toBe(false);
+  const meta = hit({ vendor: 'meta-capi', fields: [...TRANSPORT, 'custom_data.value', 'user_data.em'] });
+  expect(one(CAPI_RULE, [meta]).pass).toBe(true);
+});

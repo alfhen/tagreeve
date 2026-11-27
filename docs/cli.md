@@ -202,9 +202,10 @@ Default ignore lists for `body.only`, by vendor of the hit. A vendor that is not
 | `ga4` | `v`, `tid`, `gtm`, `_p`, `_s`, `sid`, `sct`, `seg`, `dl`, `dr`, `dt`, `en`, `cid`, `ul`, `sr`, `_eu`, `_et`, `gcs`, `gcd`, `npa`, `dma`, `dma_cps`, `are`, `frm`, `pscdl`, `tfd`, `ec`, `uaa`, `uab`, `uafvl`, `uam`, `uamb`, `uap`, `uapv`, `uaw`, `_ss`, `_fv`, `_nsi`, `_c`, `_ee`, `_z`, `_gaz`, `tag_exp`, `_tu`, `ngs` |
 | `meta` | `id`, `ev`, `dl`, `rl`, `if`, `ts`, `sw`, `sh`, `v`, `r`, `ec`, `o`, `fbp`, `it`, `coo`, `rqm`, `ler`, `cdl`, `plt`, `pmd[*]`, `expv2[*]`, `cs_est`, `a` |
 | `meta-capi` | `event_name`, `event_time`, `event_id`, `event_source_url`, `action_source` |
+| `pinterest-capi` | `event_name`, `event_time`, `event_id`, `event_source_url`, `action_source` |
 | `sgtm` | `v`, `tid`, `event`, `en`, `dtdc` |
 
-The lists are exported from `@tagreeve/decoders` as `GA4_BODY_ONLY_IGNORE`, `META_BODY_ONLY_IGNORE`, `META_CAPI_BODY_ONLY_IGNORE` and `SGTM_BODY_ONLY_IGNORE`.
+The lists are exported from `@tagreeve/decoders` as `GA4_BODY_ONLY_IGNORE`, `META_BODY_ONLY_IGNORE`, `META_CAPI_BODY_ONLY_IGNORE`, `PINTEREST_CAPI_BODY_ONLY_IGNORE` and `SGTM_BODY_ONLY_IGNORE`.
 
 ### Rules by sender
 
