@@ -1220,6 +1220,7 @@ describe('gcd letters in diffShapes', () => {
     const d = diffShapes(a, b);
     expect(d).toMatchObject({ added: [], removed: [], drift: false });
     expect(d.gcdLetters).toHaveLength(1);
+    expect(d.countChanges.map((c) => [c.consent.gcd, c.a, c.b])).toEqual([['13p3p3p2p5l1', 2, 1]]);
   });
 
   const P = '13p3p3p2p5l1';
