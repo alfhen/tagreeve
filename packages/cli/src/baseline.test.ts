@@ -635,6 +635,31 @@ test('a gcd default or update letter is not drift, in both directions', () => {
   expect(back).toMatchObject({ drift: false, added: 0, removed: 0, countChanges: 0, warnings: warning(q, p) });
 });
 
+function gcdHits(gcds: string[]): RunRecords {
+  const run = makeRun(gcds.map(() => 'view_product'));
+  run.hits.forEach((h, i) => {
+    h.consent = { ...state, raw: { gcs: 'G100', gcd: gcds[i]! } };
+  });
+  run.consentEpochs[0]!.label = 'denied';
+  return run;
+}
+
+test('a gcd split with a count change is not drift, for both shapes', () => {
+  const p = '13p3p3p2p5l1';
+  const q = '13q3q3q2q5l1';
+  const warning = [`gcd letters changed for ga4 view_product [epoch denied]: ${p} -> ${q} (same consent state). This is not drift.`];
+  const shapes = [
+    [[p, p], [p, q, q, q]],
+    [[p, p, q], [q, q]],
+  ] as const;
+  for (const [base, run] of shapes) {
+    const result = compareBaseline(buildBaseline(gcdHits([...base]), false), gcdHits([...run]));
+    expect(result).toMatchObject({ drift: false, added: 0, removed: 0, countChanges: 2, warnings: warning });
+    expect(result.changes.filter((c) => c.startsWith('count '))).toHaveLength(2);
+    for (const c of result.changes.filter((c) => c.startsWith('count '))) expect(c).toMatch(/ \(not drift\)$/);
+  }
+});
+
 test('a gcd change from p to t is still drift and gives no gcd-letters warning', () => {
   const result = compareBaseline(buildBaseline(gcdRun('13p3p3p2p5l1'), false), gcdRun('13t3p3p2p5l1'));
   expect(result).toMatchObject({ drift: true, added: 1, removed: 1 });
