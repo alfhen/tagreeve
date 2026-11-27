@@ -681,8 +681,10 @@ describe('the addToCart failure message', () => {
   });
 
   test('masks value segments inside a sandbox prefix', async () => {
-    const message = await answered([post('req_1', '/web-pixels@build/12345678/sandbox/strict/cart/add.js')], [{ requestId: 'req_1', status: 404 }]);
-    expect(message).toContain('the store answered 404');
+    const input = post('req_1', '/web-pixels@build/12345678/sandbox/strict/cart/add.js');
+    expect(input.url).toContain('12345678');
+    const message = await answered([input], [{ requestId: 'req_1', status: 404 }]);
+    expect(message).toContain('the store answered 404 to /(other)/(other)/sandbox/strict/cart/add.js');
     expect(message).not.toContain('12345678');
   });
 
