@@ -9,7 +9,7 @@
 - `pinterest-capi`: a `body.only` rule no longer fails on the five transport fields of the call (#1662, #1677).
 - Baseline: a gcd letter split with a count change is now a count change in the baseline, not drift (#1599, #1678).
 - Variables: an undeclared `{name}` inside a variable value prints a warning on stderr. The run still exits as before (#1673, #1676).
-- Cleanups: the sandbox-prefix test and the createCartCheck comment, and a guard test for the hash message labels. No behaviour change (#1600, #1675).
+- Cleanups to tests and comments for the hash label guard. No behaviour change (#1600, #1675).
 
 ### Upgrading from 0.9.1
 
