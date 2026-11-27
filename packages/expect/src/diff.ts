@@ -639,12 +639,17 @@ export function diffShapes(a: ShapeKey[], b: ShapeKey[], options: ShapeDiffOptio
       } else if (first && !tb.has(first.tid)) {
         first.left = 0;
         if (first.t.count !== t.count) result.countChanges.push({ key, consent: t.consent, ids: t.ids, a: first.t.count, b: t.count });
+      } else if (first) {
+        // Every hit of this tuple pairs with a gone gcd-letter tuple, so the rest is a count change.
+        result.countChanges.push({ key, consent: t.consent, ids: t.ids, a: first.t.count, b: t.count });
       } else if (need > 0) {
         result.added.push({ key, consent: t.consent, ids: t.ids, wholeKey: !ka });
       }
     }
     for (const l of lost) {
-      if (l.left > 0 && !tb.has(l.tid)) result.removed.push({ key, consent: l.t.consent, ids: l.t.ids, wholeKey: !kb });
+      if (l.left <= 0 || tb.has(l.tid)) continue;
+      if (l.left < l.t.count) result.countChanges.push({ key, consent: l.t.consent, ids: l.t.ids, a: l.t.count, b: l.t.count - l.left });
+      else result.removed.push({ key, consent: l.t.consent, ids: l.t.ids, wholeKey: !kb });
     }
   }
   result.drift = result.added.length > 0 || result.removed.length > 0;

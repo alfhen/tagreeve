@@ -1222,6 +1222,55 @@ describe('gcd letters in diffShapes', () => {
     expect(d.gcdLetters).toHaveLength(1);
   });
 
+  const P = '13p3p3p2p5l1';
+  const R = '13p3q3q2q5l1';
+  const T = '13t3p3p2p5l1';
+  const side = (...ts: Array<[string, number] | [string, number, { gcs?: string; ids?: string[] }]>): ShapeKey[] => [
+    { key, tuples: ts.map(([gcd, count, o]) => tuple({ gcd, count, ...o })) },
+  ];
+  const Q = '13q3q3q2q5l1';
+
+  test('shape 1: a split with a count change reports no drift', () => {
+    const d = diffShapes(side([P, 2]), side([P, 1], [Q, 3]));
+    expect(d).toMatchObject({ added: [], removed: [], drift: false });
+    expect(d.gcdLetters).toHaveLength(1);
+    expect(d.countChanges.map((c) => [c.consent.gcd, c.a, c.b])).toEqual(expect.arrayContaining([[P, 2, 1], [Q, 2, 3]]));
+    expect(d.countChanges).toHaveLength(2);
+  });
+
+  test('shape 2: a merge with a count drop reports no drift', () => {
+    const d = diffShapes(side([P, 2], [Q, 1]), side([Q, 2]));
+    expect(d).toMatchObject({ added: [], removed: [], drift: false });
+    expect(d.gcdLetters).toHaveLength(1);
+    expect(d.countChanges.map((c) => [c.consent.gcd, c.a, c.b])).toEqual(expect.arrayContaining([[P, 2, 1], [Q, 1, 2]]));
+    expect(d.countChanges).toHaveLength(2);
+  });
+
+  test('the issue literal second example (p x1 and q x1, then q x1) is still drift', () => {
+    const d = diffShapes(side([P, 1], [Q, 1]), side([Q, 1]));
+    expect(d.drift).toBe(true);
+    expect(d.removed).toHaveLength(1);
+    expect(d.gcdLetters).toEqual([]);
+  });
+
+  test('the related split (p x1, then q x1 and r x1) keeps drift with a gcd entry', () => {
+    const d = diffShapes(side([P, 1]), side([Q, 1], [R, 1]));
+    expect(d.drift).toBe(true);
+    expect(d.added).toHaveLength(1);
+    expect(d.gcdLetters).toHaveLength(1);
+  });
+
+  test.each([
+    ['p to t', [T, 3] as [string, number]],
+    ['gcs', [Q, 3, { gcs: 'G101' }] as [string, number, { gcs: string }]],
+    ['ids', [Q, 3, { ids: [] }] as [string, number, { ids: string[] }]],
+  ])('a split whose new tuple differs by %s stays drift', (_name, extra) => {
+    const d = diffShapes(side([P, 2]), side([P, 1], extra));
+    expect(d.drift).toBe(true);
+    expect(d.added).toHaveLength(1);
+    expect(d.gcdLetters).toEqual([]);
+  });
+
   test('two hits that merge into one letter are not drift', () => {
     const a = [{ key, tuples: [tuple({ gcd: '13p3p3p2p5l1' }), tuple()] }];
     const b = [{ key, tuples: [tuple({ gcd: '13p3p3p2p5l1', count: 2 })] }];
