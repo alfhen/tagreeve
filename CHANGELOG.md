@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.9.2
+
+`npm i -g tagreeve` installs this release. 0.9.2 is a patch release after 0.9.1. It has no new command, option or record field. The record stays at schema version 5. A 0.9.1 record reads as before.
+
+### Fixes in 0.9.2
+
+- `pinterest-capi`: a `body.only` rule no longer fails on the five transport fields of the call (#1662, #1677).
+- Baseline: a gcd letter split with a count change is now a count change in the baseline, not drift (#1599, #1678).
+- Variables: an undeclared `{name}` inside a variable value prints a warning on stderr. The run still exits as before (#1673, #1676).
+- Cleanups to tests and comments for the hash label guard. No behaviour change (#1600, #1675).
+
+### Upgrading from 0.9.1
+
+- **A `body.only` rule on `pinterest-capi` that failed now passes.** The rule failed on the five transport fields of the call. A suite that was red for that reason turns green.
+- **A gcd letter split with a count change is no longer drift.** A `run --baseline` that exited 1 for it now passes. The related split case still reports drift (#1599).
+- **A new warning line on stderr.** A run with an undeclared `{name}` in a variable value that the start URL or a visit path uses prints it. The exit code and stdout do not change. A script that treats any stderr output as a failure sees it.
+- **A new release needs a new server image.** On arm64 (Apple silicon), run `tagreeve server-container build` after `npm i -g tagreeve`. A run with `--server-container` exits 2 with "The image tagreeve-sgtm:<version> is not available" until the image for that version exists. On amd64 the command builds nothing.
+
+### Known in 0.9.2
+
+Issues still open that you can meet, in addition to those in 0.7.0:
+
+- The canary search reads only the forms it lists. It skips gzip and binary bodies, bodies cut at 64 KiB and net-log requests with no body, and it does not search headers. A pass means no planted value was found in the searched forms.
+- The Stape loader unwrap covers `/g/collect` and `/data`. Stape's hosting layer may act on a loader request in other ways, and the record says so in fixed text.
+- A gcd letter split of a gone tuple into two new variants still reports drift (#1599).
+- The two vendor name tables, `VENDOR_NAMES` and `HASH_REQUIRED_VENDORS`, are still separate (#1485). A guard test fails when a vendor in the second has no label.
+
 ## 0.9.1
 
 `npm i -g tagreeve` installs this release. 0.9.1 is a patch release after 0.9.0. It has no new command, option or record field. The record stays at schema version 5. A 0.9.0 record reads as before.
