@@ -139,20 +139,38 @@ test('diff pairs a hit that lands in a different step in each run, and still rep
 }, 120_000);
 
 test('diff --by-page shows the page path of a canary run, never its query', async () => {
-  const source = await readFile(join(root, 'e2e/scenarios/canaries.yml'), 'utf8');
-  const recordCanaries = async (consent: string): Promise<string> => {
-    const file = join(outDir, `canaries-${consent}.yml`);
-    await writeFile(file, source.replace('consent: accept', `consent: ${consent}`));
-    const r = await new Promise<{ code: number; stdout: string }>((resolve) => {
-      execFile(process.execPath, [cli, 'run', file, '--site', site.url, '--out', outDir, '--json'], { cwd: root, maxBuffer: 1 << 26 }, (error, stdout) => {
-        resolve({ code: error ? ((error as { code?: number }).code ?? 1) : 0, stdout });
-      });
-    });
-    expect(r.code).not.toBe(2);
-    return (JSON.parse(r.stdout) as { path: string }).path;
+  // Fixed records: the only difference is gcs on the hit whose page holds canaries, so the result never depends on timing.
+  const page = `${site.url}/plain/product?utm_source=TEST-canary-1&email=TEST-canary-2#TEST-frag`;
+  const hitIds: Record<string, string> = { accept: 'hit_01M7MG8JXF9PNWSN50VDTW57PX', reject: 'hit_01M7MG8JXG0TTP7532H5J9NCHN' };
+  const writeRun = async (name: string, gcs: string): Promise<string> => {
+    const records = [
+      { type: 'run', id: 'run_01M7MG8AVV55JCRS10FJ702KWY', scenario: 'canaries.yml', site: site.url, startedAt: 1, recordSchemaVersion: 5, pingwrightVersion: '0.0.0', browser: { name: 'chromium', version: '0' }, networkMode: 'stub', gtmOverride: null, containerVersions: {}, identity: null },
+      { type: 'step', id: 'stp_01M7MG8B6ZE6NA06CNF4JDKTJA', runId: 'run_01M7MG8AVV55JCRS10FJ702KWY', index: 0, label: 'start', startedAt: 1, endedAt: 2 },
+      {
+        type: 'hit',
+        id: hitIds[name],
+        runId: 'run_01M7MG8AVV55JCRS10FJ702KWY',
+        stepId: 'stp_01M7MG8B6ZE6NA06CNF4JDKTJA',
+        requestId: 'req_01M7MG8BCW3JX6528WPKSNWEKG',
+        t: 1,
+        vendor: 'ga4',
+        event: 'page_view',
+        consent: { ads: 'unknown', analytics: 'unknown', adUserData: 'unknown', adPersonalization: 'unknown', raw: { gcs } },
+        ids: { client_id: true },
+        page,
+        transport: 'fetch',
+        params: {},
+        fields: ['gcs'],
+        fieldsComplete: true,
+        idFields: [],
+      },
+    ];
+    const file = join(outDir, `canaries-${name}.jsonl`);
+    await writeFile(file, records.map((r) => JSON.stringify(r)).join('\n') + '\n');
+    return file;
   };
-  const a = await recordCanaries('accept');
-  const b = await recordCanaries('reject');
+  const a = await writeRun('accept', 'G111');
+  const b = await writeRun('reject', 'G100');
   type Entry = { hitId: string; page: string | null };
   type Result = { added: Entry[]; removed: Entry[]; changed: { a: Entry; b: Entry }[] };
   const json = await diff([a, b, '--by-page', '--json']);
