@@ -1,6 +1,6 @@
 import { newId, type Request } from '@tagreeve/core';
 import { expect, test } from 'vitest';
-import { decodeRequest, GA4_BODY_ONLY_IGNORE, matchesIgnoreList, META_BODY_ONLY_IGNORE, META_CAPI_BODY_ONLY_IGNORE, SGTM_BODY_ONLY_IGNORE } from './index.ts';
+import { decodeRequest, GA4_BODY_ONLY_IGNORE, matchesIgnoreList, META_BODY_ONLY_IGNORE, META_CAPI_BODY_ONLY_IGNORE, PINTEREST_CAPI_BODY_ONLY_IGNORE, SGTM_BODY_ONLY_IGNORE } from './index.ts';
 
 const GTAG_QUERY = [
   'v=2', 'tid=G-PWTEST0001', 'gtm=45je5aa0v9100000za200', '_p=1760000000000', 'gcd=13l3l3l3l1l1', 'npa=0', 'dma=0',
@@ -49,4 +49,15 @@ test('a Conversions API hit has only transport fields from the meta-capi ignore 
   expect(hit?.vendor).toBe('meta-capi');
   expect(hit?.fields?.length).toBe(5);
   expect((hit?.fields ?? []).filter((f) => !matchesIgnoreList(f, META_CAPI_BODY_ONLY_IGNORE))).toEqual([]);
+});
+
+test('a Pinterest Conversions API hit has only transport fields from the pinterest-capi ignore list', () => {
+  const postData = JSON.stringify({
+    data: [{ event_name: 'page_visit', event_time: 1700000000, event_id: 'pw-pin-event-1', event_source_url: 'https://shop.example.com/', action_source: 'web' }],
+  });
+  const [hit] = decodeRequest({ ...request, method: 'POST', url: 'https://api.pinterest.com/v5/ad_accounts/100000000000002/events', postData });
+  expect(hit?.vendor).toBe('pinterest-capi');
+  expect(hit?.fields?.length).toBe(5);
+  expect([...PINTEREST_CAPI_BODY_ONLY_IGNORE].sort()).toEqual(['action_source', 'event_id', 'event_name', 'event_source_url', 'event_time']);
+  expect((hit?.fields ?? []).filter((f) => !matchesIgnoreList(f, PINTEREST_CAPI_BODY_ONLY_IGNORE))).toEqual([]);
 });
