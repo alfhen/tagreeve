@@ -9,7 +9,8 @@
     if (!again) {
       window.dataLayer.push({ event: 'add_to_cart' });
       window.name = 'pw-navigated';
-      location.href = location.href;
+      // Let the recorder take the push before the navigation starts: a push that is seen after it gets the next document's id.
+      setTimeout(function () { location.href = location.href; }, 300);
     } else {
       fetch('https://sgtm.tagreeve.invalid/g/collect?v=2&tid=G-PWTEST0001&cid=3333333333.4444444444&gcs=G100&en=other_frame_ga', { method: 'POST', mode: 'no-cors', body: '' }).catch(function () {});
     }
