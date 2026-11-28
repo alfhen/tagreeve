@@ -158,7 +158,7 @@ export interface ScenarioOptions {
   canaries?: boolean;
   /** The Consent Mode setup the scenario expects, judged by `consentModeOrder`. For scenarios only, not for the project config. */
   consentMode?: ConsentModeExpectation;
-  /** Severity per built-in check. A check that is not listed is `fail`, except `earlyIdentifiers`, `consentModeSetup`, `consentModeOrder`, `consentStateMismatch`, `earlyIdentityPush`, `idHandover` and `serverContainerRejected`, which are `warn`. `identifierRoute` is `fail`, and `warn` turns every finding of it into a warning. */
+  /** Severity per built-in check. A check that is not listed is `fail`, except `earlyIdentifiers`, `consentModeSetup`, `consentModeOrder`, `consentStateMismatch`, `earlyIdentityPush`, `idHandover`, `doubleSend` and `serverContainerRejected`, which are `warn`. `identifierRoute` is `fail`, and `warn` turns every finding of it into a warning. */
   builtins?: Partial<Record<BuiltinName, Severity>>;
 }
 
@@ -181,7 +181,7 @@ export interface ConsentModeExpectation {
   region?: string[];
 }
 
-export const BUILTIN_NAMES = ['unknownDestination', 'sandboxPageUrl', 'possibleRealData', 'deniedIdentifiers', 'earlyIdentifiers', 'consentModeSetup', 'consentModeOrder', 'consentStateMismatch', 'earlyIdentityPush', 'idHandover', 'serverContainerRejected', 'identifierRoute'] as const;
+export const BUILTIN_NAMES = ['unknownDestination', 'sandboxPageUrl', 'possibleRealData', 'deniedIdentifiers', 'earlyIdentifiers', 'consentModeSetup', 'consentModeOrder', 'consentStateMismatch', 'earlyIdentityPush', 'idHandover', 'doubleSend', 'serverContainerRejected', 'identifierRoute'] as const;
 export type BuiltinName = (typeof BUILTIN_NAMES)[number];
 export const SEVERITIES = ['fail', 'warn'] as const;
 

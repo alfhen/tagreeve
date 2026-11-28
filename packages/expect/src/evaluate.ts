@@ -36,6 +36,7 @@ import { consentStateMismatch } from './consent-state-mismatch.ts';
 import { navigationTimes, type VisitStart } from './document.ts';
 import { identifierRoute } from './identifier-route.ts';
 import { earlyIdentityPush } from './early-identity-push.ts';
+import { doubleSend } from './double-send.ts';
 import { idHandover } from './id-handover.ts';
 import { serverContainerRejected, type ServerContainerRejected } from './server-container-rejected.ts';
 import { hostMatches } from './hosts.ts';
@@ -1127,7 +1128,7 @@ function countByHost(flags: readonly Flag[], ctx: Context): string {
 }
 
 /** Built-in checks whose default is not `fail`. */
-const DEFAULT_SEVERITY: Partial<Record<BuiltinName, Severity>> = { earlyIdentifiers: 'warn', consentModeSetup: 'warn', consentModeOrder: 'warn', consentStateMismatch: 'warn', earlyIdentityPush: 'warn', idHandover: 'warn', serverContainerRejected: 'warn' };
+const DEFAULT_SEVERITY: Partial<Record<BuiltinName, Severity>> = { earlyIdentifiers: 'warn', consentModeSetup: 'warn', consentModeOrder: 'warn', consentStateMismatch: 'warn', earlyIdentityPush: 'warn', idHandover: 'warn', doubleSend: 'warn', serverContainerRejected: 'warn' };
 
 function builtInChecks(
   records: readonly Input[],
@@ -1218,6 +1219,14 @@ function builtInChecks(
 
   const handover = idHandover(ctx.hits.filter((h) => !ctx.serverHitIds.has(h.id)), ctx.requests);
   add('idHandover', handover.pass, handover.evidence, handover.message);
+
+  const doubled = doubleSend({
+    dataLayer: ctx.dataLayerEvents,
+    hits: ctx.hits.filter((h) => !ctx.serverHitIds.has(h.id)),
+    requests: ctx.requests,
+    visits: ctx.visits,
+  });
+  if (doubled) add('doubleSend', doubled.pass, doubled.evidence, doubled.message);
 
   const real = flags.filter((f) => f.kind === 'possibleRealData');
   // Flags from the recorder come from the raw records. Scanning again only adds requests the recorder did not flag.

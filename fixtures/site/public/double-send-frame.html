@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Double send frame</title>
+</head>
+<body>
+<p>Embedded by <code>/double-send</code>. Sends one GA4 <code>purchase</code> image hit for the fake tag <code>G-PWTEST0001</code> with the same fake client ID as the page, when the page sends it a message.</p>
+<script>
+window.addEventListener('message', function (e) {
+  if (e.data !== 'send') return;
+  new Image().src = 'https://www.google-analytics.com/g/collect?v=2&tid=G-PWTEST0001&cid=555000111.1700000001&en=purchase&ep.transaction_id=PWLEAK-D100-TXN';
+});
+</script>
+</body>
+</html>

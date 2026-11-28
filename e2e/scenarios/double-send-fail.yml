@@ -1,0 +1,4 @@
+start: /double-send
+steps:
+  - wait: 4s
+options: { seed: 1, allowUnknownDestination: true, builtins: { doubleSend: fail } }

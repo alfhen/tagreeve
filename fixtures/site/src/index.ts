@@ -93,6 +93,8 @@ const pages: Record<string, string> = {
   '/consent-mode-order': 'consent-mode-order.html',
   '/consent-state-mismatch': 'consent-state-mismatch.html',
   '/consent-state-mismatch-frame': 'consent-state-mismatch-frame.html',
+  '/double-send': 'double-send.html',
+  '/double-send-frame': 'double-send-frame.html',
   '/datalayer-shapes': 'datalayer-shapes.html',
   '/datalayer-alias': 'datalayer-alias.html',
   '/datalayer-alias-child': 'datalayer-alias-child.html',

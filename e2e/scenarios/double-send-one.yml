@@ -1,0 +1,4 @@
+start: /double-send?mode=one
+steps:
+  - wait: 4s
+options: { seed: 1, allowUnknownDestination: true }

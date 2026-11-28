@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Double send</title>
+</head>
+<body>
+<h1>Double send</h1>
+<p>Sends one GA4 <code>purchase</code> image hit for the fake tag <code>G-PWTEST0001</code> with the fake client ID <code>555000111.1700000001</code>, then 300 ms later the embedded frame <code>/double-send-frame</code> sends the same hit. With <code>mode=top</code> the page sends its hit only and embeds no frame. With <code>mode=listener</code> one <code>purchase</code> listener is attached twice, so one event pushes the same <code>purchase</code> twice and sends two hits from this frame. With <code>mode=one</code> the page pushes <code>purchase</code> once and sends two equal hits. With <code>mode=different</code> it sends two hits that differ in one param.</p>
+<script>
+var q = new URLSearchParams(location.search);
+var mode = q.get('mode') || 'frames';
+var base = 'https://www.google-analytics.com/g/collect?v=2&tid=G-PWTEST0001&cid=555000111.1700000001&en=purchase&ep.transaction_id=PWLEAK-D100-TXN';
+var sent = 0;
+// The `_p` counter keeps the browser from merging two image loads of one URL. The decoder ignores it.
+function send(extra) {
+  new Image().src = base + '&_p=' + (++sent) + (extra || '');
+}
+window.dataLayer = window.dataLayer || [];
+function push() {
+  window.dataLayer.push({ event: 'purchase', ecommerce: { transaction_id: 'PWLEAK-D100-TXN', value: '10' } });
+}
+if (mode === 'frames' || mode === 'top') {
+  var frame;
+  if (mode === 'frames') {
+    frame = document.createElement('iframe');
+    frame.title = 'Embedded frame';
+    frame.src = '/double-send-frame';
+    document.body.appendChild(frame);
+  }
+  var start = function () {
+    send();
+    if (frame) setTimeout(function () { frame.contentWindow.postMessage('send', '*'); }, 300);
+  };
+  if (frame) frame.addEventListener('load', function () { setTimeout(start, 200); });
+  else setTimeout(start, 500);
+} else if (mode === 'listener') {
+  var onPurchase = function () { push(); send(); };
+  document.addEventListener('pw-purchase', onPurchase);
+  document.addEventListener('pw-purchase', function () { onPurchase(); });
+  setTimeout(function () { document.dispatchEvent(new Event('pw-purchase')); }, 500);
+} else if (mode === 'one') {
+  setTimeout(function () { push(); send(); setTimeout(send, 200); }, 500);
+} else if (mode === 'different') {
+  setTimeout(function () { send(); setTimeout(function () { send('&ep.coupon=PWTEST'); }, 200); }, 500);
+}
+</script>
+</body>
+</html>
