@@ -108,8 +108,6 @@ export function doubleSend({ dataLayer, hits, requests, visits }: DoubleSendInpu
   const pairable = (a: Candidate, b: Candidate) => {
     if (b.hit.t - a.hit.t > WINDOW_MS) return false;
     if (a.frame.page !== undefined && b.frame.page !== undefined && a.frame.page !== b.frame.page) return false;
-    // Two different sub frames are not known to share a navigation.
-    if (a.frame.n !== b.frame.n && !a.frame.main && !b.frame.main) return false;
     return sameParams(a.hit.params, b.hit.params) && !loadBetween(a, b);
   };
 

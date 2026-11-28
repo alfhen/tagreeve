@@ -111,10 +111,21 @@ describe('two frames', () => {
     expect(r[0]!.message).toContain('main frame and sub frame');
   });
 
-  test('two different sub frames are not paired', () => {
+  test('two different sub frames of one document are paired', () => {
     const a = ga4(1000, SUB);
     const b = ga4(1400, SUB2);
-    expect(failing([a.req, a.hit, doc(1100, SUB2), b.req, b.hit])).toHaveLength(0);
+    expect(a.req.frame!.n).not.toBe(b.req.frame!.n);
+    const r = failing([doc(100), a.req, a.hit, doc(1100, SUB2), b.req, b.hit]);
+    expect(r).toHaveLength(1);
+    expect(r[0]!.message).toContain('sub frame');
+  });
+
+  test('two different sub frames of different navigations are not paired', () => {
+    const a = ga4(1000, SUB);
+    const b = ga4(1400, SUB2);
+    const load = doc(1200, MAIN);
+    expect(load.t > a.hit.t && load.t < b.hit.t).toBe(true);
+    expect(failing([a.req, a.hit, load, b.req, b.hit])).toHaveLength(0);
   });
 });
 
@@ -320,10 +331,10 @@ describe('one frame', () => {
 
   test('pushes count only up to 1000 ms from the first hit and inside the document', () => {
     const { a, base } = same();
-    const load = doc(100);
-    const old = [purchase(a.hit.t - 1500 + 1000), purchase(a.hit.t - 1400 + 1000)];
-    expect(failing([load, ...base, purchase(a.hit.t - 1500), purchase(a.hit.t - 1400)])[0]!.message).toContain('one push or none was recorded');
-    expect(old).toHaveLength(2);
+    const load = doc(-1000);
+    const olds = [purchase(a.hit.t - 1500), purchase(a.hit.t - 1400)];
+    expect(olds.every((p) => p.t > load.t && p.t < a.hit.t)).toBe(true);
+    expect(failing([load, ...base, ...olds])[0]!.message).toContain('one push or none was recorded');
     const near = [purchase(a.hit.t - 600), purchase(a.hit.t - 500)];
     expect(failing([load, ...base, ...near])[0]!.message).toContain('the event was also pushed twice');
     const between = doc(a.hit.t - 550);
