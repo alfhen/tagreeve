@@ -1,4 +1,4 @@
-import { argumentsListOf, consentCommandOf, type ConsentEpoch, type ConsentState, type DataLayerEvent, type Hit } from '@tagreeve/core';
+import { argumentsListOf, consentCommandOf, signalToField, type ConsentEpoch, type ConsentState, type DataLayerEvent, type Hit } from '@tagreeve/core';
 import { GCD_SIGNALS, gcdSignals } from '@tagreeve/decoders';
 import { CONSENT_MODE_URL, GOOGLE_VENDORS } from './consent-mode-setup.ts';
 import { frameConsent, layerOf } from './frame-consent.ts';
@@ -23,12 +23,7 @@ export interface ConsentModeOrderInput {
 
 type Value = 'granted' | 'denied';
 
-const FIELD_OF: Record<ConsentSignal, keyof ConsentState> = {
-  ad_storage: 'ads',
-  analytics_storage: 'analytics',
-  ad_user_data: 'adUserData',
-  ad_personalization: 'adPersonalization',
-};
+const FIELD_OF: Record<ConsentSignal, keyof ConsentState> = signalToField;
 
 const NO_UPDATE = 'the consent update was not in the dataLayer, so the update gap and the state after the decision were not judged';
 

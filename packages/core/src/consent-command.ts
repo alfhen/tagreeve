@@ -49,7 +49,7 @@ export const unknownConsent: ConsentState = {
   adPersonalization: 'unknown',
 };
 
-const signalToField = {
+export const signalToField = {
   analytics_storage: 'analytics',
   ad_storage: 'ads',
   ad_user_data: 'adUserData',
