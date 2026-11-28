@@ -2,26 +2,26 @@ Hits
   ga4: page_view x6, user_engagement x1
   sgtm: (no event) x2
   meta: PageView x2, AddToCart x1
-  google-ads: page_view x2, view_item x1, source_update x1, add_to_cart x1
+  google-ads: page_view x2, view_item x1, add_to_cart x1
 dataLayer: 16 pushes, 8 events (add_to_cart, view_item, consent default, …); shapes in --json
 Consent epochs
-  undecided (2.4 s)
+  undecided (2.5 s)
   denied (to end)
 Flags
   unknownDestination: pixel.adnetwork.example x2 (/unknown-pixel)
   sandboxPageUrl: ga4 x2 (/web-pixels@0.0.0-fixture/sandbox/modern/)
 Expectations
   FAIL mustNot: {"vendor":["meta","google-ads"],"before":"consent"}
-       Expected no matching hits before consent, found 2 matching hits (8 before narrowing).
-       evidence: hit_01M8GJ4SC0CJV91ZW0WF060JX8, hit_01M8GJ4SC0CJV91ZW0WF060JXA
+       Expected no matching hits before consent, found 2 matching hits (7 before narrowing).
+       evidence: hit_01M8GK93NM9BZWSX4DP68RAZRN, hit_01M8GK93NM9BZWSX4DP68RAZRQ
   FAIL mustNot: {"vendor":"meta","in":"epoch(denied)"}
        Expected no matching hits in epoch(denied), found 2 matching hits (3 before narrowing).
-       evidence: hit_01M8GJ4SC14611AFXB6G8M3Z67, hit_01M8GJ4SC2F2A8TA2HFWGM5XG2
+       evidence: hit_01M8GK93NN1T3PH3TMVHQKJ7NT, hit_01M8GK93NN1T3PH3TMVHQKJ7NZ
   PASS builtin: unknownDestination
-       evidence: flg_01M8GJ4SC479BBM91JM7MFKAM4, flg_01M8GJ4SC479BBM91JM7MFKAM5
+       evidence: flg_01M8GK93NQ7FQRA1N1HZE66SHM, flg_01M8GK93NRFV1QB3Q0PG64KDB3
   WARN builtin: sandboxPageUrl
        Expected no hit to carry a sandbox URL as its page, found 2: staging.northwind.example/web-pixels@0.0.0-fixture/sandbox/modern/.
-       evidence: hit_01M8GJ4SBZ9DBZ2AVXXESEBEYE, hit_01M8GJ4SC14611AFXB6G8M3Z66
+       evidence: hit_01M8GK93NK7BFGPT9GZ56YMFKQ, hit_01M8GK93NN1T3PH3TMVHQKJ7NS
   PASS builtin: deniedIdentifiers
   PASS builtin: earlyIdentifiers
   PASS builtin: consentModeSetup
@@ -29,7 +29,7 @@ Expectations
   PASS builtin: earlyIdentityPush
   WARN builtin: idHandover
        Expected the GA4 client and session ID to carry over between contexts, found 1 difference: G-PWTEST0001: client ID differs between main frame on staging.northwind.example and sub frame on staging.northwind.example.
-       evidence: hit_01M8GJ4SBY8S03J3A973D540XC, hit_01M8GJ4SC0CJV91ZW0WF060JXB, hit_01M8GJ4SBZ9DBZ2AVXXESEBEYE, hit_01M8GJ4SC14611AFXB6G8M3Z66
+       evidence: hit_01M8GK93NHFZZ36GC5FT1EJZGJ, hit_01M8GK93NM9BZWSX4DP68RAZRR, hit_01M8GK93NK7BFGPT9GZ56YMFKQ, hit_01M8GK93NN1T3PH3TMVHQKJ7NS
   PASS builtin: possibleRealData
 Result: fail (2 of 11) with 2 warnings
-Record: tagreeve/runs/2026-01-15/run_01M8GJ4KBZ15VJQ8T4YFNE0BP1.jsonl
+Record: tagreeve/runs/2026-01-15/run_01M8GK8XMW5PS5DMCRKDCRRBEZ.jsonl
