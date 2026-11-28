@@ -117,7 +117,6 @@ export function consentModeOrder({ dataLayer, hits, epochs, epochAt, expected }:
   const mainDefaults = main.filter((e) => commandOf(e)?.command === 'default' && e.t <= firstDecisionT);
 
   // The global default and the region codes that the main frame pushed.
-  const pushedDefault: Partial<Record<ConsentSignal, { value: Value; id: string }>> = {};
   const pushedRegions = new Set<string>();
   const globalDefaults: { id: string; values: Partial<Record<ConsentSignal, Value>> }[] = [];
   for (const e of mainDefaults) {
@@ -133,13 +132,14 @@ export function consentModeOrder({ dataLayer, hits, epochs, epochAt, expected }:
       const value = valueOf((signals as Record<string, unknown>)[s]);
       if (!value) continue;
       values[s] = value;
-      // The first push sets the default of the undecided epoch; a later one never replaces it.
-      pushedDefault[s] ??= { value, id: e.id };
     }
     globalDefaults.push({ id: e.id, values });
   }
   const expectedDefault = resolveDefault(expected?.default);
-  const defaultOf = (s: ConsentSignal): Value | undefined => expectedDefault[s] ?? pushedDefault[s]?.value;
+  // The pushed default is the state of the one replay, before the first decision.
+  const firstDefault = mainDefaults[0];
+  const pushedState = firstDefault?.frame && frameConsent(dataLayer, firstDefault.frame.n, layerOf(firstDefault)).stateAt(firstDecisionT, false).state;
+  const defaultOf = (s: ConsentSignal): Value | undefined => expectedDefault[s] ?? (pushedState ? valueOf(pushedState[FIELD_OF[s]]) : undefined);
   const defaultDeniesAll = CONSENT_SIGNALS.every((s) => defaultOf(s) === 'denied');
 
   const grants = (e: ConsentEpoch) => CONSENT_SIGNALS.some((s) => e.state[FIELD_OF[s]] === 'granted');
