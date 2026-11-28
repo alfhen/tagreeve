@@ -6,6 +6,7 @@ export * from './hosts.ts';
 export * from './diff.ts';
 export * from './consent-mode-setup.ts';
 export * from './consent-mode-order.ts';
+export * from './consent-state-mismatch.ts';
 export * from './id-handover.ts';
 export * from './payment-providers.ts';
 export * from './project-config.ts';

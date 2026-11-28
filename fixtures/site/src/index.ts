@@ -91,6 +91,8 @@ const pages: Record<string, string> = {
   '/meta-early-ids': 'meta-early-ids.html',
   '/consent-mode-hits': 'consent-mode-hits.html',
   '/consent-mode-order': 'consent-mode-order.html',
+  '/consent-state-mismatch': 'consent-state-mismatch.html',
+  '/consent-state-mismatch-frame': 'consent-state-mismatch-frame.html',
   '/datalayer-shapes': 'datalayer-shapes.html',
   '/datalayer-alias': 'datalayer-alias.html',
   '/datalayer-alias-child': 'datalayer-alias-child.html',

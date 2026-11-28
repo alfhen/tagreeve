@@ -1,0 +1,4 @@
+start: /consent-state-mismatch?leak=1
+steps:
+  - wait: 4s
+options: { seed: 1, allowUnknownDestination: true }

@@ -79,7 +79,7 @@ First-party hosts: the registrable domain of `--site` is first party, so `--site
 | `serverHosts` | List of hosts or `*.domain` wildcards for `--network server`. Collection requests to them pass through, and every other one is still stubbed. A host other than `localhost`, `127.0.0.1` or `::1` prints a warning on stderr. A wildcard on a public suffix (`*.com`), a vendor host (Google, Meta, Pinterest) and a tracker-list host are scenario errors. `server` mode without `serverHosts` exits 2. A `pagehide` or `visibilitychange` send to a server host is answered in the page, so the cookies it would set are not seen. A passing cookie rule in `server` mode can miss them. |
 | `allowUnknownDestination` | `true` allows every unknown destination. A list of hosts or wildcards allows only those, and every other unknown destination still fails. |
 | `consentMode` | The Consent Mode setup the scenario expects. For scenarios only: `tagreeve/config.yml` refuses it as an unknown option. A mapping with at least one of these keys. `mode`: `basic` or `advanced`. `default`: `denied`, `granted`, or a mapping of `ad_storage`, `analytics_storage`, `ad_user_data` and `ad_personalization` to `granted` or `denied`; `denied` and `granted` mean all four. `accept`: the signals an accept grants, from the same four, all four when absent. `region`: up to 20 region codes such as `DK` or `US-CA` that the scenario expects a regional default for. A bad key or value is a scenario error that names the key. See [consentModeOrder](#consentmodeorder). |
-| `builtins` | Severity per built-in check: `fail` (the default) or `warn`. The names are `unknownDestination`, `sandboxPageUrl` (Shopify-specific), `possibleRealData`, `deniedIdentifiers`, `earlyIdentifiers`, `consentModeSetup`, `consentModeOrder`, `earlyIdentityPush`, `idHandover`, `serverContainerRejected` and `identifierRoute`. `earlyIdentifiers`, `consentModeSetup`, `consentModeOrder`, `earlyIdentityPush`, `idHandover` and `serverContainerRejected` are `warn` by default and every other check is `fail`. Any other name or severity is a scenario error. See [Exit codes](#exit-codes). |
+| `builtins` | Severity per built-in check: `fail` (the default) or `warn`. The names are `unknownDestination`, `sandboxPageUrl` (Shopify-specific), `possibleRealData`, `deniedIdentifiers`, `earlyIdentifiers`, `consentModeSetup`, `consentModeOrder`, `consentStateMismatch`, `earlyIdentityPush`, `idHandover`, `serverContainerRejected` and `identifierRoute`. `earlyIdentifiers`, `consentModeSetup`, `consentModeOrder`, `consentStateMismatch`, `earlyIdentityPush`, `idHandover` and `serverContainerRejected` are `warn` by default and every other check is `fail`. Any other name or severity is a scenario error. See [Exit codes](#exit-codes). |
 | `dataLayerNames` | List of up to 8 global names, for example `[myLayer]`, that the recorder hooks besides `dataLayer`. Use it when the container loads with a custom `l=` name. Each name is a plain identifier of up to 64 characters (letters, digits, `_`, `$`), and not `location`, `Shopify`, `__proto__`, `constructor` or `prototype`. A push to a named layer is recorded with `layer` set to its name. A global is hooked only when it is absent or a configurable array. Without the option, a Google loader with an `l=` name that is not hooked gives one `dataLayerNotHooked` flag that names the option. The flag lists each missed name once, at most five, and says how many more there are. A name that is not a plain identifier, or that looks like a value, reads `(other)`. |
 | `identifierFields` | List of field names or `*` globs, for example `['visitor_key', 'x_*']`, that `deniedIdentifiers` and `earlyIdentifiers` treat as analytics identifiers, matched against the field names of each hit. |
 
@@ -683,6 +683,29 @@ When `options.consentMode` is set, the hits show a default and no frame pushed o
 options:
   consentMode: { mode: advanced, default: denied, accept: [analytics_storage] }
   builtins: { consentModeOrder: fail }
+```
+
+### consentStateMismatch
+
+The `consentStateMismatch` check compares what a Google hit says about consent with what the `dataLayer` of the same frame says. The hit says it in `gcs` and `gcd`. `deniedIdentifiers` trusts that value, so a hit that says granted after a reject is not caught by it. This check warns when the two disagree. It is a warning by default.
+
+It is added to a run when a Google browser hit (`ga4` or `google-ads`) states a consent signal and its frame pushed a consent command. A run with nothing like that has no `consentStateMismatch` result. Each frame is judged apart: the state at the hit is replayed from the consent pushes of the hit's own frame, in every layer, in the array and the `arguments`-like object form. A default with a `region` list and a default after an update are ignored.
+
+A hit is reported when its own signal says granted and the frame's state denies that signal by a `consent update` push, with no other consent command of the frame within 2000 ms before or after the hit. The message names the frame kind, the vendor, the tag ID and the signal names, and links to [Google's Consent Mode page](https://developers.google.com/tag-platform/security/guides/consent). The evidence is the hit IDs and the IDs of the denying pushes. It never prints a `gcs` or `gcd` value or a pushed value.
+
+The message counts the hits it skipped, each for one reason:
+
+- **No frame.** The request has no frame, as in a record made before version 5.
+- **Ambiguous.** Two layers of the frame disagree about a signal.
+- **Unstable window.** A consent command of the frame is within 2000 ms of the hit. Tags queue commands and GA4 batches events, so such a hit can carry the old or the new state.
+- **Default-only denial.** The signal is denied only by a `consent default` push. Consent can be raised outside the `dataLayer`, so the check does not judge it.
+- **New document.** A page load of the hit's page falls between the denying update and the hit, since a new page may set consent in a way the `dataLayer` does not show. A popup's page load does not count for the page that opened it.
+
+A hit is in one result at most for one signal: `deniedIdentifiers` judges a signal the hit says denied, `earlyIdentifiers` one that is unknown before the first answer, and this check one that the hit says granted. Server container hits and hits of other vendors are not judged. The `gcd` letters are documented only by the community, so treat a result as a hint to look at the setup. To make the check fail a run, set it to `fail`:
+
+```yaml
+options:
+  builtins: { consentStateMismatch: fail }
 ```
 
 ### earlyIdentityPush

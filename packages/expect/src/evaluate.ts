@@ -32,6 +32,8 @@ import {
 import { GA4_BODY_ONLY_IGNORE, type MultipartBody, bodyEntries, guardFieldName, multipartPartName, splitMultipart, META_BODY_ONLY_IGNORE, META_CAPI_BODY_ONLY_IGNORE, META_CAPI_PARAM_NAMES, metaCapiBaseParam, PINTEREST_CAPI_BODY_ONLY_IGNORE, SGTM_BODY_ONLY_IGNORE, isSandboxPageUrl, maskValuePath, matchesIgnoreList, identifierClass, identifierSignal, type IdentifierClass } from '@tagreeve/decoders';
 import { consentModeSetup, GOOGLE_VENDORS } from './consent-mode-setup.ts';
 import { consentModeOrder } from './consent-mode-order.ts';
+import { consentStateMismatch } from './consent-state-mismatch.ts';
+import { navigationTimes, type VisitStart } from './document.ts';
 import { identifierRoute } from './identifier-route.ts';
 import { earlyIdentityPush } from './early-identity-push.ts';
 import { idHandover } from './id-handover.ts';
@@ -69,8 +71,8 @@ interface Context {
   tagReports: TagReport[];
   dataLayerEvents: DataLayerEvent[];
   flags: Flag[];
-  /** Times at which a visit step started. A main-frame document request is a navigation too. */
-  visitTimes: number[];
+  /** The visit steps with their start times. A main-frame document request is a navigation too. */
+  visits: VisitStart[];
   expectedTags?: ExpectedTags;
   networkMode?: Run['networkMode'];
   grace: number;
@@ -99,10 +101,10 @@ export function evaluate(records: readonly Input[], scenario: Scenario, options:
     tagReports: records.filter((r): r is TagReport => r.type === 'tagReport'),
     dataLayerEvents: records.filter((r): r is DataLayerEvent => r.type === 'dataLayerEvent'),
     flags: records.filter((r): r is Flag => r.type === 'flag'),
-    visitTimes: records
+    visits: records
       .filter((r): r is Step => r.type === 'step')
       .filter((st) => scenario.steps.some((s) => s.kind === 'visit' && s.label === st.label))
-      .map((st) => st.startedAt),
+      .map((st) => ({ stepId: st.id, t: st.startedAt })),
     expectedTags: expectedTagsOf(runRecord),
     networkMode: runRecord?.networkMode,
     grace: options.graceWindowMs ?? scenario.options.graceWindow ?? DEFAULT_GRACE_MS,
@@ -543,16 +545,7 @@ function evaluatePushRuleIn(rule: Rule, ctx: Context): RuleOutcome {
 /** An unhooked loader leaves its whole document unread: from the last navigation at or before it to the next one. A navigation is a document request of the loader's own frame that did not abort; without a frame on either side, any main-frame request counts. An embedded loader also ends with a main-frame navigation of its own page, since that unloads the frame. Both pages must be numbered, so a popup does not end it. */
 function loaderReachesScope(loader: Request | undefined, ctx: Context, inScope: (t: number) => boolean, windowStartAt: number | undefined): boolean {
   if (!loader) return true;
-  const sameFrame = (r: Request) => {
-    if (!(loader.frame && r.frame)) return r.frame?.main !== false;
-    if (r.frame.n === loader.frame.n) return true;
-    return !loader.frame.main && r.frame.main && loader.frame.page !== undefined && r.frame.page === loader.frame.page;
-  };
-  const aborted = (r: Request) => r.outcome === 'failed' && r.failure === 'net::ERR_ABORTED';
-  const navigations = [
-    ...ctx.visitTimes,
-    ...[...ctx.requests.values()].filter((r) => r.resourceType === 'document' && !aborted(r) && sameFrame(r)).map((r) => r.t),
-  ];
+  const navigations = navigationTimes({ requests: ctx.requests, visits: ctx.visits }, loader.frame);
   const start = Math.max(-Infinity, ...navigations.filter((t) => t <= loader.t));
   const end = Math.min(Infinity, ...navigations.filter((t) => t > loader.t));
   const candidates = [start, loader.t, windowStartAt, ...ctx.epochs.flatMap((e) => [e.startT, e.startT - ctx.grace])].filter(
@@ -1134,7 +1127,7 @@ function countByHost(flags: readonly Flag[], ctx: Context): string {
 }
 
 /** Built-in checks whose default is not `fail`. */
-const DEFAULT_SEVERITY: Partial<Record<BuiltinName, Severity>> = { earlyIdentifiers: 'warn', consentModeSetup: 'warn', consentModeOrder: 'warn', earlyIdentityPush: 'warn', idHandover: 'warn', serverContainerRejected: 'warn' };
+const DEFAULT_SEVERITY: Partial<Record<BuiltinName, Severity>> = { earlyIdentifiers: 'warn', consentModeSetup: 'warn', consentModeOrder: 'warn', consentStateMismatch: 'warn', earlyIdentityPush: 'warn', idHandover: 'warn', serverContainerRejected: 'warn' };
 
 function builtInChecks(
   records: readonly Input[],
@@ -1207,6 +1200,14 @@ function builtInChecks(
     expected: scenario.options.consentMode,
   });
   if (order) add('consentModeOrder', order.pass, order.evidence, order.message);
+
+  const mismatch = consentStateMismatch({
+    dataLayer: ctx.dataLayerEvents,
+    hits: ctx.hits.filter((h) => !ctx.serverHitIds.has(h.id)),
+    requests: ctx.requests,
+    visits: ctx.visits,
+  });
+  if (mismatch) add('consentStateMismatch', mismatch.pass, mismatch.evidence, mismatch.message);
 
   const early = earlyIdentityPush(
     records.filter((r): r is DataLayerEvent => r.type === 'dataLayerEvent'),
