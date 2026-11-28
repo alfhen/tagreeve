@@ -150,7 +150,7 @@ describe('runs without a server container', () => {
     expect(triples(r)).toEqual([
       ['must: {"vendor":"ga4","event":"purchase","consent.analytics":"granted"}', true, 'fail'],
       ['must: {"vendor":"google-ads","event":"conversion","consent.ads":"granted"}', true, 'fail'],
-      ...BUILTINS.flatMap((b) => (b[0] === 'builtin: consentModeSetup' ? [b, ['builtin: consentModeOrder', true, 'warn']] : [b])),
+      ...BUILTINS.flatMap((b) => (b[0] === 'builtin: consentModeSetup' ? [b, ['builtin: consentModeOrder', true, 'warn'], ['builtin: consentStateMismatch', true, 'warn']] : [b])),
     ]);
   }, 60_000);
 });

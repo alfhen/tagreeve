@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Consent state mismatch frame</title>
+</head>
+<body>
+<p>Embedded by <code>/consent-state-mismatch?frame=1</code>. Pushes a <code>consent update</code> that grants all four signals, then 200 ms later one that denies all four, and 2500 ms after the denial sends one GA4 <code>page_view</code> hit for the fake tag <code>G-PWTEST0001</code> that says granted.</p>
+<script>
+window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'update', { ad_storage: 'granted', analytics_storage: 'granted', ad_user_data: 'granted', ad_personalization: 'granted' });
+setTimeout(function () {
+  gtag('consent', 'update', { ad_storage: 'denied', analytics_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });
+}, 200);
+setTimeout(function () {
+  new Image().src = 'https://www.google-analytics.com/g/collect?v=2&tid=G-PWTEST0001&cid=7777777777.8888888888&en=page_view&gcs=G111&gcd=11t1t1t1t5';
+}, 2700);
+</script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Consent state mismatch</title>
+</head>
+<body>
+<h1>Consent state mismatch</h1>
+<p>Pushes a <code>consent update</code> that grants all four signals, then 200 ms later one that denies all four, and 2500 ms after the denial sends one GA4 <code>page_view</code> hit for the fake tag <code>G-PWTEST0001</code> that says granted in its <code>gcs</code> and <code>gcd</code>. With <code>leak=1</code> the denying update also holds an extra key with a test token. With <code>frame=1</code> the page makes no push and sends no hit itself: it embeds <code>/consent-state-mismatch-frame</code>, which does the same.</p>
+<script>
+var q = new URLSearchParams(location.search);
+if (q.get('frame') === '1') {
+  var frame = document.createElement('iframe');
+  frame.src = '/consent-state-mismatch-frame';
+  frame.title = 'Embedded frame';
+  document.body.appendChild(frame);
+} else {
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = function () { window.dataLayer.push(arguments); };
+  var granted = { ad_storage: 'granted', analytics_storage: 'granted', ad_user_data: 'granted', ad_personalization: 'granted' };
+  var denied = { ad_storage: 'denied', analytics_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' };
+  if (q.get('leak') === '1') denied.pw_note = 'PWLEAK-G100-TOKEN';
+  gtag('consent', 'update', granted);
+  setTimeout(function () { gtag('consent', 'update', denied); }, 200);
+  setTimeout(function () {
+    new Image().src = 'https://www.google-analytics.com/g/collect?v=2&tid=G-PWTEST0001&cid=7777777777.8888888888&en=page_view&gcs=G111&gcd=11t1t1t1t5';
+  }, 2700);
+}
+</script>
+</body>
+</html>
