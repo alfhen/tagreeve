@@ -13,22 +13,23 @@ Flags
 Expectations
   FAIL mustNot: {"vendor":["meta","google-ads"],"before":"consent"}
        Expected no matching hits before consent, found 2 matching hits (7 before narrowing).
-       evidence: hit_01M7MG8VPPBG5PYTMWAXR9RVJ9, hit_01M7MG8VPQC120JR5KGC2WNWQV
+       evidence: hit_01M8GK93NM9BZWSX4DP68RAZRN, hit_01M8GK93NM9BZWSX4DP68RAZRQ
   FAIL mustNot: {"vendor":"meta","in":"epoch(denied)"}
        Expected no matching hits in epoch(denied), found 2 matching hits (3 before narrowing).
-       evidence: hit_01M7MG8VPR87B8PWPX598TET9C, hit_01M7MG8VPR87B8PWPX598TET9G
+       evidence: hit_01M8GK93NN1T3PH3TMVHQKJ7NT, hit_01M8GK93NN1T3PH3TMVHQKJ7NZ
   PASS builtin: unknownDestination
-       evidence: flg_01M7MG8VPT08QCSG5NG8W9MWHT, flg_01M7MG8VPV6P4VK8RF099XA4V2
+       evidence: flg_01M8GK93NQ7FQRA1N1HZE66SHM, flg_01M8GK93NRFV1QB3Q0PG64KDB3
   WARN builtin: sandboxPageUrl
        Expected no hit to carry a sandbox URL as its page, found 2: staging.northwind.example/web-pixels@0.0.0-fixture/sandbox/modern/.
-       evidence: hit_01M7MG8VPPBG5PYTMWAXR9RVJ8, hit_01M7MG8VPQC120JR5KGC2WNWQY
+       evidence: hit_01M8GK93NK7BFGPT9GZ56YMFKQ, hit_01M8GK93NN1T3PH3TMVHQKJ7NS
   PASS builtin: deniedIdentifiers
   PASS builtin: earlyIdentifiers
   PASS builtin: consentModeSetup
+  PASS builtin: consentModeOrder
   PASS builtin: earlyIdentityPush
   WARN builtin: idHandover
        Expected the GA4 client and session ID to carry over between contexts, found 1 difference: G-PWTEST0001: client ID differs between main frame on staging.northwind.example and sub frame on staging.northwind.example.
-       evidence: hit_01M7MG8VPM4FWP9MZZ09KYBZGA, hit_01M7MG8VPQC120JR5KGC2WNWQW, hit_01M7MG8VPPBG5PYTMWAXR9RVJ8, hit_01M7MG8VPQC120JR5KGC2WNWQY
+       evidence: hit_01M8GK93NHFZZ36GC5FT1EJZGJ, hit_01M8GK93NM9BZWSX4DP68RAZRR, hit_01M8GK93NK7BFGPT9GZ56YMFKQ, hit_01M8GK93NN1T3PH3TMVHQKJ7NS
   PASS builtin: possibleRealData
-Result: fail (2 of 10) with 2 warnings
-Record: tagreeve/runs/2026-01-15/run_01M7MG8KH25ZRQFZPDWNW6J4DX.jsonl
+Result: fail (2 of 11) with 2 warnings
+Record: tagreeve/runs/2026-01-15/run_01M8GK8XMW5PS5DMCRKDCRRBEZ.jsonl

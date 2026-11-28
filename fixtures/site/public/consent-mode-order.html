@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Consent Mode order</title>
+</head>
+<body>
+<h1>Consent Mode order</h1>
+<p>Pushes a <code>consent default</code> and a <code>config</code> command for the fake tag <code>G-PWTEST0001</code> to the dataLayer, in the order the query gives, and sends one GA4 <code>page_view</code> hit with a denied <code>gcs</code> and <code>gcd</code>. The default comes first. With <code>order=late</code> the <code>config</code> command comes first. With <code>grant=ad</code> the default grants <code>ad_storage</code> and denies the other three. The page has a banner that the fixture rules answer. With <code>update=early</code> or <code>update=late</code> no hit is sent at load: the answer sends the hit 100 ms later and pushes a <code>consent update</code> that grants all four signals, at once for <code>early</code> (before the hit) and 300 ms after the answer for <code>late</code> (after the hit).</p>
+<div id="pw-consent-banner">
+  <p>We use cookies for analytics and ads.</p>
+  <button id="pw-accept" type="button">Accept</button>
+  <button id="pw-reject" type="button">Reject</button>
+</div>
+<script>
+var q = new URLSearchParams(location.search);
+window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+var denied = { ad_storage: 'denied', analytics_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' };
+var granted = { ad_storage: 'granted', analytics_storage: 'granted', ad_user_data: 'granted', ad_personalization: 'granted' };
+var start = q.get('grant') === 'ad' ? { ad_storage: 'granted', analytics_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' } : denied;
+function setDefault() { gtag('consent', 'default', start); }
+function setConfig() { gtag('config', 'G-PWTEST0001', { send_page_view: false }); }
+if (q.get('order') === 'late') { setConfig(); setDefault(); } else { setDefault(); setConfig(); }
+
+function sendHit() {
+  new Image().src = 'https://www.google-analytics.com/g/collect?v=2&tid=G-PWTEST0001&cid=7777777777.8888888888&en=page_view&gcs=G100&gcd=11p1p1p1p5';
+}
+
+var update = q.get('update');
+if (!update) sendHit();
+function answer() {
+  document.getElementById('pw-consent-banner').hidden = true;
+  if (update === 'early') gtag('consent', 'update', granted);
+  if (update) setTimeout(sendHit, 100);
+  if (update === 'late') setTimeout(function () { gtag('consent', 'update', granted); }, 300);
+}
+document.getElementById('pw-accept').addEventListener('click', answer);
+document.getElementById('pw-reject').addEventListener('click', function () { document.getElementById('pw-consent-banner').hidden = true; });
+</script>
+</body>
+</html>

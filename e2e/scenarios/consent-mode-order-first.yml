@@ -1,0 +1,4 @@
+start: /consent-mode-order
+steps:
+  - wait: 1s
+options: { seed: 1, allowUnknownDestination: true }

@@ -39,6 +39,7 @@ Then there is one column for each state:
 - **Rules and built-in checks.** The rules and checks that failed or warned, by name.
 - **Identifier routes.** One line for each group of planted values that reached the same host other than the store, in the same field and transform (encoding), of the same route kind, in the same consent epoch and with the same verdict. A line names the values, the request count, the sink host, the epoch and the verdict. A value seen only in the page URL field is a warning.
 - **consentModeSetup.** Whether a Google hit shows a Consent Mode signal that was never set. It is a warning by default.
+- **consentModeOrder.** Whether the Consent Mode default comes before `config` in the `dataLayer`, whether a Google hit left between the banner decision and the `consent update` push with a signal denied that the decision grants, and, with `options.consentMode`, whether the setup matches the one the scenario expects. It is a warning by default. The column lists it under **Rules and built-in checks** only when it fails or warns. A passing check has no entry, and a scenario with no default push and no `options.consentMode` has no result.
 - **Searched and skipped.** The forms searched, the parts searched and not searched, and the requests that were skipped, such as compressed bodies.
 
 Each column comes from its own record. If a record is missing, or names another state, the column says so and the page has a warning. The page holds names and counts only. It never shows a canary, an identity value or a value seen in a request.

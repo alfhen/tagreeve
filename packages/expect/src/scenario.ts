@@ -156,11 +156,32 @@ export interface ScenarioOptions {
   withdrawWith?: string;
   /** Put six fake click IDs on the start URL. A start URL that already holds one is refused. */
   canaries?: boolean;
-  /** Severity per built-in check. A check that is not listed is `fail`, except `earlyIdentifiers`, `consentModeSetup`, `earlyIdentityPush`, `idHandover` and `serverContainerRejected`, which are `warn`. `identifierRoute` is `fail`, and `warn` turns every finding of it into a warning. */
+  /** The Consent Mode setup the scenario expects, judged by `consentModeOrder`. For scenarios only, not for the project config. */
+  consentMode?: ConsentModeExpectation;
+  /** Severity per built-in check. A check that is not listed is `fail`, except `earlyIdentifiers`, `consentModeSetup`, `consentModeOrder`, `earlyIdentityPush`, `idHandover` and `serverContainerRejected`, which are `warn`. `identifierRoute` is `fail`, and `warn` turns every finding of it into a warning. */
   builtins?: Partial<Record<BuiltinName, Severity>>;
 }
 
-export const BUILTIN_NAMES = ['unknownDestination', 'sandboxPageUrl', 'possibleRealData', 'deniedIdentifiers', 'earlyIdentifiers', 'consentModeSetup', 'earlyIdentityPush', 'idHandover', 'serverContainerRejected', 'identifierRoute'] as const;
+export const CONSENT_SIGNALS = ['ad_storage', 'analytics_storage', 'ad_user_data', 'ad_personalization'] as const;
+export type ConsentSignal = (typeof CONSENT_SIGNALS)[number];
+export const CONSENT_MODES = ['basic', 'advanced'] as const;
+export const MAX_CONSENT_REGIONS = 20;
+const REGION_CODE = /^[A-Z]{2}(-[A-Z0-9]{1,3})?$/;
+const CONSENT_MODE_KEYS = ['mode', 'default', 'accept', 'region'];
+
+/** `denied` and `granted` mean all four signals. */
+export type ConsentModeDefault = 'denied' | 'granted' | Partial<Record<ConsentSignal, 'granted' | 'denied'>>;
+
+export interface ConsentModeExpectation {
+  mode?: (typeof CONSENT_MODES)[number];
+  default?: ConsentModeDefault;
+  /** The signals an accept grants. All four when absent. A reject grants nothing. */
+  accept?: ConsentSignal[];
+  /** Region codes, such as `DK` or `US-CA`, that the scenario expects a regional default for. */
+  region?: string[];
+}
+
+export const BUILTIN_NAMES = ['unknownDestination', 'sandboxPageUrl', 'possibleRealData', 'deniedIdentifiers', 'earlyIdentifiers', 'consentModeSetup', 'consentModeOrder', 'earlyIdentityPush', 'idHandover', 'serverContainerRejected', 'identifierRoute'] as const;
 export type BuiltinName = (typeof BUILTIN_NAMES)[number];
 export const SEVERITIES = ['fail', 'warn'] as const;
 
@@ -205,7 +226,7 @@ const NETWORKS = ['stub', 'server'];
 const CONSENT_ANSWERS = ['accept', 'reject', 'none', 'withdraw'];
 const STEP_KINDS = ['visit', 'click', 'fill', 'select', 'consent', 'wait', 'addToCart', 'evaluate', 'checkpoint', 'handoff', 'payment'];
 const TOP_KEYS = ['start', 'vars', 'identity', 'steps', 'expect', 'options'];
-const OPTION_KEYS = ['network', 'seed', 'consentTimeout', 'graceWindow', 'optionalTimeout', 'allowUnknownDestination', 'firstPartyHosts', 'identifierRouteAllow', 'platformHosts', 'cartRequest', 'unloadGapIgnore', 'dataLayerNames', 'builtins', 'identifierFields', 'serverHosts', 'viewport', 'withdrawWith', 'canaries'];
+const OPTION_KEYS = ['network', 'seed', 'consentTimeout', 'graceWindow', 'optionalTimeout', 'allowUnknownDestination', 'firstPartyHosts', 'identifierRouteAllow', 'platformHosts', 'cartRequest', 'unloadGapIgnore', 'dataLayerNames', 'builtins', 'identifierFields', 'serverHosts', 'viewport', 'withdrawWith', 'canaries', 'consentMode'];
 export const MAX_DATALAYER_NAMES = 8;
 export const DATALAYER_NAME_PATTERN = /^[A-Za-z_$][\w$]{0,63}$/;
 export const NEVER_TRAPPED_NAMES: readonly string[] = ['location', 'Shopify', '__proto__', 'constructor', 'prototype'];
@@ -285,6 +306,36 @@ export interface ParseOptionsSettings {
   echo?: boolean;
 }
 
+function parseConsentMode(v: unknown, p: Path, fail: (path: Path, message: string) => void): ConsentModeExpectation | undefined {
+  if (!isMap(v) || Object.keys(v).length === 0) {
+    fail(p, `must be a mapping with at least one of ${CONSENT_MODE_KEYS.join(', ')}`);
+    return undefined;
+  }
+  const expected: ConsentModeExpectation = {};
+  const signalsHint = `${CONSENT_SIGNALS.join(', ')}`;
+  for (const [key, value] of Object.entries(v)) {
+    const kp = [...p, key];
+    if (key === 'mode') {
+      if (typeof value === 'string' && (CONSENT_MODES as readonly string[]).includes(value)) expected.mode = value as (typeof CONSENT_MODES)[number];
+      else fail(kp, `must be ${CONSENT_MODES.join(' or ')}`);
+    } else if (key === 'default') {
+      if (value === 'denied' || value === 'granted') expected.default = value;
+      else if (isMap(value) && Object.keys(value).length > 0 && Object.entries(value).every(([n, x]) => (CONSENT_SIGNALS as readonly string[]).includes(n) && (x === 'granted' || x === 'denied'))) {
+        expected.default = value as Partial<Record<ConsentSignal, 'granted' | 'denied'>>;
+      } else fail(kp, `must be denied, granted, or a mapping of ${signalsHint} to granted or denied`);
+    } else if (key === 'accept') {
+      if (Array.isArray(value) && value.length > 0 && value.every((x) => typeof x === 'string' && (CONSENT_SIGNALS as readonly string[]).includes(x))) {
+        expected.accept = [...new Set(value as ConsentSignal[])];
+      } else fail(kp, `must be a list of signals from ${signalsHint}`);
+    } else if (key === 'region') {
+      if (!Array.isArray(value) || value.length === 0 || value.length > MAX_CONSENT_REGIONS) fail(kp, `must be a list of 1 to ${MAX_CONSENT_REGIONS} region codes such as DK or US-CA`);
+      else if (!value.every((x) => typeof x === 'string' && REGION_CODE.test(x))) fail(kp, 'each region must be a code such as DK or US-CA');
+      else expected.region = [...new Set(value as string[])];
+    } else fail(kp, `unknown key, expected one of ${CONSENT_MODE_KEYS.join(', ')}`);
+  }
+  return expected;
+}
+
 /** The `options` mapping of a scenario or of the project config. A problem goes to `fail`; the result holds the valid entries. */
 export function parseOptions(raw: unknown, path: Path, fail: (path: Path, message: string) => void, { keys = OPTION_KEYS, echo = true }: ParseOptionsSettings = {}): ScenarioOptions {
   const options: ScenarioOptions = {};
@@ -338,6 +389,9 @@ export function parseOptions(raw: unknown, path: Path, fail: (path: Path, messag
         if (!Array.isArray(v) || v.length === 0 || !v.every((x) => typeof x === 'string' && x !== '')) fail(p, 'must be a non-empty list of field names or globs such as user_data.*');
         else if (v.some((x: string) => x.length > MAX_FIELD_NAME)) fail(p, `field names are at most ${MAX_FIELD_NAME} characters`);
         else options.identifierFields = v as string[];
+      } else if (k === 'consentMode') {
+        const expected = parseConsentMode(v, p, fail);
+        if (expected) options.consentMode = expected;
       } else if (k === 'builtins') {
         if (!isMap(v)) fail(p, `must be a mapping of check name to ${SEVERITIES.join(' or ')}`);
         else {

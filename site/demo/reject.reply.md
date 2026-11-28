@@ -15,4 +15,4 @@ Found it. Two problems on staging:
 1. Meta and Google Ads fire before the visitor answers the banner (2 hits). That's what Legal is hearing about.
 2. After the visitor clicks Reject, Meta still sends PageView and AddToCart.
 
-No identifiers leak, and the fake visitor's data is clean. Evidence: hit_…RVJ9, hit_…NWQV, hit_…ET9C, hit_…ET9G.
+No identifiers leak, and the fake visitor's data is clean. Evidence: hit_…AZRN, hit_…AZRQ, hit_…J7NT, hit_…J7NZ.

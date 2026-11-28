@@ -1,0 +1,5 @@
+start: /consent-mode-hits
+steps:
+  - evaluate: "window.dataLayer = window.dataLayer || []; function g() { window.dataLayer.push(arguments); } g('config', 'G-PWTEST0001'); g('consent', 'default', { ad_storage: 'denied', analytics_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', pw_note: 'PWLEAK-M100-TOKEN' }); true"
+  - wait: 1s
+options: { seed: 1, allowUnknownDestination: true }

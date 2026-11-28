@@ -13,21 +13,22 @@ Flags
 Expectations
   FAIL mustNot: {"vendor":["meta","google-ads"],"before":"consent"}
        Expected no matching hits before consent, found 2 matching hits (17 before narrowing).
-       evidence: hit_01M7MG8JXHDYAH1WDVNCA3QD24, hit_01M7MG8JXHDYAH1WDVNCA3QD26
+       evidence: hit_01M8GK8X1S5M7N3EQ3TK97DMQF, hit_01M8GK8X1T2R7A1SDS57MRDCWS
   PASS must: {"vendor":"meta","event":"AddToCart","in":"epoch(granted)"}
-       evidence: hit_01M7MG8JXM0Z2WTHX5SCM49DMF
+       evidence: hit_01M8GK8X1W9Z26QYXV7THXTQER
   PASS builtin: unknownDestination
-       evidence: flg_01M7MG8JXP2FDVKB9W1W4F448J, flg_01M7MG8JXP2FDVKB9W1W4F448K
+       evidence: flg_01M8GK8X1Y01SMK7SC7DSB3ZBT, flg_01M8GK8X1Z898ZR8RGEA9ASJEB
   WARN builtin: sandboxPageUrl
        Expected no hit to carry a sandbox URL as its page, found 2: staging.northwind.example/web-pixels@0.0.0-fixture/sandbox/modern/.
-       evidence: hit_01M7MG8JXHDYAH1WDVNCA3QD23, hit_01M7MG8JXKB53FQ95GY5AFQ08W
+       evidence: hit_01M8GK8X1S5M7N3EQ3TK97DMQE, hit_01M8GK8X1V316ZYY908WREVKTG
   PASS builtin: deniedIdentifiers
   PASS builtin: earlyIdentifiers
   PASS builtin: consentModeSetup
+  PASS builtin: consentModeOrder
   PASS builtin: earlyIdentityPush
   WARN builtin: idHandover
        Expected the GA4 client and session ID to carry over between contexts, found 1 difference: G-PWTEST0001: client ID differs between main frame on staging.northwind.example and sub frame on staging.northwind.example.
-       evidence: hit_01M7MG8JXF9PNWSN50VDTW57PX, hit_01M7MG8JXJ1BXRA7XREGTH6137, hit_01M7MG8JXKB53FQ95GY5AFQ08Y, hit_01M7MG8JXHDYAH1WDVNCA3QD23, hit_01M7MG8JXKB53FQ95GY5AFQ08W
+       evidence: hit_01M8GK8X1QFB245146JRE8HBSM, hit_01M8GK8X1T2R7A1SDS57MRDCWY, hit_01M8GK8X1V316ZYY908WREVKTH, hit_01M8GK8X1S5M7N3EQ3TK97DMQE, hit_01M8GK8X1V316ZYY908WREVKTG
   PASS builtin: possibleRealData
-Result: fail (1 of 10) with 2 warnings
-Record: tagreeve/runs/2026-01-15/run_01M7MG8AVV55JCRS10FJ702KWY.jsonl
+Result: fail (1 of 11) with 2 warnings
+Record: tagreeve/runs/2026-01-15/run_01M8GK8PWMEVWBHSS99J8562SV.jsonl
