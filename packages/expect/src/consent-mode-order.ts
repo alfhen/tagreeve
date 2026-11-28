@@ -111,7 +111,10 @@ export function consentModeOrder({ dataLayer, hits, epochs, epochAt, expected }:
 
   const main = pushes.filter((e) => e.frame?.main === true);
   const mainUpdates = main.filter((e) => commandOf(e)?.command === 'update');
-  const mainDefaults = main.filter((e) => commandOf(e)?.command === 'default');
+  const decided = epochs.filter((e) => e.label !== 'undecided').sort((a, b) => a.startT - b.startT);
+  // A later document can push its own default (a CMP that restores stored consent), so the setup is read from before the first decision.
+  const firstDecisionT = Math.min(decided[0]?.startT ?? Infinity, mainUpdates[0]?.t ?? Infinity);
+  const mainDefaults = main.filter((e) => commandOf(e)?.command === 'default' && e.t <= firstDecisionT);
 
   // The global default and the region codes that the main frame pushed.
   const pushedDefault: Partial<Record<ConsentSignal, { value: Value; id: string }>> = {};
@@ -133,7 +136,6 @@ export function consentModeOrder({ dataLayer, hits, epochs, epochAt, expected }:
   const defaultOf = (s: ConsentSignal): Value | undefined => expectedDefault[s] ?? pushedDefault[s]?.value;
   const defaultDeniesAll = CONSENT_SIGNALS.every((s) => defaultOf(s) === 'denied');
 
-  const decided = epochs.filter((e) => e.label !== 'undecided').sort((a, b) => a.startT - b.startT);
   const grants = (e: ConsentEpoch) => CONSENT_SIGNALS.some((s) => e.state[FIELD_OF[s]] === 'granted');
 
   // Rule 2: a hit between the decision and the update push of the main frame.

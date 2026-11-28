@@ -240,6 +240,23 @@ describe('update gap', () => {
 describe('the expected default', () => {
   const grantsAds = { ad_storage: 'granted', analytics_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' };
 
+  test('a later document default granting all does not cause a mismatch', () => {
+    const later = dflt(3000, {}, signals('granted'));
+    const u = update(1001);
+    expect(later.t).toBeGreaterThan(u.t);
+    const r = judge({ dataLayer: [dflt(10), u, later], epochs: decision(1000, 'accept'), expected: { default: 'denied' } });
+    expect(r?.message ?? '').not.toContain('expected denied');
+  });
+
+  test('a later document default denying all does not hide a mismatch', () => {
+    const later = dflt(3000, {}, signals('denied'));
+    const u = update(1001);
+    expect(later.t).toBeGreaterThan(u.t);
+    const r = must(judge({ dataLayer: [dflt(10, {}, grantsAds), u, later], epochs: decision(1000, 'accept'), expected: { default: 'denied' } }));
+    expect(r.pass).toBe(false);
+    expect(r.message).toContain('ad_storage');
+  });
+
   test('a main frame default that grants ad_storage warns and names it', () => {
     const d = dflt(10, {}, grantsAds);
     const r = must(judge({ dataLayer: [d, config(20)], expected: { default: 'denied' } }));
