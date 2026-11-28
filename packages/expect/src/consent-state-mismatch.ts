@@ -1,8 +1,10 @@
 import { signalToField, type DataLayerEvent, type Hit, type Request } from '@tagreeve/core';
-import { CONSENT_MODE_URL } from './consent-mode-setup.ts';
+import { CONSENT_MODE_URL, GOOGLE_VENDORS } from './consent-mode-setup.ts';
 import { pageLoadTimes, type VisitStart } from './document.ts';
 import { frameConsent, layerOf, type FrameConsent } from './frame-consent.ts';
 import { CONSENT_SIGNALS, type ConsentSignal } from './scenario.ts';
+
+export type { VisitStart };
 
 export interface ConsentStateMismatch {
   pass: boolean;
@@ -20,7 +22,6 @@ export interface ConsentStateMismatchInput {
 
 /** Tags queue gtag commands and GA4 batches events, so a hit near a change can legitimately carry the old or the new state. */
 const STABLE_MS = 2000;
-const VENDORS: ReadonlySet<string> = new Set(['ga4', 'google-ads']);
 const TAG_ID = /^[A-Za-z]{1,3}-[A-Za-z0-9]{4,20}$/;
 const MAX_LISTED = 5;
 
@@ -74,13 +75,16 @@ export function consentStateMismatch({ dataLayer, hits, requests, visits }: Cons
   const skipped: Record<Skip, number> = { noFrame: 0, ambiguous: 0, unstable: 0, defaultOnly: 0, newDocument: 0 };
   const reported = new Map<string, { frame: string; vendor: string; tag: string; hits: Set<string>; signals: Set<ConsentSignal> }>();
   const evidence: string[] = [];
+  const loadsByPage = new Map<number | undefined, number[]>();
   let considered = 0;
 
   for (const hit of hits) {
-    if (!VENDORS.has(hit.vendor)) continue;
+    if (!GOOGLE_VENDORS.has(hit.vendor)) continue;
     const granted = CONSENT_SIGNALS.filter((s) => hit.consent[signalToField[s]] === 'granted');
     if (CONSENT_SIGNALS.every((s) => hit.consent[signalToField[s]] === 'unknown')) continue;
-    const frame = requests.get(hit.requestId)?.frame;
+    const request = requests.get(hit.requestId);
+    if (!request) continue;
+    const frame = request.frame;
     if (!frame) {
       skipped.noFrame++;
       continue;
@@ -112,7 +116,11 @@ export function consentStateMismatch({ dataLayer, hits, requests, visits }: Cons
       skipped.unstable++;
       continue;
     }
-    const loads = pageLoadTimes({ requests, visits }, frame);
+    let loads = loadsByPage.get(frame.page);
+    if (!loads) {
+      loads = pageLoadTimes({ requests, visits }, frame);
+      loadsByPage.set(frame.page, loads);
+    }
     const live = [...pushes].filter(([, id]) => {
       const at = layers.events.get(id)?.t ?? -Infinity;
       return !loads.some((t) => t > at && t <= hit.t);

@@ -194,7 +194,7 @@ describe('what is not judged', () => {
     const other = accept(1000, { layer: 'otherLayer' });
     expect(other.layer).toBe('otherLayer');
     expect(hit.consent.ads).toBe('granted');
-    const results = mismatch([acc, rej, other, req, hit]);
+    const results = mismatch([acc, rej, other, req, hit], 'start: /\noptions:\n  dataLayerNames: [otherLayer]\n');
     expect(inEvidence(results, hit.id)).toBe(false);
     expect(results[0]!.message).toContain('1 hit skipped as ambiguous');
   });
@@ -367,7 +367,7 @@ describe('documents', () => {
     const first = sent(500, SAYS_GRANTED, { frame: MAIN });
     const frameDoc = doc(3000, SUB);
     const { hit, req } = sent(6000, SAYS_GRANTED, { frame: SUB });
-    const records = [accept(1000, { frame: SUB }), reject(1500, { frame: SUB }), first.req, first.hit, frameDoc, req, hit];
+    const records = [accept(100, { frame: SUB }), reject(300, { frame: SUB }), first.req, first.hit, frameDoc, req, hit];
     expect(frameDoc.frame!.main).toBe(false);
     expect(inEvidence(mismatch(records), hit.id)).toBe(true);
   });
