@@ -1,7 +1,7 @@
 import { newId, type ConsentEpoch, type ConsentState, type DataLayerEvent, type Hit, type Request, type Step } from '@tagreeve/core';
 import { describe, expect, test } from 'vitest';
 import { consentModeOrder, type ConsentModeOrder } from './consent-mode-order.ts';
-import { epochForHit } from './evaluate.ts';
+import { epochForHit, evaluate } from './evaluate.ts';
 import { parseScenario, ScenarioError, type ConsentModeExpectation } from './scenario.ts';
 
 const runId = newId('run');
@@ -555,4 +555,102 @@ test('a planted value in an extra key of a consent push is not in the result', (
   const r = must(judge({ dataLayer: [config(10), d], expected: { default: 'denied' } }));
   expect(r.pass).toBe(false);
   expect(JSON.stringify(r)).not.toContain(token);
+});
+
+describe('through evaluate', () => {
+  const ORDER = 'builtin: consentModeOrder';
+  const serverRequest = (id: string, t: number): Request =>
+    ({ type: 'request', id, runId, stepId: null, t, method: 'GET', url: 'https://sgtm.example.com/g/collect', resourceType: 'image', frameUrl: 'http://localhost:3000/', initiator: null, headers: {}, postData: null, outcome: 'stubbed', captured: 'serverContainer' }) as unknown as Request;
+  type Records = Parameters<typeof evaluate>[0];
+  const run = (records: unknown[], yaml = 'start: /') => evaluate(records as Records, parseScenario(yaml)).filter((r) => r.expectation === ORDER);
+
+  test('a default pushed only in a sub frame, with no option, still adds one consentModeOrder result', () => {
+    const d = dflt(10, { frame: SUB });
+    const scenario = parseScenario('start: /');
+    const dataLayer = [d, config(20, { frame: SUB })];
+    expect(dataLayer.some((e) => e.frame!.main && e.args[0] === 'consent')).toBe(false);
+    expect(scenario.options.consentMode).toBeUndefined();
+    const results = run([...dataLayer, hit(30, {}, { gcd: '13r3r3r3r5' })]);
+    expect(results).toHaveLength(1);
+  });
+
+  const epochs = decision(1000, 'accept');
+  const slowHit = (over: Partial<Hit> = {}) => hit(1100, { analytics: 'denied' }, { gcd: '13p3p3p3p5', ...over });
+
+  test('an update-gap hit captured from the server container does not warn', () => {
+    const requestId = 'req_server_1';
+    const h = slowHit({ requestId });
+    const req = serverRequest(requestId, 1100);
+    const u = update(1300);
+    expect(req.captured).toBe('serverContainer');
+    expect(h.t).toBeGreaterThan(epochs[1]!.startT);
+    expect(h.t).toBeLessThan(u.t);
+    const results = run([...epochs, dflt(100), config(110), u, req, h]);
+    expect(results.some((r) => !r.pass)).toBe(false);
+    expect(results.flatMap((r) => r.evidence)).not.toContain(h.id);
+  });
+
+  test('a mode hit captured from the server container is not reported', () => {
+    const requestId = 'req_server_2';
+    const h = hit(500, all('denied'), { gcd: '13p3p3p3p5', requestId });
+    const req = serverRequest(requestId, 500);
+    expect(req.captured).toBe('serverContainer');
+    expect(epochForHit(epochs, h.t, 50)?.label).toBe('undecided');
+    const results = run([...epochs, req, h], 'start: /\noptions:\n  consentMode: { mode: basic }');
+    expect(results.some((r) => !r.pass)).toBe(false);
+    expect(results.flatMap((r) => r.evidence)).not.toContain(h.id);
+  });
+});
+
+describe('the expected default and region, by frame and document', () => {
+  const grantsAds = { ad_storage: 'granted', analytics_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' };
+
+  test('a global default with a region list is not compared with default', () => {
+    const d = dflt(10, {}, { ...grantsAds, region: ['DK'] });
+    expect(d.args[2]).toMatchObject({ region: ['DK'], ad_storage: 'granted' });
+    const r = judge({ dataLayer: [d, config(20)], expected: { default: 'denied' } });
+    expect(r?.message ?? '').not.toContain('ad_storage');
+    expect(r?.evidence ?? []).not.toContain(d.id);
+  });
+
+  test('the union of the main frame region defaults covers the region codes', () => {
+    const dk = dflt(20, {}, { ...signals('denied'), region: ['DK'] });
+    const ca = dflt(30, {}, { ...signals('denied'), region: ['US-CA'] });
+    expect((dk.args[2] as { region: string[] }).region).toHaveLength(1);
+    expect((ca.args[2] as { region: string[] }).region).toHaveLength(1);
+    const r = must(judge({ dataLayer: [dflt(10), dk, ca, config(40)], expected: { region: ['DK', 'US-CA'] } }));
+    expect(r.pass).toBe(true);
+  });
+
+  test('a region default pushed only in a sub frame does not cover the region', () => {
+    const dk = dflt(20, { frame: SUB }, { ...signals('denied'), region: ['DK'] });
+    expect(dk.frame!.main).toBe(false);
+    const r = must(judge({ dataLayer: [dflt(10), dk, config(40)], expected: { region: ['DK'] } }));
+    expect(r.pass).toBe(false);
+  });
+
+  test('a region pushed on the first page covers a second page with only a global default', () => {
+    const dk = dflt(10, {}, { ...signals('denied'), region: ['DK'] });
+    const second = [dflt(200), config(210)];
+    const boundary: Step = { type: 'step', id: newId('step'), runId, index: 1, label: 'visit-2', startedAt: 100, endedAt: 105 };
+    expect(dk.t).toBeLessThan(boundary.startedAt);
+    expect(second.every((e) => e.t > boundary.endedAt!)).toBe(true);
+    expect(second.some((e) => (e.args[2] as { region?: string[] } | undefined)?.region !== undefined)).toBe(false);
+    const r = must(judge({ dataLayer: [dk, config(20), ...second], expected: { region: ['DK'] } }));
+    expect(r.pass).toBe(true);
+  });
+});
+
+describe('an accept whose update is pushed only in a sub frame', () => {
+  test('the sub frame update is not read as the main frame state', () => {
+    const u = update(1300, { frame: SUB }, { analytics_storage: 'granted', ad_storage: 'granted' });
+    expect((u.args[2] as Record<string, string>).ad_storage).toBe('granted');
+    expect(u.frame!.main).toBe(false);
+    const r = judge({
+      dataLayer: [dflt(100, {}, signals('denied')), config(110), u],
+      epochs: decision(1000, 'accept', { state: { ...all('denied'), analytics: 'granted', ads: 'granted' } }),
+      expected: { accept: ['analytics_storage'] },
+    });
+    expect(r?.message ?? '').not.toContain('ad_storage');
+  });
 });
