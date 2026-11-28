@@ -119,6 +119,7 @@ export function consentModeOrder({ dataLayer, hits, epochs, epochAt, expected }:
   // The global default and the region codes that the main frame pushed.
   const pushedDefault: Partial<Record<ConsentSignal, { value: Value; id: string }>> = {};
   const pushedRegions = new Set<string>();
+  const globalDefaults: { id: string; values: Partial<Record<ConsentSignal, Value>> }[] = [];
   for (const e of mainDefaults) {
     const signals = commandOf(e)!.signals;
     if (typeof signals !== 'object' || signals === null) continue;
@@ -127,10 +128,15 @@ export function consentModeOrder({ dataLayer, hits, epochs, epochAt, expected }:
       for (const code of Array.isArray(region) ? region : [region]) if (typeof code === 'string') pushedRegions.add(code);
       continue;
     }
+    const values: Partial<Record<ConsentSignal, Value>> = {};
     for (const s of CONSENT_SIGNALS) {
       const value = valueOf((signals as Record<string, unknown>)[s]);
-      if (value) pushedDefault[s] = { value, id: e.id };
+      if (!value) continue;
+      values[s] = value;
+      // The first push sets the default of the undecided epoch; a later one never replaces it.
+      pushedDefault[s] ??= { value, id: e.id };
     }
+    globalDefaults.push({ id: e.id, values });
   }
   const expectedDefault = resolveDefault(expected?.default);
   const defaultOf = (s: ConsentSignal): Value | undefined => expectedDefault[s] ?? pushedDefault[s]?.value;
@@ -162,11 +168,19 @@ export function consentModeOrder({ dataLayer, hits, epochs, epochAt, expected }:
 
   if (expected) {
     // Rule 3: the default and the regional default.
-    const mismatched = CONSENT_SIGNALS.filter((s) => expectedDefault[s] !== undefined && pushedDefault[s] !== undefined && pushedDefault[s]!.value !== expectedDefault[s]);
-    if (mismatched.length > 0) {
+    // Each global default is judged on its own, so a later one never hides an earlier mismatch.
+    const mismatches = globalDefaults.flatMap((d) => {
+      const wrong = CONSENT_SIGNALS.filter((s) => expectedDefault[s] !== undefined && d.values[s] !== undefined && d.values[s] !== expectedDefault[s]);
+      return wrong.length > 0 ? [{ id: d.id, wrong, values: d.values }] : [];
+    });
+    if (mismatches.length > 0) {
+      const described = CONSENT_SIGNALS.flatMap((s) => {
+        const first = mismatches.find((m) => m.wrong.includes(s));
+        return first ? [`${s} is ${first.values[s]}, expected ${expectedDefault[s]}`] : [];
+      });
       findings.push({
-        text: `The main frame default does not match the setup the scenario states: ${list(mismatched.map((s) => `${s} is ${pushedDefault[s]!.value}, expected ${expectedDefault[s]}`))}.`,
-        evidence: [...new Set(mismatched.map((s) => pushedDefault[s]!.id))],
+        text: `The main frame default does not match the setup the scenario states: ${list(described)}.`,
+        evidence: mismatches.map((m) => m.id),
       });
     }
     if (expected.region && mainDefaults.length > 0) {

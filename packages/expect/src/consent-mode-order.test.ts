@@ -257,6 +257,50 @@ describe('the expected default', () => {
     expect(r.message).toContain('ad_storage');
   });
 
+  const only = (name: string) => ({ ...signals('denied'), [name]: 'granted' });
+  const noDecision = { expected: { default: 'denied' as const } };
+
+  test('with no decision, a first default granting ad_storage warns, also when a later default denies all', () => {
+    const first = dflt(10, {}, grantsAds);
+    const later = dflt(3000);
+    const dataLayer = [first, config(20), later, config(3010)];
+    expect(dataLayer.some((e) => e.args[1] === 'update')).toBe(false);
+    const r = must(judge({ dataLayer, ...noDecision }));
+    expect(r.pass).toBe(false);
+    expect(r.message).toContain('ad_storage is granted, expected denied');
+    expect(r.evidence).toContain(first.id);
+    expect(r.evidence).not.toContain(later.id);
+  });
+
+  test('two mismatching defaults are both reported', () => {
+    const a = dflt(10, {}, only('ad_storage'));
+    const b = dflt(20, {}, only('analytics_storage'));
+    const r = must(judge({ dataLayer: [a, b], ...noDecision }));
+    expect(r.pass).toBe(false);
+    expect(r.message).toContain('ad_storage');
+    expect(r.message).toContain('analytics_storage');
+    expect(r.evidence).toEqual(expect.arrayContaining([a.id, b.id]));
+  });
+
+  test('a later mismatching default warns when the first one matches', () => {
+    const a = dflt(10);
+    const b = dflt(3000, {}, only('ad_storage'));
+    const r = must(judge({ dataLayer: [a, b], ...noDecision }));
+    expect(r.pass).toBe(false);
+    expect(r.message).toContain('ad_storage');
+    expect(r.evidence).toContain(b.id);
+    expect(r.evidence).not.toContain(a.id);
+  });
+
+  test('a default after the first update push is left unjudged', () => {
+    const b = dflt(3000, {}, only('ad_storage'));
+    const u = update(500, {}, signals('denied'));
+    expect(b.t).toBeGreaterThan(u.t);
+    const r = must(judge({ dataLayer: [dflt(10), u, b], ...noDecision }));
+    expect(r.message).not.toContain('ad_storage');
+    expect(r.evidence ?? []).not.toContain(b.id);
+  });
+
   test('a main frame default that grants ad_storage warns and names it', () => {
     const d = dflt(10, {}, grantsAds);
     const r = must(judge({ dataLayer: [d, config(20)], expected: { default: 'denied' } }));
