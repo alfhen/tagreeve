@@ -412,6 +412,18 @@ describe('the state after an accept or a reject', () => {
     expect(r.evidence).toContain(u.id);
   });
 
+  test('a default pushed in the same tick as the update is the baseline for the signals the accept leaves alone', () => {
+    const r = must(
+      judge({
+        dataLayer: [update(1000, {}, { analytics_storage: 'granted', ad_storage: 'granted' }), dflt(1000, {}, signals('denied'))],
+        epochs: decision(1000, 'accept', { state: { ...all('denied'), analytics: 'granted', ads: 'granted' } }),
+        expected: { accept: ['analytics_storage'] },
+      }),
+    );
+    expect(r.pass).toBe(false);
+    expect(r.message).toContain('ad_storage');
+  });
+
   test('an accept that grants exactly the accept list passes', () => {
     const r = must(
       judge({

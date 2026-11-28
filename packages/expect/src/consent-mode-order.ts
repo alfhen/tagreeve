@@ -133,7 +133,8 @@ export function consentModeOrder({ dataLayer, hits, epochs, epochAt, expected }:
   const expectedDefault = resolveDefault(expected?.default);
   // The pushed default is the state of the one replay, before the first decision.
   const firstDefault = mainDefaults[0];
-  const pushedState = firstDefault?.frame && frameConsent(dataLayer, firstDefault.frame.n, layerOf(firstDefault)).stateAt(firstDecisionT, false).state;
+  // A default in the same tick as the first update counts: the replay orders it before the update.
+  const pushedState = firstDefault?.frame && frameConsent(dataLayer, firstDefault.frame.n, layerOf(firstDefault)).changes.filter((c) => c.command === 'default' && c.t <= firstDecisionT).at(-1)?.state;
   const defaultOf = (s: ConsentSignal): Value | undefined => expectedDefault[s] ?? (pushedState ? valueOf(pushedState[FIELD_OF[s]]) : undefined);
   const defaultDeniesAll = CONSENT_SIGNALS.every((s) => defaultOf(s) === 'denied');
 

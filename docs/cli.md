@@ -668,7 +668,7 @@ options:
 
 ### consentModeOrder
 
-The `consentModeOrder` check judges the order of the Consent Mode calls in the `dataLayer`. It is added to a run when a `consent default` was pushed in some frame, or when the scenario sets `options.consentMode`. A run with neither has no `consentModeOrder` result. It is a warning by default. It reads only pushes that show in the `dataLayer`. A consent call that does not show there, such as a template API call, gives a pass with a note and never a warning. It never prints a pushed value other than a signal name and `granted` or `denied`, and its evidence is hit and push IDs.
+The `consentModeOrder` check judges the order of the Consent Mode calls in the `dataLayer`. It is added to a run when a `consent default` was pushed in some frame, or when the scenario sets `options.consentMode`. A run with neither has no `consentModeOrder` result. It is a warning by default. It reads the recorded `dataLayer` pushes and the Google browser hits, with their times and consent signals. A consent call that does not show there, such as a template API call, gives a pass with a note and never a warning. It never prints a pushed value other than a signal name and `granted` or `denied`, and its evidence is hit and push IDs.
 
 It judges four things:
 
