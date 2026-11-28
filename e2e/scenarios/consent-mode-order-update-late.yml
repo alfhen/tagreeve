@@ -1,0 +1,5 @@
+start: /consent-mode-order?update=late
+steps:
+  - consent: accept
+  - wait: 2s
+options: { seed: 1, allowUnknownDestination: true }

@@ -31,6 +31,7 @@ import {
 } from '@tagreeve/core';
 import { GA4_BODY_ONLY_IGNORE, type MultipartBody, bodyEntries, guardFieldName, multipartPartName, splitMultipart, META_BODY_ONLY_IGNORE, META_CAPI_BODY_ONLY_IGNORE, META_CAPI_PARAM_NAMES, metaCapiBaseParam, PINTEREST_CAPI_BODY_ONLY_IGNORE, SGTM_BODY_ONLY_IGNORE, isSandboxPageUrl, maskValuePath, matchesIgnoreList, identifierClass, identifierSignal, type IdentifierClass } from '@tagreeve/decoders';
 import { consentModeSetup, GOOGLE_VENDORS } from './consent-mode-setup.ts';
+import { consentModeOrder } from './consent-mode-order.ts';
 import { identifierRoute } from './identifier-route.ts';
 import { earlyIdentityPush } from './early-identity-push.ts';
 import { idHandover } from './id-handover.ts';
@@ -1133,7 +1134,7 @@ function countByHost(flags: readonly Flag[], ctx: Context): string {
 }
 
 /** Built-in checks whose default is not `fail`. */
-const DEFAULT_SEVERITY: Partial<Record<BuiltinName, Severity>> = { earlyIdentifiers: 'warn', consentModeSetup: 'warn', earlyIdentityPush: 'warn', idHandover: 'warn', serverContainerRejected: 'warn' };
+const DEFAULT_SEVERITY: Partial<Record<BuiltinName, Severity>> = { earlyIdentifiers: 'warn', consentModeSetup: 'warn', consentModeOrder: 'warn', earlyIdentityPush: 'warn', idHandover: 'warn', serverContainerRejected: 'warn' };
 
 function builtInChecks(
   records: readonly Input[],
@@ -1197,6 +1198,15 @@ function builtInChecks(
     records.filter((r): r is DataLayerEvent => r.type === 'dataLayerEvent'),
   );
   add('consentModeSetup', consentMode.pass, consentMode.evidence, consentMode.message);
+
+  const order = consentModeOrder({
+    dataLayer: ctx.dataLayerEvents,
+    hits: ctx.hits.filter((h) => !ctx.serverHitIds.has(h.id)),
+    epochs: ctx.epochs,
+    epochAt: (t) => epochForHit(ctx.epochs, t, ctx.grace),
+    expected: scenario.options.consentMode,
+  });
+  if (order) add('consentModeOrder', order.pass, order.evidence, order.message);
 
   const early = earlyIdentityPush(
     records.filter((r): r is DataLayerEvent => r.type === 'dataLayerEvent'),

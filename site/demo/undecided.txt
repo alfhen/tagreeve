@@ -12,21 +12,22 @@ Flags
 Expectations
   FAIL mustNot: {"vendor":["meta","google-ads"],"before":"consent"}
        Expected no matching hits before consent, found 5 matching hits (5 before narrowing).
-       evidence: hit_01M7MG8A893SSKS2BP0ERSCAV8, hit_01M7MG8A893SSKS2BP0ERSCAVA, hit_01M7MG8A8AB0HFHZNWHH6WV402, hit_01M7MG8A8AB0HFHZNWHH6WV404, hit_01M7MG8A8AB0HFHZNWHH6WV405
+       evidence: hit_01M8GJ4C5M8QP3HQ3NNHC0QH1C, hit_01M8GJ4C5N4RKJBMY1HRAA7KZ3, hit_01M8GJ4C5N4RKJBMY1HRAA7KZ6, hit_01M8GJ4C5P2VZJDXPZ20NXBBSA, hit_01M8GJ4C5P2VZJDXPZ20NXBBSB
   PASS must: {"vendor":"ga4","event":"page_view","count":">=2"}
-       evidence: hit_01M7MG8A8640TFQ7P2051VDWJX, hit_01M7MG8A88F6JWQC5C042Q643Y, hit_01M7MG8A893SSKS2BP0ERSCAV9, hit_01M7MG8A893SSKS2BP0ERSCAVB, hit_01M7MG8A893SSKS2BP0ERSCAVD and 1 more
+       evidence: hit_01M8GJ4C5JA6QTDKVWMZ6ZNYJZ, hit_01M8GJ4C5M8QP3HQ3NNHC0QH1B, hit_01M8GJ4C5M8QP3HQ3NNHC0QH1D, hit_01M8GJ4C5N4RKJBMY1HRAA7KZ4, hit_01M8GJ4C5N4RKJBMY1HRAA7KZ7 and 1 more
   PASS builtin: unknownDestination
-       evidence: flg_01M7MG8A8C90XJTN1GGXVNF0WG, flg_01M7MG8A8D7VF5RP6976M9Y14D
+       evidence: flg_01M8GJ4C5Q0VRHTGHZ9G9NZGNX, flg_01M8GJ4C5RFN9R9DF1XX3F1AZY
   WARN builtin: sandboxPageUrl
        Expected no hit to carry a sandbox URL as its page, found 2: staging.northwind.example/web-pixels@0.0.0-fixture/sandbox/modern/.
-       evidence: hit_01M7MG8A88F6JWQC5C042Q643Y, hit_01M7MG8A893SSKS2BP0ERSCAVD
+       evidence: hit_01M8GJ4C5M8QP3HQ3NNHC0QH1B, hit_01M8GJ4C5N4RKJBMY1HRAA7KZ7
   PASS builtin: deniedIdentifiers
   PASS builtin: earlyIdentifiers
   PASS builtin: consentModeSetup
+  PASS builtin: consentModeOrder
   PASS builtin: earlyIdentityPush
   WARN builtin: idHandover
        Expected the GA4 client and session ID to carry over between contexts, found 1 difference: G-PWTEST0001: client ID differs between main frame on staging.northwind.example and sub frame on staging.northwind.example.
-       evidence: hit_01M7MG8A8640TFQ7P2051VDWJX, hit_01M7MG8A893SSKS2BP0ERSCAVB, hit_01M7MG8A88F6JWQC5C042Q643Y, hit_01M7MG8A893SSKS2BP0ERSCAVD
+       evidence: hit_01M8GJ4C5JA6QTDKVWMZ6ZNYJZ, hit_01M8GJ4C5N4RKJBMY1HRAA7KZ4, hit_01M8GJ4C5M8QP3HQ3NNHC0QH1B, hit_01M8GJ4C5N4RKJBMY1HRAA7KZ7
   PASS builtin: possibleRealData
-Result: fail (1 of 10) with 2 warnings
-Record: tagreeve/runs/2026-01-15/run_01M7MG82K4DD6QBAV3WF0J4RYC.jsonl
+Result: fail (1 of 11) with 2 warnings
+Record: tagreeve/runs/2026-01-15/run_01M8GJ468P1YZDGG1R68WVGVJH.jsonl

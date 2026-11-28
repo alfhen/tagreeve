@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { argumentsListOf, consentCommandOf } from './consent-command.ts';
+import { argumentsListOf, consentCommandOf, consentModeChanges, unknownConsent } from './consent-command.ts';
 
 const signals = { ad_storage: 'denied', analytics_storage: 'granted' };
 
@@ -48,4 +48,31 @@ test.each([
 
 test('one index key and a gtm. key still read as a list', () => {
   expect(argumentsListOf([{ 0: 'consent', ...stamp }])).toEqual(['consent']);
+});
+
+const objectDefault = { 0: 'consent', 1: 'default', 2: { ad_storage: 'denied' } };
+
+test('consentModeChanges ignores the object form when the switch is not set', () => {
+  expect(consentModeChanges([{ t: 1, args: [objectDefault] }])).toEqual([]);
+  expect(consentModeChanges([{ t: 1, args: [objectDefault] }], Infinity, { objectForm: false })).toEqual([]);
+});
+
+test('consentModeChanges counts the object form with the switch on, and each change carries its push ID', () => {
+  const changes = consentModeChanges([{ t: 1, id: 'dle_a', args: [objectDefault] }], Infinity, { objectForm: true });
+  expect(changes).toHaveLength(1);
+  expect(changes[0]).toMatchObject({ id: 'dle_a', command: 'default', signals: { ads: 'denied' } });
+  expect(changes[0]!.state).toEqual({ ...unknownConsent, ads: 'denied' });
+});
+
+test('consentModeChanges reads the array form with the switch on, and a push with no ID gives a change with no id', () => {
+  const [change] = consentModeChanges([{ t: 1, args: ['consent', 'default', { analytics_storage: 'granted' }] }], Infinity, { objectForm: true });
+  expect(change).toBeDefined();
+  expect('id' in change!).toBe(false);
+  expect(change!.signals).toEqual({ analytics: 'granted' });
+});
+
+test('consentModeChanges with the switch on orders an object-form update after a default of the same tick', () => {
+  const update = { 0: 'consent', 1: 'update', 2: { ad_storage: 'granted' } };
+  const changes = consentModeChanges([{ t: 5, id: 'u', args: [update] }, { t: 5, id: 'd', args: [objectDefault] }], Infinity, { objectForm: true });
+  expect(changes.map((c) => c.id)).toEqual(['d', 'u']);
 });

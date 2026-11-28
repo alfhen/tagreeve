@@ -5,7 +5,7 @@ Hits
   google-ads: page_view x2, gtag.config x4, consent_update x1, remarketing x1, view_item x3, add_to_cart x3
 dataLayer: 16 pushes, 8 events (add_to_cart, view_item, consent default, …); shapes in --json
 Consent epochs
-  undecided (2.5 s)
+  undecided (2.4 s)
   granted (to end)
 Flags
   unknownDestination: pixel.adnetwork.example x2 (/unknown-pixel)
@@ -13,21 +13,22 @@ Flags
 Expectations
   FAIL mustNot: {"vendor":["meta","google-ads"],"before":"consent"}
        Expected no matching hits before consent, found 2 matching hits (17 before narrowing).
-       evidence: hit_01M7MG8JXHDYAH1WDVNCA3QD24, hit_01M7MG8JXHDYAH1WDVNCA3QD26
+       evidence: hit_01M8GJ4JSHECDKK16KHAPJQ7BB, hit_01M8GJ4JSHECDKK16KHAPJQ7BD
   PASS must: {"vendor":"meta","event":"AddToCart","in":"epoch(granted)"}
-       evidence: hit_01M7MG8JXM0Z2WTHX5SCM49DMF
+       evidence: hit_01M8GJ4JSM2A6QKATQPQR0SCZM
   PASS builtin: unknownDestination
-       evidence: flg_01M7MG8JXP2FDVKB9W1W4F448J, flg_01M7MG8JXP2FDVKB9W1W4F448K
+       evidence: flg_01M8GJ4JSP43J1A7QEYG8JKHBJ, flg_01M8GJ4JSP43J1A7QEYG8JKHBK
   WARN builtin: sandboxPageUrl
        Expected no hit to carry a sandbox URL as its page, found 2: staging.northwind.example/web-pixels@0.0.0-fixture/sandbox/modern/.
-       evidence: hit_01M7MG8JXHDYAH1WDVNCA3QD23, hit_01M7MG8JXKB53FQ95GY5AFQ08W
+       evidence: hit_01M8GJ4JSG0FTEJPQZQY1ACBDH, hit_01M8GJ4JSJCQ4S9XSYDMT8Q1EV
   PASS builtin: deniedIdentifiers
   PASS builtin: earlyIdentifiers
   PASS builtin: consentModeSetup
+  PASS builtin: consentModeOrder
   PASS builtin: earlyIdentityPush
   WARN builtin: idHandover
        Expected the GA4 client and session ID to carry over between contexts, found 1 difference: G-PWTEST0001: client ID differs between main frame on staging.northwind.example and sub frame on staging.northwind.example.
-       evidence: hit_01M7MG8JXF9PNWSN50VDTW57PX, hit_01M7MG8JXJ1BXRA7XREGTH6137, hit_01M7MG8JXKB53FQ95GY5AFQ08Y, hit_01M7MG8JXHDYAH1WDVNCA3QD23, hit_01M7MG8JXKB53FQ95GY5AFQ08W
+       evidence: hit_01M8GJ4JSEEC4JDZ5B49VVC772, hit_01M8GJ4JSJCQ4S9XSYDMT8Q1ES, hit_01M8GJ4JSK6FYGAX1YE1H8878D, hit_01M8GJ4JSG0FTEJPQZQY1ACBDH, hit_01M8GJ4JSJCQ4S9XSYDMT8Q1EV
   PASS builtin: possibleRealData
-Result: fail (1 of 10) with 2 warnings
-Record: tagreeve/runs/2026-01-15/run_01M7MG8AVV55JCRS10FJ702KWY.jsonl
+Result: fail (1 of 11) with 2 warnings
+Record: tagreeve/runs/2026-01-15/run_01M8GJ4CR09E2NK0GZTY6KPN44.jsonl
